@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dinner Spinner 🍽️</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: #f5f5f5;
+    }
+    h1 { color: #333; }
+    #result {
+      font-size: 2rem;
+      color: #e85d04;
+      min-height: 3rem;
+      margin: 2rem 0;
+    }
+    button {
+      padding: 1rem 2rem;
+      font-size: 1.2rem;
+      background: #e85d04;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover { background: #dc2f02; }
+  </style>
+</head>
+<body>
+  <h1>🍽️ Dinner Spinner</h1>
+  <div id="result">What should I eat?</div>
+  <button onclick="spin()">Spin!</button>
+
+  <script>
+    const dinners = [
+      'Pizza', 'Tacos', 'Pasta', 'Sushi', 'Burger', 
+      'Curry', 'Stir Fry', 'Salad', 'Sandwich', 'Soup',
+      'Ramen', 'Paella', 'BBQ', 'Falafel', 'Kebab'
+    ];
+    
+    function spin() {
+      const result = document.getElementById('result');
+      let spins = 0;
+      const interval = setInterval(() => {
+        result.textContent = dinners[Math.floor(Math.random() * dinners.length)];
+        spins++;
+        if (spins > 10) {
+          clearInterval(interval);
+        }
+      }, 100);
+    }
+  </script>
+</body>
+</html>
