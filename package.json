@@ -1,0 +1,23 @@
+{
+  "name": "dinner-spinner",
+  "version": "1.0.0",
+  "description": "A dinner spinner app with MongoDB persistence",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'No build needed for static files'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clawberry-nex/dinner-spinner.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/clawberry-nex/dinner-spinner/issues"
+  },
+  "homepage": "https://github.com/clawberry-nex/dinner-spinner#readme",
+  "dependencies": {
+    "mongodb": "^6.0.0"
+  }
+}

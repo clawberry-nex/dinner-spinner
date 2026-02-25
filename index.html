@@ -162,6 +162,10 @@
       color: var(--text-muted);
       font-style: italic;
     }
+    
+    .loading {
+      opacity: 0.5;
+    }
   </style>
 </head>
 <body>
@@ -172,7 +176,7 @@
     </header>
     
     <div class="spinner-card">
-      <div id="result">?</div>
+      <div id="result">Loading...</div>
       <button class="btn" onclick="spin()" id="spinBtn">Spin!</button>
     </div>
     
@@ -193,20 +197,57 @@
       'Ramen', 'Paella', 'BBQ', 'Falafel', 'Kebab'
     ];
     
-    // Load from localStorage or use defaults
-    let dishes = JSON.parse(localStorage.getItem('dinnerSpinnerDishes')) || [...DEFAULT_DISHES];
-    const theme = localStorage.getItem('dinnerSpinnerTheme') || 'light';
-    document.documentElement.setAttribute('data-theme', theme);
+    const API_URL = '/api/dishes';
+    let dishes = [];
+    let theme = 'light';
     
-    function saveDishes() {
-      localStorage.setItem('dinnerSpinnerDishes', JSON.stringify(dishes));
+    // Load from API
+    async function loadData() {
+      try {
+        const res = await fetch(API_URL);
+        const data = await res.json();
+        dishes = data.dishes || [];
+        theme = data.theme || 'light';
+      } catch (e) {
+        // Fallback to localStorage if API fails
+        dishes = JSON.parse(localStorage.getItem('dinnerSpinnerDishes')) || [...DEFAULT_DISHES];
+        theme = localStorage.getItem('dinnerSpinnerTheme') || 'light';
+      }
+      
+      document.documentElement.setAttribute('data-theme', theme);
+      renderDishes();
+      document.getElementById('result').textContent = '?';
+    }
+    
+    async function saveDishes() {
+      try {
+        await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dishes })
+        });
+      } catch (e) {
+        // Fallback to localStorage
+        localStorage.setItem('dinnerSpinnerDishes', JSON.stringify(dishes));
+      }
+    }
+    
+    async function saveTheme() {
+      try {
+        await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ theme })
+        });
+      } catch (e) {
+        localStorage.setItem('dinnerSpinnerTheme', theme);
+      }
     }
     
     function toggleTheme() {
-      const current = document.documentElement.getAttribute('data-theme');
-      const next = current === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('dinnerSpinnerTheme', next);
+      theme = theme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+      saveTheme();
     }
     
     function renderDishes() {
@@ -258,7 +299,7 @@
       }, 80);
     }
     
-    renderDishes();
+    loadData();
   </script>
 </body>
 </html>
