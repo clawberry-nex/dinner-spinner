@@ -5,58 +5,260 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dinner Spinner 🍽️</title>
   <style>
+    :root {
+      --bg: #f5f5f5;
+      --card-bg: #fff;
+      --text: #333;
+      --text-muted: #666;
+      --accent: #e85d04;
+      --accent-hover: #dc2f02;
+      --border: #ddd;
+      --shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    [data-theme="dark"] {
+      --bg: #1a1a1a;
+      --card-bg: #2a2a2a;
+      --text: #eee;
+      --text-muted: #aaa;
+      --border: #444;
+      --shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    
+    * { box-sizing: border-box; }
+    
     body {
-      font-family: system-ui, sans-serif;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
       min-height: 100vh;
       margin: 0;
-      background: #f5f5f5;
+      padding: 2rem;
+      transition: background 0.3s, color 0.3s;
     }
-    h1 { color: #333; }
+    
+    .container {
+      max-width: 500px;
+      width: 100%;
+    }
+    
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+    
+    h1 { margin: 0; font-size: 1.5rem; }
+    
+    .theme-toggle {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    
+    .theme-toggle:hover { opacity: 1; }
+    
+    .spinner-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+    
     #result {
-      font-size: 2rem;
-      color: #e85d04;
-      min-height: 3rem;
-      margin: 2rem 0;
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: var(--accent);
+      min-height: 4rem;
+      margin: 1.5rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    button {
-      padding: 1rem 2rem;
-      font-size: 1.2rem;
-      background: #e85d04;
+    
+    .btn {
+      padding: 0.8rem 1.5rem;
+      font-size: 1.1rem;
+      background: var(--accent);
       color: white;
       border: none;
       border-radius: 8px;
       cursor: pointer;
+      transition: background 0.2s;
     }
-    button:hover { background: #dc2f02; }
+    
+    .btn:hover { background: var(--accent-hover); }
+    
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .dishes-section {
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+    }
+    
+    .dishes-section h2 {
+      font-size: 1.1rem;
+      margin: 0 0 1rem 0;
+      color: var(--text-muted);
+    }
+    
+    .add-dish {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    
+    .add-dish input {
+      flex: 1;
+      padding: 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    
+    .dishes-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    
+    .dish-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.4rem 0.8rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 0.9rem;
+    }
+    
+    .dish-tag button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0;
+      margin-left: 0.2rem;
+    }
+    
+    .dish-tag button:hover { color: var(--accent); }
+    
+    .empty-state {
+      color: var(--text-muted);
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
-  <h1>🍽️ Dinner Spinner</h1>
-  <div id="result">What should I eat?</div>
-  <button onclick="spin()">Spin!</button>
+  <div class="container">
+    <header>
+      <h1>🍽️ Dinner Spinner</h1>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌓</button>
+    </header>
+    
+    <div class="spinner-card">
+      <div id="result">?</div>
+      <button class="btn" onclick="spin()" id="spinBtn">Spin!</button>
+    </div>
+    
+    <div class="dishes-section">
+      <h2>My Dishes</h2>
+      <div class="add-dish">
+        <input type="text" id="newDish" placeholder="Add a dish..." onkeypress="if(event.key==='Enter')addDish()">
+        <button class="btn" onclick="addDish()">Add</button>
+      </div>
+      <div class="dishes-list" id="dishesList"></div>
+    </div>
+  </div>
 
   <script>
-    const dinners = [
+    const DEFAULT_DISHES = [
       'Pizza', 'Tacos', 'Pasta', 'Sushi', 'Burger', 
       'Curry', 'Stir Fry', 'Salad', 'Sandwich', 'Soup',
       'Ramen', 'Paella', 'BBQ', 'Falafel', 'Kebab'
     ];
     
+    // Load from localStorage or use defaults
+    let dishes = JSON.parse(localStorage.getItem('dinnerSpinnerDishes')) || [...DEFAULT_DISHES];
+    const theme = localStorage.getItem('dinnerSpinnerTheme') || 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    
+    function saveDishes() {
+      localStorage.setItem('dinnerSpinnerDishes', JSON.stringify(dishes));
+    }
+    
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('dinnerSpinnerTheme', next);
+    }
+    
+    function renderDishes() {
+      const list = document.getElementById('dishesList');
+      if (dishes.length === 0) {
+        list.innerHTML = '<span class="empty-state">No dishes yet. Add some!</span>';
+        return;
+      }
+      list.innerHTML = dishes.map((dish, i) => 
+        `<span class="dish-tag">${dish}<button onclick="removeDish(${i})" title="Remove">×</button></span>`
+      ).join('');
+    }
+    
+    function addDish() {
+      const input = document.getElementById('newDish');
+      const dish = input.value.trim();
+      if (dish && !dishes.includes(dish)) {
+        dishes.push(dish);
+        saveDishes();
+        renderDishes();
+      }
+      input.value = '';
+    }
+    
+    function removeDish(index) {
+      dishes.splice(index, 1);
+      saveDishes();
+      renderDishes();
+    }
+    
     function spin() {
+      if (dishes.length === 0) {
+        document.getElementById('result').textContent = 'Add dishes first!';
+        return;
+      }
+      
       const result = document.getElementById('result');
+      const btn = document.getElementById('spinBtn');
+      btn.disabled = true;
+      
       let spins = 0;
       const interval = setInterval(() => {
-        result.textContent = dinners[Math.floor(Math.random() * dinners.length)];
+        result.textContent = dishes[Math.floor(Math.random() * dishes.length)];
         spins++;
-        if (spins > 10) {
+        if (spins > 15) {
           clearInterval(interval);
+          btn.disabled = false;
         }
-      }, 100);
+      }, 80);
     }
+    
+    renderDishes();
   </script>
 </body>
 </html>
