@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dinner Spinner
 
-## Getting Started
+Personal web app: spin a button to pick a random dish, scale servings, build a
+multi-dish shopping list, and push it to Todoist. Admin UI and a tokened POST
+endpoint for adding new dishes.
 
-First, run the development server:
+Next.js 16 (App Router) + TypeScript + Tailwind v4 + Postgres on Neon. Deploys
+to Vercel.
+
+## Environment variables
+
+| Name | Purpose |
+|---|---|
+| `DATABASE_URL` | Neon Postgres connection string (required) |
+| `ADMIN_PASSWORD` | Password for the `/admin` UI |
+| `SESSION_SECRET` | HMAC key for the admin session cookie (≥16 chars) |
+| `API_TOKEN` | Bearer token accepted by `POST /api/dishes` |
+| `TODOIST_API_TOKEN` | Todoist REST API token |
+| `TODOIST_PROJECT_NAME` | Name of the Todoist project that shopping tasks go into |
+
+See `.env.example`.
+
+## Local setup
 
 ```bash
+npm install
+cp .env.example .env.local   # then fill in values
+psql "$DATABASE_URL" -f db/schema.sql
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Adding a dish via the API
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+curl -X POST https://<your-deploy>/api/dishes \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+    "title": "Vegetarian Lasagna",
+    "subtitle": "Layered comfort",
+    "tags": ["vegetarian", "Finn likes this"],
+    "baseServings": 4,
+    "ingredients": [
+      { "quantity": 2, "unit": "pcs", "name": "carrot" },
+      { "quantity": 400, "unit": "g", "name": "lasagna sheets" }
+    ],
+    "recipe": "1. Preheat oven...\n2. ..."
+  }'
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Routes
 
-## Learn More
+- `/` — spinner (client-side filter by tags, press Spin, routes to detail)
+- `/dishes/[id]` — dish detail with servings stepper, add to meal plan
+- `/plan` — meal plan, aggregated shopping list, send to Todoist
+- `/admin` — password-protected dish management
+- `/admin/login` — login form
+- `POST /api/dishes` — create dish (bearer token or admin cookie)
+- `PATCH|DELETE /api/dishes/[id]` — update/delete (admin cookie only via UI)
+- `GET /api/dishes` — list dishes (optional `?tags=a,b` filter)
+- `GET /api/tags` — list distinct tags
+- `POST /api/todoist` — push aggregated shopping list to Todoist
 
-To learn more about Next.js, take a look at the following resources:
+## Deploying
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. `gh repo create clawberry-nex/dinner-spinner --public --source=. --push`
+2. In the Vercel dashboard, import the GitHub repo (or use `vercel link`).
+3. Add all env vars from the table above in the Vercel project settings.
+4. After the first deploy, apply the schema once:
+   `psql "$DATABASE_URL" -f db/schema.sql`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Ingredient aggregation
 
-## Deploy on Vercel
+Ingredients are grouped by `(name, unit)` case-insensitively and summed.
+Mismatched units (e.g. `100 g flour` vs `1 cup flour`) are listed separately
+— there's no unit conversion.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The recipe's `baseServings` is the source of truth for scaling: when you view
+a dish at N servings, each quantity is multiplied by `N / baseServings`.
