@@ -1,7 +1,7 @@
 import type { Ingredient } from "./types";
 import { formatIngredient } from "./ingredients";
 
-const API = "https://api.todoist.com/rest/v2";
+const API = "https://api.todoist.com/api/v1";
 
 async function todoistFetch(path: string, init: RequestInit = {}) {
   const token = process.env.TODOIST_API_TOKEN;
@@ -22,10 +22,24 @@ async function todoistFetch(path: string, init: RequestInit = {}) {
 }
 
 type TodoistProject = { id: string; name: string };
+type TodoistProjectsResponse = {
+  results: TodoistProject[];
+  next_cursor: string | null;
+};
 
 async function resolveProjectId(name: string): Promise<string> {
-  const res = await todoistFetch("/projects");
-  const projects = (await res.json()) as TodoistProject[];
+  const projects: TodoistProject[] = [];
+  let cursor: string | null = null;
+  do {
+    const path: string = cursor
+      ? `/projects?cursor=${encodeURIComponent(cursor)}`
+      : "/projects";
+    const res = await todoistFetch(path);
+    const data = (await res.json()) as TodoistProjectsResponse;
+    projects.push(...data.results);
+    cursor = data.next_cursor;
+  } while (cursor);
+
   const match = projects.find(
     (p) => p.name.toLowerCase() === name.toLowerCase(),
   );
