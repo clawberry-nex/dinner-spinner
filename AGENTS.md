@@ -71,7 +71,7 @@ Rules:
 - **Colour that changes the product is part of `name`**, not descriptor. `green chili` and `red chili` are different items; `yellow pepper` and `red pepper` are different items.
 - **Normalize to singular in `name`**: `tomatoes` → `tomato`, `small onions` → `onion`. This lets aggregation across dishes actually merge.
 - **Use the standard vocabularies in `lib/vocabulary.ts`** for both `unit` and `name` whenever possible. Diverge only when nothing fits — then type a sensible custom value. The admin form uses these as `<datalist>` autocomplete hints.
-- **Mark `pantry: true`** on items the user always has in stock — the canonical set is `water`, `salt`, `black pepper`, `white pepper`, `olive oil`, `vegetable oil`, `sunflower oil`, `sugar`, `caster sugar`, `plain flour`. Use judgment for anything else (don't flag rare/expensive ingredients).
+- **Mark `pantry: true`** on items the user always has in stock. The authoritative list lives in `lib/vocabulary.ts::PANTRY_DEFAULTS` — read it before ingesting a recipe. The API applies `PANTRY_DEFAULTS` as an exact-match fallback via `applyPantryDefaults()` in `lib/ingredients.ts`, but agents and scripts should set `pantry` explicitly using **semantic judgment**: `"cumin"` and `"1 tsp cumin powder"` are both pantry even though neither matches the set exactly; `"smoked paprika"` is not pantry even though plain `"paprika"` might be. When in doubt, don't flag it.
 - If an item is truly free-text ("salt and black pepper to taste"), just put it with `unit: "to taste"`, `quantity: 1`, and leave descriptor/preparation empty. Mark `pantry: true` for salt/pepper.
 
 ### Standard units (use these when possible)
