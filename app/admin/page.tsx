@@ -11,6 +11,7 @@ type IngredientDraft = {
   descriptor: string;
   name: string;
   preparation: string;
+  pantry: boolean;
 };
 
 const EMPTY_INGREDIENT: IngredientDraft = {
@@ -19,6 +20,7 @@ const EMPTY_INGREDIENT: IngredientDraft = {
   descriptor: "",
   name: "",
   preparation: "",
+  pantry: false,
 };
 
 type Draft = {
@@ -57,6 +59,7 @@ function dishToDraft(d: Dish): Draft {
             descriptor: i.descriptor ?? "",
             name: i.name,
             preparation: i.preparation ?? "",
+            pantry: !!i.pantry,
           }))
         : [{ ...EMPTY_INGREDIENT }],
   };
@@ -71,6 +74,7 @@ function draftToPayload(d: Draft) {
       name: i.name.trim(),
       descriptor: i.descriptor.trim() || null,
       preparation: i.preparation.trim() || null,
+      pantry: i.pantry || null,
     }));
   const tags = d.tagsInput
     .split(",")
@@ -285,7 +289,10 @@ export default function AdminPage() {
               size/quality that matters at the store (small, medium, large).{" "}
               <span className="font-medium">prep</span> is cut/cook prep
               (&ldquo;thinly sliced&rdquo;) &mdash; dropped from the shopping
-              list.
+              list. Tick <span className="font-medium">pantry</span> for
+              things you always have in stock (water, salt, pepper,
+              olive oil) &mdash; they&rsquo;re shown on the dish but never
+              added to the shopping list.
             </p>
             <div className="mt-1 flex flex-col gap-3">
               {draft.ingredients.map((ing, i) => (
@@ -339,14 +346,26 @@ export default function AdminPage() {
                       ×
                     </button>
                   </div>
-                  <input
-                    placeholder="prep (thinly sliced, peeled and diced…)"
-                    value={ing.preparation}
-                    onChange={(e) =>
-                      updateIngredient(i, { preparation: e.target.value })
-                    }
-                    className="mt-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      placeholder="prep (thinly sliced, peeled and diced…)"
+                      value={ing.preparation}
+                      onChange={(e) =>
+                        updateIngredient(i, { preparation: e.target.value })
+                      }
+                      className="flex-1 rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <label className="flex shrink-0 items-center gap-1 text-xs text-zinc-500">
+                      <input
+                        type="checkbox"
+                        checked={ing.pantry}
+                        onChange={(e) =>
+                          updateIngredient(i, { pantry: e.target.checked })
+                        }
+                      />
+                      pantry
+                    </label>
+                  </div>
                 </div>
               ))}
               <button

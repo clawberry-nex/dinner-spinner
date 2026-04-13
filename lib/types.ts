@@ -6,6 +6,7 @@ export const IngredientSchema = z.object({
   name: z.string().trim().min(1).max(128),
   descriptor: z.string().trim().max(60).nullable().optional(),
   preparation: z.string().trim().max(200).nullable().optional(),
+  pantry: z.boolean().nullable().optional(),
 });
 
 export type Ingredient = z.infer<typeof IngredientSchema>;

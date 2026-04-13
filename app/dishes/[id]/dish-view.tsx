@@ -108,8 +108,12 @@ export default function DishView({ dish }: { dish: Dish }) {
                 servings,
                 dish.baseServings,
               );
+              const pantry = !!scaled.pantry;
               return (
-                <li key={i}>
+                <li
+                  key={i}
+                  className={pantry ? "italic text-zinc-400 dark:text-zinc-500" : ""}
+                >
                   <span className="font-mono">
                     {formatQty(scaled.quantity)}
                   </span>
@@ -117,8 +121,13 @@ export default function DishView({ dish }: { dish: Dish }) {
                   {scaled.descriptor ? ` ${scaled.descriptor}` : ""}{" "}
                   {scaled.name}
                   {scaled.preparation && (
-                    <span className="text-zinc-500">
+                    <span className={pantry ? "" : "text-zinc-500"}>
                       , {scaled.preparation}
+                    </span>
+                  )}
+                  {pantry && (
+                    <span className="ml-2 rounded-full border border-zinc-300 px-1.5 py-0.5 text-[10px] uppercase not-italic tracking-wide text-zinc-500 dark:border-zinc-700">
+                      pantry
                     </span>
                   )}
                 </li>

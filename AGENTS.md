@@ -54,23 +54,25 @@ When ingesting a pasted recipe, do **not** cram everything into `name`. Each
 ingredient is a JSON object:
 
 ```ts
-{ quantity: number, unit?: string, descriptor?: string, name: string, preparation?: string }
+{ quantity: number, unit?: string, descriptor?: string, name: string, preparation?: string, pantry?: boolean }
 ```
 
 | Field | Meaning | Examples | Shown on shopping list? |
 |---|---|---|---|
-| `name` | Bare purchasable thing | `green chili`, `aubergine`, `tomato`, `garlic`, `red pepper` | always |
-| `descriptor` | Size/quality modifier that changes what you'd buy | `small`, `medium`, `large`, `ripe` | yes |
+| `name` | Bare purchasable thing | `green chili`, `aubergine`, `tomato`, `garlic`, `red pepper` | always (unless pantry) |
+| `descriptor` | Size/quality modifier that changes what you'd buy | `small`, `medium`, `large`, `ripe` | yes (unless pantry) |
 | `preparation` | Cut/cook prep | `thinly sliced`, `peeled and cut into 3cm dice`, `chopped`, `trimmed` | **no** (dropped) |
-| `unit` | Measurement unit if any | `g`, `ml`, `tbsp`, `stuks`, `cloves`, `handful` | yes |
-| `quantity` | Number (float OK) | `2`, `0.5`, `110` | yes |
+| `unit` | Measurement unit if any | `g`, `ml`, `tbsp`, `piece`, `clove`, `handful` | yes (unless pantry) |
+| `quantity` | Number (float OK) | `2`, `0.5`, `110` | yes (unless pantry) |
+| `pantry` | True if Mirko always has this in stock | `true` for water, salt, pepper, olive oil, sugar, basic flour | **no** — pantry items are excluded from the shopping list and Todoist push entirely. Still shown on the dish detail in muted italic with a "pantry" badge. |
 
 Rules:
 - **`fresh` is implied** — never put `fresh` in `descriptor`. Everything's assumed fresh.
 - **Colour that changes the product is part of `name`**, not descriptor. `green chili` and `red chili` are different items; `yellow pepper` and `red pepper` are different items.
 - **Normalize to singular in `name`**: `tomatoes` → `tomato`, `small onions` → `onion`. This lets aggregation across dishes actually merge.
 - **Use the standard vocabularies in `lib/vocabulary.ts`** for both `unit` and `name` whenever possible. Diverge only when nothing fits — then type a sensible custom value. The admin form uses these as `<datalist>` autocomplete hints.
-- If an item is truly free-text ("salt and black pepper to taste"), just put it with `unit: "to taste"`, `quantity: 1`, and leave descriptor/preparation empty. It won't meaningfully aggregate but the dish detail will still show it.
+- **Mark `pantry: true`** on items the user always has in stock — the canonical set is `water`, `salt`, `black pepper`, `white pepper`, `olive oil`, `vegetable oil`, `sunflower oil`, `sugar`, `caster sugar`, `plain flour`. Use judgment for anything else (don't flag rare/expensive ingredients).
+- If an item is truly free-text ("salt and black pepper to taste"), just put it with `unit: "to taste"`, `quantity: 1`, and leave descriptor/preparation empty. Mark `pantry: true` for salt/pepper.
 
 ### Standard units (use these when possible)
 

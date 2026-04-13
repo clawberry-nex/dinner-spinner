@@ -50,6 +50,9 @@ export function aggregateIngredients(
   const merged = new Map<AggregateKey, Ingredient>();
   for (const group of groups) {
     for (const raw of group.ingredients) {
+      // Pantry items are excluded from the shopping list — they're things
+      // the user always has in stock (water, salt, pepper, etc.).
+      if (raw.pantry) continue;
       const scaled = scaleIngredient(raw, group.servings, group.baseServings);
       const key = keyOf(scaled);
       const existing = merged.get(key);
