@@ -6,6 +6,7 @@ import type { Dish, Ingredient } from "@/lib/types";
 import {
   aggregateIngredients,
   formatQty,
+  visibleUnit,
 } from "@/lib/ingredients";
 
 const PLAN_KEY = "mealPlan";
@@ -176,13 +177,16 @@ export default function PlanPage() {
               <p className="text-zinc-500">No ingredients across these dishes.</p>
             ) : (
               <ul className="list-disc space-y-1 pl-6">
-                {shoppingList.map((ing, i) => (
-                  <li key={i}>
-                    <span className="font-mono">{formatQty(ing.quantity)}</span>
-                    {ing.unit ? ` ${ing.unit}` : ""}
-                    {ing.descriptor ? ` ${ing.descriptor}` : ""} {ing.name}
-                  </li>
-                ))}
+                {shoppingList.map((ing, i) => {
+                  const unit = visibleUnit(ing.unit);
+                  return (
+                    <li key={i}>
+                      <span className="font-mono">{formatQty(ing.quantity)}</span>
+                      {unit ? ` ${unit}` : ""}
+                      {ing.descriptor ? ` ${ing.descriptor}` : ""} {ing.name}
+                    </li>
+                  );
+                })}
               </ul>
             )}
             {shoppingList.length > 0 && (

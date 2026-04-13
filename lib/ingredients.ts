@@ -17,16 +17,30 @@ export function formatQty(qty: number): string {
     .replace(/\.?0+$/, "");
 }
 
+// Units that are implicit and shouldn't be rendered (data still stores them
+// for aggregation correctness — "piece" is the canonical countable unit).
+const HIDDEN_UNITS = new Set(["piece"]);
+
+function visibleUnit(unit: string | null | undefined): string | null {
+  const u = unit?.trim();
+  if (!u) return null;
+  if (HIDDEN_UNITS.has(u.toLowerCase())) return null;
+  return u;
+}
+
 // Shopping-list format: qty, unit, descriptor, name — NO preparation.
 // This is what Todoist tasks use; `preparation` is intentionally dropped.
 export function formatIngredient(ing: Ingredient): string {
   const qty = formatQty(ing.quantity);
   const parts: string[] = [qty];
-  if (ing.unit?.trim()) parts.push(ing.unit.trim());
+  const unit = visibleUnit(ing.unit);
+  if (unit) parts.push(unit);
   if (ing.descriptor?.trim()) parts.push(ing.descriptor.trim());
   parts.push(ing.name);
   return parts.join(" ");
 }
+
+export { visibleUnit };
 
 // Dish-detail format: shopping-list line + ", preparation" suffix if present.
 export function formatIngredientDetailed(ing: Ingredient): string {

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import type { Dish } from "@/lib/types";
-import { formatQty, scaleIngredient } from "@/lib/ingredients";
+import { formatQty, scaleIngredient, visibleUnit } from "@/lib/ingredients";
 import type { Ingredient } from "@/lib/types";
 
 const PLAN_KEY = "mealPlan";
@@ -109,6 +109,7 @@ export default function DishView({ dish }: { dish: Dish }) {
                 dish.baseServings,
               );
               const pantry = !!scaled.pantry;
+              const unit = visibleUnit(scaled.unit);
               return (
                 <li
                   key={i}
@@ -117,7 +118,7 @@ export default function DishView({ dish }: { dish: Dish }) {
                   <span className="font-mono">
                     {formatQty(scaled.quantity)}
                   </span>
-                  {scaled.unit ? ` ${scaled.unit}` : ""}
+                  {unit ? ` ${unit}` : ""}
                   {scaled.descriptor ? ` ${scaled.descriptor}` : ""}{" "}
                   {scaled.name}
                   {scaled.preparation && (
