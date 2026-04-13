@@ -1,6 +1,8 @@
 import type { Ingredient } from "./types";
 import { formatIngredient } from "./ingredients";
 
+// Pinned to /api/v1 — the old /rest/v2 was deprecated and returns 410.
+// Projects response is {results, next_cursor}, so pagination is handled below.
 const API = "https://api.todoist.com/api/v1";
 
 async function todoistFetch(path: string, init: RequestInit = {}) {

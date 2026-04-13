@@ -5,7 +5,13 @@ multi-dish shopping list, and push it to Todoist. Admin UI and a tokened POST
 endpoint for adding new dishes.
 
 Next.js 16 (App Router) + TypeScript + Tailwind v4 + Postgres on Neon. Deploys
-to Vercel.
+to Vercel — auto-deploys from `main`.
+
+- **Production**: https://dinner-spinner-lake.vercel.app
+- **Admin**: https://dinner-spinner-lake.vercel.app/admin
+
+The earlier MongoDB-based attempt lives (archived, read-only) at
+[clawberry-nex/dinner-spinner-old](https://github.com/clawberry-nex/dinner-spinner-old).
 
 ## Environment variables
 
