@@ -5,6 +5,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import type { Dish } from "@/lib/types";
 import { formatQty, scaleIngredient } from "@/lib/ingredients";
+import type { Ingredient } from "@/lib/types";
 
 const PLAN_KEY = "mealPlan";
 
@@ -102,11 +103,24 @@ export default function DishView({ dish }: { dish: Dish }) {
         {dish.ingredients.length > 0 ? (
           <ul className="list-disc space-y-1 pl-6">
             {dish.ingredients.map((ing, i) => {
-              const scaled = scaleIngredient(ing, servings, dish.baseServings);
+              const scaled: Ingredient = scaleIngredient(
+                ing,
+                servings,
+                dish.baseServings,
+              );
               return (
                 <li key={i}>
-                  <span className="font-mono">{formatQty(scaled.quantity)}</span>
-                  {scaled.unit ? ` ${scaled.unit}` : ""} {scaled.name}
+                  <span className="font-mono">
+                    {formatQty(scaled.quantity)}
+                  </span>
+                  {scaled.unit ? ` ${scaled.unit}` : ""}
+                  {scaled.descriptor ? ` ${scaled.descriptor}` : ""}{" "}
+                  {scaled.name}
+                  {scaled.preparation && (
+                    <span className="text-zinc-500">
+                      , {scaled.preparation}
+                    </span>
+                  )}
                 </li>
               );
             })}

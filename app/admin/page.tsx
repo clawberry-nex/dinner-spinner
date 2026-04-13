@@ -4,7 +4,21 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Dish, Ingredient } from "@/lib/types";
 
-type IngredientDraft = { quantity: string; unit: string; name: string };
+type IngredientDraft = {
+  quantity: string;
+  unit: string;
+  descriptor: string;
+  name: string;
+  preparation: string;
+};
+
+const EMPTY_INGREDIENT: IngredientDraft = {
+  quantity: "",
+  unit: "",
+  descriptor: "",
+  name: "",
+  preparation: "",
+};
 
 type Draft = {
   id: number | null;
@@ -23,7 +37,7 @@ const EMPTY_DRAFT: Draft = {
   recipe: "",
   tagsInput: "",
   baseServings: "4",
-  ingredients: [{ quantity: "", unit: "", name: "" }],
+  ingredients: [{ ...EMPTY_INGREDIENT }],
 };
 
 function dishToDraft(d: Dish): Draft {
@@ -39,9 +53,11 @@ function dishToDraft(d: Dish): Draft {
         ? d.ingredients.map((i) => ({
             quantity: String(i.quantity),
             unit: i.unit ?? "",
+            descriptor: i.descriptor ?? "",
             name: i.name,
+            preparation: i.preparation ?? "",
           }))
-        : [{ quantity: "", unit: "", name: "" }],
+        : [{ ...EMPTY_INGREDIENT }],
   };
 }
 
@@ -52,6 +68,8 @@ function draftToPayload(d: Draft) {
       quantity: Number(i.quantity) || 0,
       unit: i.unit.trim() || null,
       name: i.name.trim(),
+      descriptor: i.descriptor.trim() || null,
+      preparation: i.preparation.trim() || null,
     }));
   const tags = d.tagsInput
     .split(",")
@@ -140,7 +158,7 @@ export default function AdminPage() {
   function addIngredient() {
     setDraft((d) => ({
       ...d,
-      ingredients: [...d.ingredients, { quantity: "", unit: "", name: "" }],
+      ingredients: [...d.ingredients, { ...EMPTY_INGREDIENT }],
     }));
   }
 
@@ -243,42 +261,73 @@ export default function AdminPage() {
 
           <div>
             <span className="text-sm font-medium">Ingredients</span>
-            <div className="mt-1 flex flex-col gap-2">
+            <p className="mb-2 text-xs text-zinc-500">
+              <span className="font-medium">name</span> is the bare purchasable
+              thing (&ldquo;green chili&rdquo;, &ldquo;tomato&rdquo;).{" "}
+              <span className="font-medium">descriptor</span> is
+              size/quality that matters at the store (small, medium, large).{" "}
+              <span className="font-medium">prep</span> is cut/cook prep
+              (&ldquo;thinly sliced&rdquo;) &mdash; dropped from the shopping
+              list.
+            </p>
+            <div className="mt-1 flex flex-col gap-3">
               {draft.ingredients.map((ing, i) => (
-                <div key={i} className="flex gap-2">
+                <div
+                  key={i}
+                  className="rounded border border-zinc-200 p-2 dark:border-zinc-800"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="qty"
+                      value={ing.quantity}
+                      onChange={(e) =>
+                        updateIngredient(i, { quantity: e.target.value })
+                      }
+                      className="w-20 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <input
+                      placeholder="unit (g, tbsp…)"
+                      value={ing.unit}
+                      onChange={(e) =>
+                        updateIngredient(i, { unit: e.target.value })
+                      }
+                      className="w-28 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <input
+                      placeholder="size (medium…)"
+                      value={ing.descriptor}
+                      onChange={(e) =>
+                        updateIngredient(i, { descriptor: e.target.value })
+                      }
+                      className="w-32 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <input
+                      placeholder="name (green chili)"
+                      value={ing.name}
+                      onChange={(e) =>
+                        updateIngredient(i, { name: e.target.value })
+                      }
+                      className="min-w-40 flex-1 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeIngredient(i)}
+                      className="text-sm text-red-600"
+                      aria-label="remove ingredient"
+                    >
+                      ×
+                    </button>
+                  </div>
                   <input
-                    type="number"
-                    step="any"
-                    placeholder="qty"
-                    value={ing.quantity}
+                    placeholder="prep (thinly sliced, peeled and diced…)"
+                    value={ing.preparation}
                     onChange={(e) =>
-                      updateIngredient(i, { quantity: e.target.value })
+                      updateIngredient(i, { preparation: e.target.value })
                     }
-                    className="w-20 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+                    className="mt-2 w-full rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />
-                  <input
-                    placeholder="unit (g, tbsp, pcs…)"
-                    value={ing.unit}
-                    onChange={(e) =>
-                      updateIngredient(i, { unit: e.target.value })
-                    }
-                    className="w-40 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  <input
-                    placeholder="name"
-                    value={ing.name}
-                    onChange={(e) =>
-                      updateIngredient(i, { name: e.target.value })
-                    }
-                    className="flex-1 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeIngredient(i)}
-                    className="text-sm text-red-600"
-                  >
-                    ×
-                  </button>
                 </div>
               ))}
               <button

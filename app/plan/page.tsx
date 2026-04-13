@@ -179,7 +179,8 @@ export default function PlanPage() {
                 {shoppingList.map((ing, i) => (
                   <li key={i}>
                     <span className="font-mono">{formatQty(ing.quantity)}</span>
-                    {ing.unit ? ` ${ing.unit}` : ""} {ing.name}
+                    {ing.unit ? ` ${ing.unit}` : ""}
+                    {ing.descriptor ? ` ${ing.descriptor}` : ""} {ing.name}
                   </li>
                 ))}
               </ul>

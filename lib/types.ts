@@ -4,6 +4,8 @@ export const IngredientSchema = z.object({
   quantity: z.number().nonnegative(),
   unit: z.string().trim().max(32).nullable().optional(),
   name: z.string().trim().min(1).max(128),
+  descriptor: z.string().trim().max(60).nullable().optional(),
+  preparation: z.string().trim().max(200).nullable().optional(),
 });
 
 export type Ingredient = z.infer<typeof IngredientSchema>;

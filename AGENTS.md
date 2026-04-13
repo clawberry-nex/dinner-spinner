@@ -48,6 +48,53 @@ Next.js 16 (App Router) + TypeScript + Tailwind v4 + `@neondatabase/serverless` 
 
 `.env.example` ships the placeholder template; `.env*` is gitignored except for `.env.example`.
 
+## Parsing recipes into ingredient rows
+
+When ingesting a pasted recipe, do **not** cram everything into `name`. Each
+ingredient is a JSON object:
+
+```ts
+{ quantity: number, unit?: string, descriptor?: string, name: string, preparation?: string }
+```
+
+| Field | Meaning | Examples | Shown on shopping list? |
+|---|---|---|---|
+| `name` | Bare purchasable thing | `green chili`, `aubergine`, `tomato`, `garlic`, `red pepper` | always |
+| `descriptor` | Size/quality modifier that changes what you'd buy | `small`, `medium`, `large`, `ripe` | yes |
+| `preparation` | Cut/cook prep | `thinly sliced`, `peeled and cut into 3cm dice`, `chopped`, `trimmed` | **no** (dropped) |
+| `unit` | Measurement unit if any | `g`, `ml`, `tbsp`, `stuks`, `cloves`, `handful` | yes |
+| `quantity` | Number (float OK) | `2`, `0.5`, `110` | yes |
+
+Rules:
+- **`fresh` is implied** — never put `fresh` in `descriptor`. Everything's assumed fresh.
+- **Colour that changes the product is part of `name`**, not descriptor. `green chili` and `red chili` are different items; `yellow pepper` and `red pepper` are different items.
+- **Normalize to singular in `name`**: `tomatoes` → `tomato`, `small onions` → `onion`. This lets aggregation across dishes actually merge.
+- If an item is truly free-text ("salt and black pepper to taste"), just put it with `unit: "to taste"`, `quantity: 1`, and leave descriptor/preparation empty. It won't meaningfully aggregate but the dish detail will still show it.
+
+### Worked examples
+
+```
+"2 small onions, cut into 3cm dice"
+→ { quantity: 2, unit: "stuks", descriptor: "small", name: "onion", preparation: "cut into 3cm dice" }
+
+"0.5 fresh green chilli, thinly sliced"
+→ { quantity: 0.5, unit: "stuks", name: "green chili", preparation: "thinly sliced" }
+  (no descriptor — "fresh" is implied; "green" stays with name)
+
+"0.5 large aubergine, peeled and cut into 3cm dice"
+→ { quantity: 0.5, unit: "stuks", descriptor: "large", name: "aubergine", preparation: "peeled and cut into 3cm dice" }
+
+"2 medium tomatoes, peeled and chopped"
+→ { quantity: 2, unit: "stuks", descriptor: "medium", name: "tomato", preparation: "peeled and chopped" }
+  (plural → singular)
+
+"4 cloves garlic, sliced"
+→ { quantity: 4, unit: "cloves", name: "garlic", preparation: "sliced" }
+
+"200 g French beans, trimmed"
+→ { quantity: 200, unit: "g", name: "French beans", preparation: "trimmed" }
+```
+
 ## Non-obvious things
 
 - **Next 16 typegen**: `RouteContext<'/api/dishes/[id]'>` and `PageProps<'/dishes/[id]'>` are globally available types generated into `.next/dev/types/` by `next dev`, `next build`, or `next typegen`. If tsc complains about `Cannot find name 'RouteContext'`, run `npx next typegen` first.

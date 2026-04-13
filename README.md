@@ -42,17 +42,32 @@ curl -X POST https://<your-deploy>/api/dishes \
   -H "Authorization: Bearer $API_TOKEN" \
   -H "content-type: application/json" \
   -d '{
-    "title": "Vegetarian Lasagna",
-    "subtitle": "Layered comfort",
+    "title": "Ratatouille",
+    "subtitle": "Provencal veg stew",
     "tags": ["vegetarian", "Finn likes this"],
     "baseServings": 4,
     "ingredients": [
-      { "quantity": 2, "unit": "pcs", "name": "carrot" },
-      { "quantity": 400, "unit": "g", "name": "lasagna sheets" }
+      { "quantity": 2, "unit": "stuks", "descriptor": "small", "name": "onion", "preparation": "cut into 3cm dice" },
+      { "quantity": 0.5, "unit": "stuks", "name": "green chili", "preparation": "thinly sliced" },
+      { "quantity": 2, "unit": "stuks", "descriptor": "medium", "name": "tomato", "preparation": "peeled and chopped" },
+      { "quantity": 200, "unit": "g", "name": "French beans", "preparation": "trimmed" }
     ],
-    "recipe": "1. Preheat oven...\n2. ..."
+    "recipe": "1. Heat oil...\n2. ..."
   }'
 ```
+
+Each ingredient has three text fields that together describe the item:
+
+| Field | Purpose | Examples | In shopping list? |
+|---|---|---|---|
+| `name` | bare purchasable thing | `green chili`, `aubergine`, `tomato` | yes |
+| `descriptor` (optional) | size/quality that affects purchase | `small`, `medium`, `large` | yes (part of aggregation key) |
+| `preparation` (optional) | cut/cook prep | `thinly sliced`, `peeled and diced`, `chopped` | **no** — dropped |
+
+Rules of thumb:
+- `fresh` is implied — never put it in `descriptor`.
+- Colours that change the product (`green` vs `red` chili, `red` vs `yellow` pepper) are part of `name`, not descriptor.
+- Use singular in `name` (`tomato`, not `tomatoes`) so aggregation across dishes actually merges.
 
 ## Routes
 
@@ -77,9 +92,11 @@ curl -X POST https://<your-deploy>/api/dishes \
 
 ## Ingredient aggregation
 
-Ingredients are grouped by `(name, unit)` case-insensitively and summed.
-Mismatched units (e.g. `100 g flour` vs `1 cup flour`) are listed separately
-— there's no unit conversion.
+Ingredients are grouped by `(name, unit, descriptor)` case-insensitively and
+summed. `preparation` is dropped during aggregation, so `2 onion, sliced` and
+`3 onion, diced` collapse into `5 onion` on the shopping list. Mismatched
+units (e.g. `100 g flour` vs `1 cup flour`) are listed separately — there's
+no unit conversion.
 
 The recipe's `baseServings` is the source of truth for scaling: when you view
 a dish at N servings, each quantity is multiplied by `N / baseServings`.
