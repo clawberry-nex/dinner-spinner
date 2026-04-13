@@ -6,7 +6,7 @@ import {
   checkApiToken,
   verifySessionCookieValue,
 } from "@/lib/auth";
-import { applyPantryDefaults } from "@/lib/ingredients";
+import { applyPantryDefaults } from "@/lib/pantry";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -52,7 +52,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const d = { ...parsed.data, ingredients: applyPantryDefaults(parsed.data.ingredients) };
+  const d = {
+    ...parsed.data,
+    ingredients: await applyPantryDefaults(parsed.data.ingredients),
+  };
   const rows = await sql`
     INSERT INTO dishes (title, subtitle, recipe, tags, ingredients, base_servings)
     VALUES (

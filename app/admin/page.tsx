@@ -96,8 +96,15 @@ export default function AdminPage() {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [existingNames, setExistingNames] = useState<string[]>([]);
+  const [pantryDefaults, setPantryDefaults] = useState<string[]>([]);
+  const [newPantryName, setNewPantryName] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  const pantryDefaultsSet = useMemo(
+    () => new Set(pantryDefaults.map((n) => n.toLowerCase())),
+    [pantryDefaults],
+  );
 
   // Standard vocabulary + names already used in the DB, deduped & sorted.
   const ingredientNameOptions = useMemo(() => {
@@ -113,14 +120,42 @@ export default function AdminPage() {
   }, [existingNames]);
 
   async function reload() {
-    const [dRes, tRes, nRes] = await Promise.all([
+    const [dRes, tRes, nRes, pRes] = await Promise.all([
       fetch("/api/dishes"),
       fetch("/api/tags"),
       fetch("/api/ingredient-names"),
+      fetch("/api/pantry-defaults"),
     ]);
     setDishes((await dRes.json()) as Dish[]);
     setTagSuggestions((await tRes.json()) as string[]);
     setExistingNames((await nRes.json()) as string[]);
+    setPantryDefaults((await pRes.json()) as string[]);
+  }
+
+  async function addPantryDefault(name: string) {
+    const normalized = name.toLowerCase().trim();
+    if (!normalized) return;
+    if (pantryDefaultsSet.has(normalized)) return;
+    const res = await fetch("/api/pantry-defaults", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: normalized }),
+    });
+    if (res.ok) {
+      setPantryDefaults((prev) =>
+        [...prev, normalized].sort((a, b) => a.localeCompare(b)),
+      );
+    }
+  }
+
+  async function removePantryDefault(name: string) {
+    const res = await fetch(
+      `/api/pantry-defaults?name=${encodeURIComponent(name)}`,
+      { method: "DELETE" },
+    );
+    if (res.ok) {
+      setPantryDefaults((prev) => prev.filter((n) => n !== name));
+    }
   }
 
   useEffect(() => {
@@ -370,6 +405,20 @@ export default function AdminPage() {
                       />
                       pantry
                     </label>
+                    {ing.pantry &&
+                      ing.name.trim() &&
+                      !pantryDefaultsSet.has(
+                        ing.name.trim().toLowerCase(),
+                      ) && (
+                        <button
+                          type="button"
+                          onClick={() => addPantryDefault(ing.name)}
+                          className="shrink-0 text-xs text-emerald-600 hover:underline"
+                          title={`Add "${ing.name.trim()}" to pantry defaults so it auto-flags next time`}
+                        >
+                          pin to defaults
+                        </button>
+                      )}
                   </div>
                 </div>
               ))}
@@ -465,6 +514,68 @@ export default function AdminPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-xl font-semibold">
+          Pantry defaults ({pantryDefaults.length})
+        </h2>
+        <p className="mb-3 text-xs text-zinc-500">
+          Ingredient names in this list auto-flag <code>pantry: true</code>{" "}
+          when used in any dish. They&rsquo;re excluded from the shopping list
+          and Todoist push. Match is case-insensitive, exact name (no
+          fuzzy).
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            addPantryDefault(newPantryName);
+            setNewPantryName("");
+          }}
+          className="mb-3 flex gap-2"
+        >
+          <input
+            list="ingredient-names-for-pantry"
+            value={newPantryName}
+            onChange={(e) => setNewPantryName(e.target.value)}
+            placeholder="add pantry name…"
+            className="flex-1 rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          <button
+            type="submit"
+            disabled={!newPantryName.trim()}
+            className="rounded-md bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-70"
+          >
+            Add
+          </button>
+        </form>
+        <datalist id="ingredient-names-for-pantry">
+          {ingredientNameOptions.map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
+        {pantryDefaults.length === 0 ? (
+          <p className="text-zinc-500">No pantry defaults yet.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {pantryDefaults.map((name) => (
+              <span
+                key={name}
+                className="group inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-2 py-0.5 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+              >
+                {name}
+                <button
+                  type="button"
+                  onClick={() => removePantryDefault(name)}
+                  className="text-zinc-400 hover:text-red-600"
+                  aria-label={`remove ${name} from pantry defaults`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
         )}
       </section>
     </div>

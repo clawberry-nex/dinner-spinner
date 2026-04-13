@@ -1,21 +1,7 @@
 import type { Ingredient } from "./types";
-import { PANTRY_DEFAULTS } from "./vocabulary";
 
-/**
- * For any ingredient where pantry is not explicitly set to false,
- * auto-mark pantry:true if the name matches PANTRY_DEFAULTS.
- * Explicit pantry:false is always respected.
- */
-export function applyPantryDefaults(ingredients: Ingredient[]): Ingredient[] {
-  return ingredients.map((ing) => {
-    if (ing.pantry === false) return ing;
-    if (ing.pantry) return ing;
-    if (PANTRY_DEFAULTS.has(ing.name.toLowerCase().trim())) {
-      return { ...ing, pantry: true };
-    }
-    return ing;
-  });
-}
+// applyPantryDefaults lives in lib/pantry.ts (server-only, DB-backed).
+// This file stays pure so client components can import from it.
 
 export function scaleIngredient(
   ingredient: Ingredient,
