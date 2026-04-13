@@ -18,6 +18,9 @@ export default function RootLayout({
             <Link href="/" className="hover:underline">
               Spinner
             </Link>
+            <Link href="/dishes" className="hover:underline">
+              Dishes
+            </Link>
             <Link href="/plan" className="hover:underline">
               Meal plan
             </Link>
