@@ -7,6 +7,7 @@ import {
   checkApiToken,
   verifySessionCookieValue,
 } from "@/lib/auth";
+import { applyPantryDefaults } from "@/lib/ingredients";
 
 async function isAuthorized(request: Request): Promise<boolean> {
   if (checkApiToken(request.headers.get("authorization"))) return true;
@@ -49,7 +50,7 @@ export async function PATCH(
       { status: 400 },
     );
   }
-  const d = parsed.data;
+  const d = { ...parsed.data, ingredients: applyPantryDefaults(parsed.data.ingredients) };
   const rows = await sql`
     UPDATE dishes SET
       title = ${d.title},
