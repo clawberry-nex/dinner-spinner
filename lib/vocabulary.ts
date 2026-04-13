@@ -248,3 +248,40 @@ export const STANDARD_INGREDIENTS: readonly string[] = [
   "milk chocolate",
   "cocoa powder",
 ];
+
+/**
+ * Ingredient names that are auto-marked pantry:true in the admin form.
+ * These are things Mirko always has in stock — excluded from shopping lists.
+ */
+export const PANTRY_DEFAULTS: ReadonlySet<string> = new Set([
+  // water & salt
+  "water",
+  "salt",
+  "black pepper",
+  "white pepper",
+  // oils
+  "olive oil",
+  "sunflower oil",
+  "vegetable oil",
+  "sesame oil",
+  "coconut oil",
+  // baking
+  "plain flour",
+  "bread flour",
+  "baking powder",
+  "baking soda",
+  "sugar",
+  "caster sugar",
+  "brown sugar",
+  "icing sugar",
+  // vinegars & sauces
+  "vinegar",
+  "balsamic vinegar",
+  "white wine vinegar",
+  "soy sauce",
+  "fish sauce",
+  "sriracha",
+  "mustard",
+  "ketchup",
+  "tomato purée",
+]);

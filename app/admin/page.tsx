@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Dish, Ingredient } from "@/lib/types";
-import { STANDARD_INGREDIENTS, STANDARD_UNITS } from "@/lib/vocabulary";
+import { PANTRY_DEFAULTS, STANDARD_INGREDIENTS, STANDARD_UNITS } from "@/lib/vocabulary";
 
 type IngredientDraft = {
   quantity: string;
@@ -332,9 +332,14 @@ export default function AdminPage() {
                       list="ingredient-names"
                       placeholder="name (green chili)"
                       value={ing.name}
-                      onChange={(e) =>
-                        updateIngredient(i, { name: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const name = e.target.value;
+                        const patch: Partial<IngredientDraft> = { name };
+                        if (PANTRY_DEFAULTS.has(name.toLowerCase().trim())) {
+                          patch.pantry = true;
+                        }
+                        updateIngredient(i, patch);
+                      }}
                       className="min-w-40 flex-1 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
                     />
                     <button
