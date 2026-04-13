@@ -61,15 +61,20 @@ function keyOf(ing: Ingredient): AggregateKey {
   return `${name}\u0000${unit}\u0000${descriptor}`;
 }
 
-export function aggregateIngredients(
-  groups: { ingredients: Ingredient[]; servings: number; baseServings: number }[],
+type IngredientGroup = {
+  ingredients: Ingredient[];
+  servings: number;
+  baseServings: number;
+};
+
+function aggregate(
+  groups: IngredientGroup[],
+  predicate: (ing: Ingredient) => boolean,
 ): Ingredient[] {
   const merged = new Map<AggregateKey, Ingredient>();
   for (const group of groups) {
     for (const raw of group.ingredients) {
-      // Pantry items are excluded from the shopping list — they're things
-      // the user always has in stock (water, salt, pepper, etc.).
-      if (raw.pantry) continue;
+      if (!predicate(raw)) continue;
       const scaled = scaleIngredient(raw, group.servings, group.baseServings);
       const key = keyOf(scaled);
       const existing = merged.get(key);
@@ -83,6 +88,7 @@ export function aggregateIngredients(
           unit: scaled.unit ?? null,
           name: scaled.name,
           descriptor: scaled.descriptor ?? null,
+          pantry: scaled.pantry ?? null,
         });
       }
     }
@@ -90,4 +96,17 @@ export function aggregateIngredients(
   return Array.from(merged.values()).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
+}
+
+// Shopping list: everything the user needs to actually buy.
+// Pantry items are excluded (they're things like water/salt/pepper
+// the user always has in stock).
+export function aggregateIngredients(groups: IngredientGroup[]): Ingredient[] {
+  return aggregate(groups, (ing) => !ing.pantry);
+}
+
+// Pantry items used in the plan — reference view so the user can
+// sanity-check their stock. Never sent to Todoist.
+export function aggregatePantryItems(groups: IngredientGroup[]): Ingredient[] {
+  return aggregate(groups, (ing) => !!ing.pantry);
 }

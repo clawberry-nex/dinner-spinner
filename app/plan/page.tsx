@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Dish, Ingredient } from "@/lib/types";
 import {
   aggregateIngredients,
+  aggregatePantryItems,
   formatQty,
   visibleUnit,
 } from "@/lib/ingredients";
@@ -56,16 +57,24 @@ export default function PlanPage() {
     [plan, dishes],
   );
 
-  const shoppingList: Ingredient[] = useMemo(
+  const groupedForAggregation = useMemo(
     () =>
-      aggregateIngredients(
-        planWithDish.map(({ entry, dish }) => ({
-          ingredients: dish.ingredients,
-          servings: entry.servings,
-          baseServings: dish.baseServings,
-        })),
-      ),
+      planWithDish.map(({ entry, dish }) => ({
+        ingredients: dish.ingredients,
+        servings: entry.servings,
+        baseServings: dish.baseServings,
+      })),
     [planWithDish],
+  );
+
+  const shoppingList: Ingredient[] = useMemo(
+    () => aggregateIngredients(groupedForAggregation),
+    [groupedForAggregation],
+  );
+
+  const pantryList: Ingredient[] = useMemo(
+    () => aggregatePantryItems(groupedForAggregation),
+    [groupedForAggregation],
   );
 
   function updateServings(id: number, delta: number) {
@@ -212,6 +221,32 @@ export default function PlanPage() {
               </div>
             )}
           </section>
+
+          {pantryList.length > 0 && (
+            <section>
+              <h2 className="mb-1 text-xl font-semibold text-zinc-600 dark:text-zinc-400">
+                Pantry check ({pantryList.length})
+              </h2>
+              <p className="mb-3 text-xs text-zinc-500">
+                Skipped from the shopping list because you already have
+                them. Glance over to make sure you&rsquo;re not running low.
+              </p>
+              <ul className="list-disc space-y-1 pl-6 italic text-zinc-500">
+                {pantryList.map((ing, i) => {
+                  const unit = visibleUnit(ing.unit);
+                  return (
+                    <li key={i}>
+                      <span className="font-mono not-italic">
+                        {formatQty(ing.quantity)}
+                      </span>
+                      {unit ? ` ${unit}` : ""}
+                      {ing.descriptor ? ` ${ing.descriptor}` : ""} {ing.name}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
         </>
       )}
     </div>
