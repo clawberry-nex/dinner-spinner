@@ -68,6 +68,7 @@ Rules of thumb:
 - `fresh` is implied — never put it in `descriptor`.
 - Colours that change the product (`green` vs `red` chili, `red` vs `yellow` pepper) are part of `name`, not descriptor.
 - Use singular in `name` (`tomato`, not `tomatoes`) so aggregation across dishes actually merges.
+- Prefer the standard vocabularies in `lib/vocabulary.ts` (`STANDARD_UNITS` and `STANDARD_INGREDIENTS`) for `unit` and `name`. The admin form surfaces them as `<datalist>` autocomplete. Use English (`piece`, not `stuks`; `tbsp`, not `el`).
 
 ## Routes
 

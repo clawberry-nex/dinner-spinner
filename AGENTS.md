@@ -69,7 +69,25 @@ Rules:
 - **`fresh` is implied** — never put `fresh` in `descriptor`. Everything's assumed fresh.
 - **Colour that changes the product is part of `name`**, not descriptor. `green chili` and `red chili` are different items; `yellow pepper` and `red pepper` are different items.
 - **Normalize to singular in `name`**: `tomatoes` → `tomato`, `small onions` → `onion`. This lets aggregation across dishes actually merge.
+- **Use the standard vocabularies in `lib/vocabulary.ts`** for both `unit` and `name` whenever possible. Diverge only when nothing fits — then type a sensible custom value. The admin form uses these as `<datalist>` autocomplete hints.
 - If an item is truly free-text ("salt and black pepper to taste"), just put it with `unit: "to taste"`, `quantity: 1`, and leave descriptor/preparation empty. It won't meaningfully aggregate but the dish detail will still show it.
+
+### Standard units (use these when possible)
+
+`g`, `kg`, `oz`, `lb` · `ml`, `l`, `tsp`, `tbsp`, `cup`, `fl oz` · `piece`, `clove`, `wedge`, `slice`, `sprig`, `leaf`, `head`, `bulb`, `stalk`, `bunch`, `handful`, `can`, `jar`, `bottle`, `pack` · `pinch`, `dash`, `splash`, `drizzle`, `to taste`
+
+> Use English: `piece` not `stuks`, `tbsp` not `el`, `tsp` not `tl`, `clove` not `teentjes`, etc. Always singular: `clove` not `cloves`, `sprig` not `sprigs`. The full canonical list lives in `lib/vocabulary.ts::STANDARD_UNITS`.
+
+### Standard ingredient names (use these when possible)
+
+The full list lives in `lib/vocabulary.ts::STANDARD_INGREDIENTS` (~150 items across vegetables, fruits, herbs, spices, proteins, dairy, pantry, nuts, sweets). Notable conventions:
+
+- All **singular**: `onion`, `carrot`, `tomato`, `egg`, `clove` (when used as a name, e.g. for the spice).
+- **Compound colours stay together**: `green chili`, `red pepper`, `yellow pepper`.
+- **Cuts of meat are explicit**: `chicken thigh`, `chicken breast`, `beef mince`, `pork chop` — never just `chicken` or `pork`.
+- **Dairy is specific**: `unsalted butter` is its own entry; so are `double cream`, `sour cream`, `cream cheese`.
+- **Sauces & oils stay generic when possible**: `soy sauce` (not "Kikkoman"), `olive oil` (not "extra virgin Italian olive oil unless that matters to the recipe").
+- If the recipe needs something not in the list (e.g. `gochujang`, `tahini`, `nduja`, `sumac`), just type it. Don't force a bad mapping.
 
 ### Worked examples
 

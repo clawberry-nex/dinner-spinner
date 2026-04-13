@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Dish, Ingredient } from "@/lib/types";
+import { STANDARD_INGREDIENTS, STANDARD_UNITS } from "@/lib/vocabulary";
 
 type IngredientDraft = {
   quantity: string;
@@ -90,16 +91,32 @@ export default function AdminPage() {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [existingNames, setExistingNames] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Standard vocabulary + names already used in the DB, deduped & sorted.
+  const ingredientNameOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const n of [...STANDARD_INGREDIENTS, ...existingNames]) {
+      const key = n.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(n);
+    }
+    return out.sort((a, b) => a.localeCompare(b));
+  }, [existingNames]);
+
   async function reload() {
-    const [dRes, tRes] = await Promise.all([
+    const [dRes, tRes, nRes] = await Promise.all([
       fetch("/api/dishes"),
       fetch("/api/tags"),
+      fetch("/api/ingredient-names"),
     ]);
     setDishes((await dRes.json()) as Dish[]);
     setTagSuggestions((await tRes.json()) as string[]);
+    setExistingNames((await nRes.json()) as string[]);
   }
 
   useEffect(() => {
@@ -288,6 +305,7 @@ export default function AdminPage() {
                       className="w-20 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
                     />
                     <input
+                      list="standard-units"
                       placeholder="unit (g, tbsp…)"
                       value={ing.unit}
                       onChange={(e) =>
@@ -304,6 +322,7 @@ export default function AdminPage() {
                       className="w-32 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
                     />
                     <input
+                      list="ingredient-names"
                       placeholder="name (green chili)"
                       value={ing.name}
                       onChange={(e) =>
@@ -369,6 +388,17 @@ export default function AdminPage() {
             )}
             {msg && <span className="text-sm">{msg}</span>}
           </div>
+
+          <datalist id="standard-units">
+            {STANDARD_UNITS.map((u) => (
+              <option key={u} value={u} />
+            ))}
+          </datalist>
+          <datalist id="ingredient-names">
+            {ingredientNameOptions.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
         </form>
       </section>
 
