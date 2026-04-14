@@ -90,10 +90,16 @@ export default function DishView({ dish }: { dish: Dish }) {
           <span className="ml-2 text-xs text-zinc-500">
             (base: {dish.baseServings})
           </span>
+          <Link
+            href={`/dishes/${dish.id}/cook?servings=${servings}`}
+            className="ml-auto rounded-md border border-emerald-600 px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+          >
+            Cook mode
+          </Link>
           <button
             type="button"
             onClick={addToPlan}
-            className="ml-auto rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
           >
             Add to meal plan
           </button>
