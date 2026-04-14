@@ -54,18 +54,22 @@ async function resolveProjectId(name: string): Promise<string> {
 }
 
 export async function createShoppingTasks(ingredients: Ingredient[]): Promise<number> {
+  return createTaskContents(ingredients.map(formatIngredient));
+}
+
+// Lower-level variant: takes already-formatted task content strings. Lets
+// callers do grouping/formatting client-side (e.g. "2 can + 400 ml coconut
+// milk" as one task).
+export async function createTaskContents(contents: string[]): Promise<number> {
   const projectName = process.env.TODOIST_PROJECT_NAME;
   if (!projectName) throw new Error("TODOIST_PROJECT_NAME is not set");
   const projectId = await resolveProjectId(projectName);
 
   let created = 0;
-  for (const ing of ingredients) {
+  for (const content of contents) {
     await todoistFetch("/tasks", {
       method: "POST",
-      body: JSON.stringify({
-        content: formatIngredient(ing),
-        project_id: projectId,
-      }),
+      body: JSON.stringify({ content, project_id: projectId }),
     });
     created += 1;
   }

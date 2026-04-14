@@ -6,11 +6,15 @@ import {
   checkApiToken,
   verifySessionCookieValue,
 } from "@/lib/auth";
-import { createShoppingTasks } from "@/lib/todoist";
+import { createShoppingTasks, createTaskContents } from "@/lib/todoist";
 
-const BodySchema = z.object({
-  ingredients: z.array(IngredientSchema).min(1),
-});
+// Accept either {ingredients: Ingredient[]} (legacy; server formats each
+// ingredient into a task) or {tasks: string[]} (pre-formatted content,
+// used by the plan page to group multi-unit items into one line).
+const BodySchema = z.union([
+  z.object({ ingredients: z.array(IngredientSchema).min(1) }),
+  z.object({ tasks: z.array(z.string().trim().min(1)).min(1) }),
+]);
 
 async function isAuthorized(request: Request): Promise<boolean> {
   if (checkApiToken(request.headers.get("authorization"))) return true;
@@ -39,7 +43,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const count = await createShoppingTasks(parsed.data.ingredients);
+    const count =
+      "tasks" in parsed.data
+        ? await createTaskContents(parsed.data.tasks)
+        : await createShoppingTasks(parsed.data.ingredients);
     return Response.json({ ok: true, created: count });
   } catch (err) {
     return Response.json(

@@ -15,6 +15,8 @@ type IngredientDraft = {
   // `fixed` is the inverse of `scalable`. Default false (i.e. scalable).
   fixed: boolean;
   optional: boolean;
+  // Comma-separated alternative names in the input; parsed on save.
+  alternativesInput: string;
 };
 
 const EMPTY_INGREDIENT: IngredientDraft = {
@@ -26,6 +28,7 @@ const EMPTY_INGREDIENT: IngredientDraft = {
   pantry: false,
   fixed: false,
   optional: false,
+  alternativesInput: "",
 };
 
 type Draft = {
@@ -67,6 +70,7 @@ function dishToDraft(d: Dish): Draft {
             pantry: !!i.pantry,
             fixed: i.scalable === false,
             optional: !!i.optional,
+            alternativesInput: (i.alternatives ?? []).join(", "),
           }))
         : [{ ...EMPTY_INGREDIENT }],
   };
@@ -75,17 +79,24 @@ function dishToDraft(d: Dish): Draft {
 function draftToPayload(d: Draft) {
   const ingredients: Ingredient[] = d.ingredients
     .filter((i) => i.name.trim().length > 0)
-    .map((i) => ({
-      quantity: Number(i.quantity) || 0,
-      unit: i.unit.trim() || null,
-      name: i.name.trim(),
-      descriptor: i.descriptor.trim() || null,
-      preparation: i.preparation.trim() || null,
-      pantry: i.pantry || null,
-      // fixed checkbox (UI) → scalable:false (data)
-      scalable: i.fixed ? false : null,
-      optional: i.optional || null,
-    }));
+    .map((i) => {
+      const alternatives = i.alternativesInput
+        .split(",")
+        .map((a) => a.trim())
+        .filter(Boolean);
+      return {
+        quantity: Number(i.quantity) || 0,
+        unit: i.unit.trim() || null,
+        name: i.name.trim(),
+        descriptor: i.descriptor.trim() || null,
+        preparation: i.preparation.trim() || null,
+        pantry: i.pantry || null,
+        // fixed checkbox (UI) → scalable:false (data)
+        scalable: i.fixed ? false : null,
+        optional: i.optional || null,
+        alternatives: alternatives.length > 0 ? alternatives : null,
+      };
+    });
   const tags = d.tagsInput
     .split(",")
     .map((t) => t.trim())
@@ -165,6 +176,37 @@ export default function AdminPage() {
     );
     if (res.ok) {
       setPantryDefaults((prev) => prev.filter((n) => n !== name));
+    }
+  }
+
+  // Ingredient names in the current draft that are pantry-flagged but not
+  // yet in the curated pantry_names set. Used by the bulk "pin all" button.
+  const pinnableFromDraft = useMemo(() => {
+    const names = new Set<string>();
+    for (const ing of draft.ingredients) {
+      const name = ing.name.trim().toLowerCase();
+      if (!name) continue;
+      if (!ing.pantry) continue;
+      if (pantryDefaultsSet.has(name)) continue;
+      names.add(name);
+    }
+    return [...names];
+  }, [draft.ingredients, pantryDefaultsSet]);
+
+  async function pinAllFlagged() {
+    const added: string[] = [];
+    for (const name of pinnableFromDraft) {
+      const res = await fetch("/api/pantry-defaults", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) added.push(name);
+    }
+    if (added.length > 0) {
+      setPantryDefaults((prev) =>
+        [...new Set([...prev, ...added])].sort((a, b) => a.localeCompare(b)),
+      );
     }
   }
 
@@ -349,33 +391,34 @@ export default function AdminPage() {
                     <input
                       type="number"
                       step="any"
+                      inputMode="decimal"
                       placeholder="qty"
                       value={ing.quantity}
                       onChange={(e) =>
                         updateIngredient(i, { quantity: e.target.value })
                       }
-                      className="w-20 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+                      className="w-16 rounded border border-zinc-300 px-2 py-1.5 text-base dark:border-zinc-700 dark:bg-zinc-900"
                     />
                     <input
                       list="standard-units"
-                      placeholder="unit (g, tbsp…)"
+                      placeholder="unit"
                       value={ing.unit}
                       onChange={(e) =>
                         updateIngredient(i, { unit: e.target.value })
                       }
-                      className="w-28 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+                      className="w-20 rounded border border-zinc-300 px-2 py-1.5 text-base dark:border-zinc-700 dark:bg-zinc-900"
                     />
                     <input
-                      placeholder="size (medium…)"
+                      placeholder="size"
                       value={ing.descriptor}
                       onChange={(e) =>
                         updateIngredient(i, { descriptor: e.target.value })
                       }
-                      className="w-32 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+                      className="w-20 rounded border border-zinc-300 px-2 py-1.5 text-base dark:border-zinc-700 dark:bg-zinc-900"
                     />
                     <input
                       list="ingredient-names"
-                      placeholder="name (green chili)"
+                      placeholder="name"
                       value={ing.name}
                       onChange={(e) => {
                         const name = e.target.value;
@@ -385,29 +428,30 @@ export default function AdminPage() {
                         }
                         updateIngredient(i, patch);
                       }}
-                      className="min-w-40 flex-1 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
+                      className="min-w-[10rem] flex-1 rounded border border-zinc-300 px-2 py-1.5 text-base dark:border-zinc-700 dark:bg-zinc-900"
                     />
                     <button
                       type="button"
                       onClick={() => removeIngredient(i)}
-                      className="text-sm text-red-600"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-zinc-200 text-lg text-red-600 hover:bg-red-50 dark:border-zinc-800 dark:hover:bg-red-950"
                       aria-label="remove ingredient"
                     >
                       ×
                     </button>
                   </div>
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
                     <input
-                      placeholder="prep (thinly sliced, peeled and diced…)"
+                      placeholder="prep (thinly sliced…)"
                       value={ing.preparation}
                       onChange={(e) =>
                         updateIngredient(i, { preparation: e.target.value })
                       }
-                      className="flex-1 rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      className="min-w-[10rem] flex-1 rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                     />
-                    <label className="flex shrink-0 items-center gap-1 text-xs text-zinc-500">
+                    <label className="flex shrink-0 items-center gap-1.5 py-1 text-xs text-zinc-500 select-none">
                       <input
                         type="checkbox"
+                        className="h-4 w-4"
                         checked={ing.pantry}
                         onChange={(e) =>
                           updateIngredient(i, { pantry: e.target.checked })
@@ -430,11 +474,12 @@ export default function AdminPage() {
                         </button>
                       )}
                     <label
-                      className="flex shrink-0 items-center gap-1 text-xs text-zinc-500"
+                      className="flex shrink-0 items-center gap-1.5 py-1 text-xs text-zinc-500 select-none"
                       title="Quantity stays the same regardless of servings (e.g. 1 bay leaf)"
                     >
                       <input
                         type="checkbox"
+                        className="h-4 w-4"
                         checked={ing.fixed}
                         onChange={(e) =>
                           updateIngredient(i, { fixed: e.target.checked })
@@ -443,11 +488,12 @@ export default function AdminPage() {
                       fixed
                     </label>
                     <label
-                      className="flex shrink-0 items-center gap-1 text-xs text-zinc-500"
+                      className="flex shrink-0 items-center gap-1.5 py-1 text-xs text-zinc-500 select-none"
                       title="Optional ingredient — excluded from the shopping list unless the user opts in"
                     >
                       <input
                         type="checkbox"
+                        className="h-4 w-4"
                         checked={ing.optional}
                         onChange={(e) =>
                           updateIngredient(i, { optional: e.target.checked })
@@ -456,15 +502,38 @@ export default function AdminPage() {
                       optional
                     </label>
                   </div>
+                  <input
+                    placeholder="alternatives (comma-separated, e.g. 'olive oil, ghee')"
+                    value={ing.alternativesInput}
+                    onChange={(e) =>
+                      updateIngredient(i, {
+                        alternativesInput: e.target.value,
+                      })
+                    }
+                    className="mt-2 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
                 </div>
               ))}
-              <button
-                type="button"
-                onClick={addIngredient}
-                className="self-start text-sm text-emerald-600 hover:underline"
-              >
-                + add ingredient
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={addIngredient}
+                  className="text-sm text-emerald-600 hover:underline"
+                >
+                  + add ingredient
+                </button>
+                {pinnableFromDraft.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={pinAllFlagged}
+                    className="rounded-md border border-emerald-600 px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                    title={`Add to pantry defaults: ${pinnableFromDraft.join(", ")}`}
+                  >
+                    pin {pinnableFromDraft.length} pantry item
+                    {pinnableFromDraft.length === 1 ? "" : "s"} to defaults
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

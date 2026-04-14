@@ -83,61 +83,61 @@ POSTs a new dish with the source's fields copied, title suffixed with
 
 ## Small cleanups / polish
 
-### Singularize `lasagna sheets` in STANDARD_INGREDIENTS
+### ~~Singularize `lasagna sheets` in STANDARD_INGREDIENTS~~ ✅
 
-The entry in `lib/vocabulary.ts::STANDARD_INGREDIENTS` is plural, against
-the "always singular" rule codified everywhere else. Cosmetic only;
-aggregation still works because every dish uses the same form. Rename to
-`lasagna sheet` and migrate existing rows via SQL `jsonb_set`.
+Done. Renamed to `lasagna sheet` in `lib/vocabulary.ts` + SQL
+`jsonb_set` migration on existing rows.
 
-### Admin: bulk-pin flagged ingredients
+### ~~Admin: bulk-pin flagged ingredients~~ ✅
 
-Today the "pin to defaults" link is per-ingredient. On a freshly-imported
-recipe with 5 new pantry items, you'd click it 5 times. Add a "pin all
-flagged pantry items" shortcut at the bottom of the ingredient section
-that POSTs all of them in a batch.
+Done. A `pin N pantry items to defaults` button appears below the
+ingredient section whenever the current draft has pantry-flagged names
+that aren't yet in the curated set.
 
-### `/plan`: persist meal plan server-side
+### ~~`/plan`: persist meal plan server-side~~ ✅
 
-**Problem.** Meal plan is stored in `localStorage`, so it's lost when you
-clear browser data or switch devices.
+Done. New `meal_plan` single-row table + `/api/meal-plan` GET/PUT with
+admin auth. Shared `lib/meal-plan.ts` module exposes `useMealPlan()`
+(for `/plan` and the browse page) and `mutatePlan()` (for the dish
+detail "Add to plan" button). Reads localStorage first for instant UI,
+then syncs from server. Writes to both, fire-and-forget PUT. Silently
+falls back to localStorage-only if the user isn't admin-authed.
 
-**Sketch.** New `meal_plan` row (single row or single-user table) holding
-the current plan. GET/PUT API. Client still caches in `localStorage` for
-instant loads but syncs to server on change.
+### ~~Mobile polish pass~~ ✅
 
-### Mobile polish pass
+Done. Admin ingredient row: narrower inputs that flex-wrap on narrow
+screens, `text-base` (16px) font-size to prevent iOS auto-zoom on
+focus, `inputMode="decimal"` on the quantity field, bigger touch
+targets on the remove button and the checkbox labels.
 
-The admin form's two-row ingredient layout hasn't been tested on a narrow
-screen. Likely needs some flex-wrap adjustments and bigger touch targets
-for the pantry/pin buttons.
+### ~~Recipe step → ingredient linking~~ ✅
 
-### Recipe step → ingredient linking
-
-**Problem.** In the recipe markdown, ingredient names are plain text.
-Clicking them could scroll the ingredient list into view (or highlight
-the row). Bonus: auto-check off ingredients as you follow the recipe.
-
-**Sketch.** Nice-to-have. Probably needs a custom ReactMarkdown renderer
-that spots ingredient names in the text and wraps them in clickable spans.
-Accuracy depends on how consistently the recipe text uses the same form
-as the ingredient `name`.
+Done in cook mode. `linkifyStep` in `app/dishes/[id]/cook/cook-view.tsx`
+scans step text for ingredient names (greedy longest match, plural
+tolerance, word boundaries) and wraps each match in a clickable button.
+Tapping scrolls the ingredient row into view and briefly highlights it.
+`stopPropagation` so it doesn't toggle step-done. Dish detail page
+still renders plain — only cook mode has the linking.
 
 ## Non-obvious wishlist
 
-### Multi-unit shopping list items
+### ~~Multi-unit shopping list items~~ ✅
 
-Related to unit conversion but distinct: when aggregation can't collapse
-because units truly differ (e.g. `2 can coconut milk` + `400 ml coconut
-milk`), the current list shows them as two separate lines. Could render
-them grouped under one heading: `coconut milk: 2 can + 400 ml` so it's
-clearer they're the same thing.
+Done. `groupByName` in `lib/ingredients.ts` groups aggregated rows by
+`(name, descriptor)` so `2 can coconut milk` + `400 ml coconut milk`
+render as `2 can + 400 ml coconut milk` on one line. Todoist receives
+pre-formatted strings via a new `{tasks: string[]}` body shape on
+`/api/todoist` (the old `{ingredients}` shape still works for
+backward-compat with curl scripts).
 
-### Ingredient substitutions
+### ~~Ingredient substitutions~~ ✅
 
-"Use butter or olive oil" kind of flexibility. Would need a new schema
-(either a `substitutes: string[]` array on the ingredient, or a separate
-concept entirely). Low priority — most recipes are fine as-written.
+Done as a minimal schema: optional `alternatives?: string[]` on
+`Ingredient`. Dish detail and cook mode render `(or X, Y)` after the
+primary name. Shopping list uses only the primary. Admin form has a
+compact `alternatives (comma-separated)` input below each ingredient
+block. Quantity-differentiated alternatives (e.g. "60g butter OR 60ml
+olive oil") aren't supported yet — keep it simple.
 
 ### Nutritional info per serving
 

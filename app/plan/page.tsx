@@ -7,47 +7,29 @@ import {
   aggregateIngredients,
   aggregatePantryItems,
   formatQty,
+  formatShoppingGroup,
+  groupByName,
   visibleUnit,
 } from "@/lib/ingredients";
-
-const PLAN_KEY = "mealPlan";
-
-type PlanEntry = { id: number; servings: number };
-
-function readPlan(): PlanEntry[] {
-  try {
-    const raw = localStorage.getItem(PLAN_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as PlanEntry[];
-  } catch {
-    return [];
-  }
-}
-
-function writePlan(plan: PlanEntry[]) {
-  localStorage.setItem(PLAN_KEY, JSON.stringify(plan));
-}
+import { useMealPlan, type PlanEntry } from "@/lib/meal-plan";
 
 export default function PlanPage() {
-  const [plan, setPlan] = useState<PlanEntry[]>([]);
+  const { plan, setPlan, loading: planLoading } = useMealPlan();
   const [dishes, setDishes] = useState<Dish[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [dishesLoading, setDishesLoading] = useState(true);
   const [includeOptional, setIncludeOptional] = useState(false);
   const [sendState, setSendState] = useState<
     { kind: "idle" } | { kind: "sending" } | { kind: "ok"; count: number } | { kind: "err"; msg: string }
   >({ kind: "idle" });
 
+  const loading = planLoading || dishesLoading;
+
   useEffect(() => {
-    const p = readPlan();
-    setPlan(p);
-    if (p.length === 0) {
-      setLoading(false);
-      return;
-    }
+    // Fetch all dishes once; we filter client-side by the plan entries.
     fetch(`/api/dishes`)
       .then((r) => r.json() as Promise<Dish[]>)
-      .then((all) => setDishes(all.filter((d) => p.some((e) => e.id === d.id))))
-      .finally(() => setLoading(false));
+      .then(setDishes)
+      .finally(() => setDishesLoading(false));
   }, []);
 
   const planWithDish = useMemo(
@@ -73,40 +55,48 @@ export default function PlanPage() {
     [groupedForAggregation, includeOptional],
   );
 
+  // Group entries with the same name + descriptor but different units
+  // (e.g. "2 can coconut milk" + "400 ml coconut milk") into one line.
+  const shoppingGroups = useMemo(
+    () => groupByName(shoppingList),
+    [shoppingList],
+  );
+
   const pantryList: Ingredient[] = useMemo(
     () => aggregatePantryItems(groupedForAggregation, { includeOptional }),
     [groupedForAggregation, includeOptional],
   );
 
+  const pantryGroups = useMemo(
+    () => groupByName(pantryList),
+    [pantryList],
+  );
+
   function updateServings(id: number, delta: number) {
-    const next = plan
-      .map((e) =>
-        e.id === id ? { ...e, servings: Math.max(1, e.servings + delta) } : e,
-      );
+    const next = plan.map((e) =>
+      e.id === id ? { ...e, servings: Math.max(1, e.servings + delta) } : e,
+    );
     setPlan(next);
-    writePlan(next);
   }
 
   function remove(id: number) {
-    const next = plan.filter((e) => e.id !== id);
-    setPlan(next);
-    writePlan(next);
-    setDishes((ds) => ds.filter((d) => d.id !== id));
+    setPlan(plan.filter((e) => e.id !== id));
   }
 
   function clearAll() {
     setPlan([]);
-    setDishes([]);
-    writePlan([]);
   }
 
   async function sendToTodoist() {
     setSendState({ kind: "sending" });
     try {
+      // Pre-format each group as one task so multi-unit items land as
+      // one line ("2 can + 400 ml coconut milk").
+      const tasks = shoppingGroups.map(formatShoppingGroup);
       const res = await fetch("/api/todoist", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ingredients: shoppingList }),
+        body: JSON.stringify({ tasks }),
       });
       const data = (await res.json()) as { ok?: boolean; created?: number; error?: string };
       if (!res.ok || !data.ok) {
@@ -193,20 +183,28 @@ export default function PlanPage() {
                 include optional
               </label>
             </div>
-            {shoppingList.length === 0 ? (
+            {shoppingGroups.length === 0 ? (
               <p className="text-zinc-500">No ingredients across these dishes.</p>
             ) : (
               <ul className="list-disc space-y-1 pl-6">
-                {shoppingList.map((ing, i) => {
-                  const unit = visibleUnit(ing.unit);
-                  return (
-                    <li key={i}>
-                      <span className="font-mono">{formatQty(ing.quantity)}</span>
-                      {unit ? ` ${unit}` : ""}
-                      {ing.descriptor ? ` ${ing.descriptor}` : ""} {ing.name}
-                    </li>
-                  );
-                })}
+                {shoppingGroups.map((group, i) => (
+                  <li key={i}>
+                    {group.items.map((ing, j) => {
+                      const unit = visibleUnit(ing.unit);
+                      return (
+                        <span key={j}>
+                          {j > 0 && <span className="text-zinc-400"> + </span>}
+                          <span className="font-mono">
+                            {formatQty(ing.quantity)}
+                          </span>
+                          {unit ? ` ${unit}` : ""}
+                        </span>
+                      );
+                    })}
+                    {group.descriptor ? ` ${group.descriptor}` : ""}{" "}
+                    {group.name}
+                  </li>
+                ))}
               </ul>
             )}
             {shoppingList.length > 0 && (
@@ -233,28 +231,36 @@ export default function PlanPage() {
             )}
           </section>
 
-          {pantryList.length > 0 && (
+          {pantryGroups.length > 0 && (
             <section>
               <h2 className="mb-1 text-xl font-semibold text-zinc-600 dark:text-zinc-400">
-                Pantry check ({pantryList.length})
+                Pantry check ({pantryGroups.length})
               </h2>
               <p className="mb-3 text-xs text-zinc-500">
                 Skipped from the shopping list because you already have
                 them. Glance over to make sure you&rsquo;re not running low.
               </p>
               <ul className="list-disc space-y-1 pl-6 italic text-zinc-500">
-                {pantryList.map((ing, i) => {
-                  const unit = visibleUnit(ing.unit);
-                  return (
-                    <li key={i}>
-                      <span className="font-mono not-italic">
-                        {formatQty(ing.quantity)}
-                      </span>
-                      {unit ? ` ${unit}` : ""}
-                      {ing.descriptor ? ` ${ing.descriptor}` : ""} {ing.name}
-                    </li>
-                  );
-                })}
+                {pantryGroups.map((group, i) => (
+                  <li key={i}>
+                    {group.items.map((ing, j) => {
+                      const unit = visibleUnit(ing.unit);
+                      return (
+                        <span key={j}>
+                          {j > 0 && (
+                            <span className="text-zinc-400"> + </span>
+                          )}
+                          <span className="font-mono not-italic">
+                            {formatQty(ing.quantity)}
+                          </span>
+                          {unit ? ` ${unit}` : ""}
+                        </span>
+                      );
+                    })}
+                    {group.descriptor ? ` ${group.descriptor}` : ""}{" "}
+                    {group.name}
+                  </li>
+                ))}
               </ul>
             </section>
           )}

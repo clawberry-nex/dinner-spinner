@@ -167,3 +167,45 @@ export function aggregatePantryItems(
     (ing) => !!ing.pantry && (includeOptional || !ing.optional),
   );
 }
+
+// A group of aggregated ingredient rows that all share the same name +
+// descriptor but have different units that couldn't be collapsed (e.g.
+// "2 can coconut milk" + "400 ml coconut milk"). Single-unit groups are
+// the common case and render as one line.
+export type ShoppingGroup = {
+  name: string;
+  descriptor: string | null;
+  items: Ingredient[];
+};
+
+export function groupByName(list: Ingredient[]): ShoppingGroup[] {
+  const groups = new Map<string, ShoppingGroup>();
+  for (const ing of list) {
+    const name = ing.name.trim();
+    const descriptor = ing.descriptor?.trim() || null;
+    const key = `${name.toLowerCase()}\u0000${(descriptor ?? "").toLowerCase()}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.items.push(ing);
+    } else {
+      groups.set(key, { name, descriptor, items: [ing] });
+    }
+  }
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Shopping-list format for a group: "2 can + 400 ml coconut milk" when
+// multiple units exist, or "400 ml coconut milk" when there's just one.
+export function formatShoppingGroup(group: ShoppingGroup): string {
+  const amounts = group.items
+    .map((ing) => {
+      const qty = formatQty(ing.quantity);
+      const unit = visibleUnit(ing.unit);
+      return unit ? `${qty} ${unit}` : qty;
+    })
+    .join(" + ");
+  const parts = [amounts];
+  if (group.descriptor) parts.push(group.descriptor);
+  parts.push(group.name);
+  return parts.join(" ");
+}

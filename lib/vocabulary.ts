@@ -216,7 +216,7 @@ export const STANDARD_INGREDIENTS: readonly string[] = [
   "pasta",
   "spaghetti",
   "penne",
-  "lasagna sheets",
+  "lasagna sheet",
   "rice",
   "basmati rice",
   "jasmine rice",

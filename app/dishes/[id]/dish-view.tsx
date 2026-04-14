@@ -6,39 +6,23 @@ import ReactMarkdown from "react-markdown";
 import type { Dish } from "@/lib/types";
 import { formatQty, scaleIngredient, visibleUnit } from "@/lib/ingredients";
 import type { Ingredient } from "@/lib/types";
-
-const PLAN_KEY = "mealPlan";
-
-type PlanEntry = { id: number; servings: number };
-
-function readPlan(): PlanEntry[] {
-  try {
-    const raw = localStorage.getItem(PLAN_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as PlanEntry[];
-  } catch {
-    return [];
-  }
-}
-
-function writePlan(plan: PlanEntry[]) {
-  localStorage.setItem(PLAN_KEY, JSON.stringify(plan));
-}
+import { mutatePlan } from "@/lib/meal-plan";
 
 export default function DishView({ dish }: { dish: Dish }) {
   const [servings, setServings] = useState<number>(dish.baseServings);
   const [addedMsg, setAddedMsg] = useState<string | null>(null);
 
   function addToPlan() {
-    const plan = readPlan();
-    const existing = plan.findIndex((p) => p.id === dish.id);
-    if (existing >= 0) {
-      plan[existing] = { id: dish.id, servings };
-    } else {
-      plan.push({ id: dish.id, servings });
-    }
-    writePlan(plan);
-    setAddedMsg(`Added to meal plan (${plan.length} dishes).`);
+    const next = mutatePlan((prev) => {
+      const existing = prev.findIndex((p) => p.id === dish.id);
+      if (existing >= 0) {
+        const copy = [...prev];
+        copy[existing] = { id: dish.id, servings };
+        return copy;
+      }
+      return [...prev, { id: dish.id, servings }];
+    });
+    setAddedMsg(`Added to meal plan (${next.length} dishes).`);
     setTimeout(() => setAddedMsg(null), 2500);
   }
 
@@ -129,6 +113,12 @@ export default function DishView({ dish }: { dish: Dish }) {
                   {unit ? ` ${unit}` : ""}
                   {scaled.descriptor ? ` ${scaled.descriptor}` : ""}{" "}
                   {scaled.name}
+                  {scaled.alternatives && scaled.alternatives.length > 0 && (
+                    <span className="text-zinc-500">
+                      {" "}
+                      (or {scaled.alternatives.join(", ")})
+                    </span>
+                  )}
                   {scaled.preparation && (
                     <span className={pantry ? "" : "text-zinc-500"}>
                       , {scaled.preparation}

@@ -1,14 +1,90 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
 import type { Dish, Ingredient } from "@/lib/types";
 import {
   formatQty,
   scaleIngredient,
   visibleUnit,
 } from "@/lib/ingredients";
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Linkify an ingredient reference inside a step's plain text. Longest
+// ingredient names match first (so "green chili" wins over "chili"),
+// and a trailing `s` is tolerated so "onion" matches "onions". Each
+// matched span is turned into a clickable button that calls onTap with
+// the ingredient's index in the ingredients array.
+function linkifyStep(
+  text: string,
+  ingredients: Ingredient[],
+  onTap: (index: number) => void,
+): React.ReactNode[] {
+  if (ingredients.length === 0) return [text];
+
+  // Sort name-index pairs by name length desc so longest matches win.
+  const entries = ingredients
+    .map((ing, idx) => ({ name: ing.name.trim(), idx }))
+    .filter((e) => e.name.length >= 3) // skip tiny names to avoid noise
+    .sort((a, b) => b.name.length - a.name.length);
+
+  if (entries.length === 0) return [text];
+
+  // Build a single alternation regex — longest first means the first
+  // alternative that matches at a given position wins.
+  const alternation = entries
+    .map((e) => escapeRegex(e.name))
+    .join("|");
+  const re = new RegExp(`\\b(?:${alternation})s?\\b`, "gi");
+
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    const matched = match[0];
+    // Find which ingredient this is — case-insensitive, strip trailing s.
+    const normalized = matched
+      .replace(/s$/i, "")
+      .toLowerCase();
+    const hit = entries.find(
+      (e) =>
+        e.name.toLowerCase() === normalized ||
+        e.name.toLowerCase() === matched.toLowerCase(),
+    );
+    if (hit) {
+      parts.push(
+        <button
+          key={`ing-${key++}`}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTap(hit.idx);
+          }}
+          className="inline underline decoration-dotted decoration-emerald-500 underline-offset-2 hover:bg-emerald-100 dark:hover:bg-emerald-950"
+        >
+          {matched}
+        </button>,
+      );
+    } else {
+      parts.push(matched);
+    }
+    lastIndex = match.index + matched.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts;
+}
 
 type Section = {
   title: string | null;
@@ -121,6 +197,8 @@ export default function CookView({
 }) {
   const [servings, setServings] = useState<number>(initialServings);
   const [doneSteps, setDoneSteps] = useState<Set<string>>(new Set());
+  const [highlightedIdx, setHighlightedIdx] = useState<number | null>(null);
+  const ingredientRefs = useRef<Array<HTMLLIElement | null>>([]);
   const wakeLock = useWakeLock();
 
   const sections = useMemo(
@@ -144,6 +222,16 @@ export default function CookView({
       return next;
     });
   }
+
+  const scrollToIngredient = useCallback((idx: number) => {
+    const el = ingredientRefs.current[idx];
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedIdx(idx);
+    window.setTimeout(() => {
+      setHighlightedIdx((cur) => (cur === idx ? null : cur));
+    }, 1600);
+  }, []);
 
   return (
     <div className="flex flex-col gap-6">
@@ -196,14 +284,30 @@ export default function CookView({
             const unit = visibleUnit(ing.unit);
             const pantry = !!ing.pantry;
             const optional = !!ing.optional;
+            const isHighlighted = highlightedIdx === i;
             return (
               <li
                 key={i}
-                className={pantry ? "italic text-zinc-400" : ""}
+                ref={(el) => {
+                  ingredientRefs.current[i] = el;
+                }}
+                className={`rounded px-1 transition-colors ${
+                  pantry ? "italic text-zinc-400" : ""
+                } ${
+                  isHighlighted
+                    ? "bg-emerald-200 dark:bg-emerald-900"
+                    : ""
+                }`}
               >
                 <span className="font-mono">{formatQty(ing.quantity)}</span>
                 {unit ? ` ${unit}` : ""}
                 {ing.descriptor ? ` ${ing.descriptor}` : ""} {ing.name}
+                {ing.alternatives && ing.alternatives.length > 0 && (
+                  <span className="text-zinc-500">
+                    {" "}
+                    (or {ing.alternatives.join(", ")})
+                  </span>
+                )}
                 {optional && (
                   <span className="ml-1 text-xs text-zinc-500">
                     (optional)
@@ -256,13 +360,11 @@ export default function CookView({
                           {done ? "✓" : stepIdx + 1}
                         </span>
                         <span className="flex-1">
-                          <ReactMarkdown
-                            components={{
-                              p: ({ children }) => <>{children}</>,
-                            }}
-                          >
-                            {step}
-                          </ReactMarkdown>
+                          {linkifyStep(
+                            step,
+                            scaledIngredients,
+                            scrollToIngredient,
+                          )}
                         </span>
                       </button>
                     </li>

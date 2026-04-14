@@ -61,8 +61,9 @@ ingredient is a JSON object:
   name: string,
   preparation?: string,
   pantry?: boolean,
-  scalable?: boolean,  // default true
-  optional?: boolean,  // default false
+  scalable?: boolean,     // default true
+  optional?: boolean,     // default false
+  alternatives?: string[], // e.g. ["olive oil"] for "butter or olive oil"
 }
 ```
 
@@ -76,6 +77,7 @@ ingredient is a JSON object:
 | `pantry` | True if Mirko always has this in stock | `true` for water, salt, pepper, olive oil, sugar, basic flour | **no** — excluded from shopping list / Todoist entirely. Still shown on dish detail. |
 | `scalable` | `false` if the quantity is FIXED regardless of servings. Default = scalable. | `false` for `1 bay leaf`, `1 cinnamon stick`, `1 stock cube`, `1 star anise` | yes, with the literal fixed quantity (scaler is a no-op). |
 | `optional` | `true` if the recipe explicitly lists the ingredient as optional / garnish. Default = required. | `true` for `(optional) coriander garnish`, `(optional) chilli flakes`, `lime wedges to serve` | excluded by default; user can opt in via `/plan` toggle. |
+| `alternatives` | Alternative ingredient names the user can swap in. Only the primary goes on the shopping list. | `["olive oil"]` for "butter or olive oil", `["ghee"]` for "butter or ghee". | no — only the primary is shopped for. |
 
 Rules:
 - **`fresh` is implied** — never put `fresh` in `descriptor`. Everything's assumed fresh.

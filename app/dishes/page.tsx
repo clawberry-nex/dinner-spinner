@@ -3,29 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Dish } from "@/lib/types";
-
-const PLAN_KEY = "mealPlan";
-
-type PlanEntry = { id: number; servings: number };
-
-function readPlan(): PlanEntry[] {
-  try {
-    const raw = localStorage.getItem(PLAN_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as PlanEntry[];
-  } catch {
-    return [];
-  }
-}
-
-function writePlan(plan: PlanEntry[]) {
-  localStorage.setItem(PLAN_KEY, JSON.stringify(plan));
-}
+import { useMealPlan } from "@/lib/meal-plan";
 
 export default function DishesIndexPage() {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(true);
-  const [plan, setPlan] = useState<PlanEntry[]>([]);
+  const { plan, setPlan } = useMealPlan();
   const [activeTags, setActiveTags] = useState<string[]>([]);
 
   useEffect(() => {
@@ -33,7 +16,6 @@ export default function DishesIndexPage() {
       .then((r) => r.json() as Promise<Dish[]>)
       .then(setDishes)
       .finally(() => setLoading(false));
-    setPlan(readPlan());
   }, []);
 
   const allTags = useMemo(() => {
@@ -54,16 +36,12 @@ export default function DishesIndexPage() {
   }
 
   function togglePlan(dish: Dish) {
-    const current = readPlan();
-    const idx = current.findIndex((p) => p.id === dish.id);
-    let next: PlanEntry[];
+    const idx = plan.findIndex((p) => p.id === dish.id);
     if (idx >= 0) {
-      next = current.filter((p) => p.id !== dish.id);
+      setPlan(plan.filter((p) => p.id !== dish.id));
     } else {
-      next = [...current, { id: dish.id, servings: dish.baseServings }];
+      setPlan([...plan, { id: dish.id, servings: dish.baseServings }]);
     }
-    writePlan(next);
-    setPlan(next);
   }
 
   const inPlan = useMemo(() => new Set(plan.map((p) => p.id)), [plan]);

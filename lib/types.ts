@@ -11,6 +11,13 @@ export const IngredientSchema = z.object({
   scalable: z.boolean().nullable().optional(),
   // optional: true → excluded from shopping list by default.
   optional: z.boolean().nullable().optional(),
+  // Alternative ingredients the user can swap in (e.g. "butter" → ["olive oil"]).
+  // Only the primary name goes on the shopping list.
+  alternatives: z
+    .array(z.string().trim().min(1).max(128))
+    .max(8)
+    .nullable()
+    .optional(),
 });
 
 export type Ingredient = z.infer<typeof IngredientSchema>;
