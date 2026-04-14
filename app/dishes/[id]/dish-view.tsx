@@ -115,6 +115,8 @@ export default function DishView({ dish }: { dish: Dish }) {
                 dish.baseServings,
               );
               const pantry = !!scaled.pantry;
+              const optional = !!scaled.optional;
+              const fixed = scaled.scalable === false;
               const unit = visibleUnit(scaled.unit);
               return (
                 <li
@@ -130,6 +132,16 @@ export default function DishView({ dish }: { dish: Dish }) {
                   {scaled.preparation && (
                     <span className={pantry ? "" : "text-zinc-500"}>
                       , {scaled.preparation}
+                    </span>
+                  )}
+                  {optional && (
+                    <span className="ml-1 text-xs text-zinc-500">
+                      (optional)
+                    </span>
+                  )}
+                  {fixed && (
+                    <span className="ml-2 rounded-full border border-zinc-300 px-1.5 py-0.5 text-[10px] uppercase not-italic tracking-wide text-zinc-500 dark:border-zinc-700">
+                      fixed
                     </span>
                   )}
                   {pantry && (

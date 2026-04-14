@@ -12,6 +12,9 @@ type IngredientDraft = {
   name: string;
   preparation: string;
   pantry: boolean;
+  // `fixed` is the inverse of `scalable`. Default false (i.e. scalable).
+  fixed: boolean;
+  optional: boolean;
 };
 
 const EMPTY_INGREDIENT: IngredientDraft = {
@@ -21,6 +24,8 @@ const EMPTY_INGREDIENT: IngredientDraft = {
   name: "",
   preparation: "",
   pantry: false,
+  fixed: false,
+  optional: false,
 };
 
 type Draft = {
@@ -60,6 +65,8 @@ function dishToDraft(d: Dish): Draft {
             name: i.name,
             preparation: i.preparation ?? "",
             pantry: !!i.pantry,
+            fixed: i.scalable === false,
+            optional: !!i.optional,
           }))
         : [{ ...EMPTY_INGREDIENT }],
   };
@@ -75,6 +82,9 @@ function draftToPayload(d: Draft) {
       descriptor: i.descriptor.trim() || null,
       preparation: i.preparation.trim() || null,
       pantry: i.pantry || null,
+      // fixed checkbox (UI) → scalable:false (data)
+      scalable: i.fixed ? false : null,
+      optional: i.optional || null,
     }));
   const tags = d.tagsInput
     .split(",")
@@ -419,6 +429,32 @@ export default function AdminPage() {
                           pin to defaults
                         </button>
                       )}
+                    <label
+                      className="flex shrink-0 items-center gap-1 text-xs text-zinc-500"
+                      title="Quantity stays the same regardless of servings (e.g. 1 bay leaf)"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={ing.fixed}
+                        onChange={(e) =>
+                          updateIngredient(i, { fixed: e.target.checked })
+                        }
+                      />
+                      fixed
+                    </label>
+                    <label
+                      className="flex shrink-0 items-center gap-1 text-xs text-zinc-500"
+                      title="Optional ingredient — excluded from the shopping list unless the user opts in"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={ing.optional}
+                        onChange={(e) =>
+                          updateIngredient(i, { optional: e.target.checked })
+                        }
+                      />
+                      optional
+                    </label>
                   </div>
                 </div>
               ))}

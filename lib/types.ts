@@ -7,6 +7,10 @@ export const IngredientSchema = z.object({
   descriptor: z.string().trim().max(60).nullable().optional(),
   preparation: z.string().trim().max(200).nullable().optional(),
   pantry: z.boolean().nullable().optional(),
+  // scalable: false → scaleIngredient() is a no-op. Defaults to scalable.
+  scalable: z.boolean().nullable().optional(),
+  // optional: true → excluded from shopping list by default.
+  optional: z.boolean().nullable().optional(),
 });
 
 export type Ingredient = z.infer<typeof IngredientSchema>;

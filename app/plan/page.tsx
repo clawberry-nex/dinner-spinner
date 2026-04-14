@@ -32,6 +32,7 @@ export default function PlanPage() {
   const [plan, setPlan] = useState<PlanEntry[]>([]);
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(true);
+  const [includeOptional, setIncludeOptional] = useState(false);
   const [sendState, setSendState] = useState<
     { kind: "idle" } | { kind: "sending" } | { kind: "ok"; count: number } | { kind: "err"; msg: string }
   >({ kind: "idle" });
@@ -68,13 +69,13 @@ export default function PlanPage() {
   );
 
   const shoppingList: Ingredient[] = useMemo(
-    () => aggregateIngredients(groupedForAggregation),
-    [groupedForAggregation],
+    () => aggregateIngredients(groupedForAggregation, { includeOptional }),
+    [groupedForAggregation, includeOptional],
   );
 
   const pantryList: Ingredient[] = useMemo(
-    () => aggregatePantryItems(groupedForAggregation),
-    [groupedForAggregation],
+    () => aggregatePantryItems(groupedForAggregation, { includeOptional }),
+    [groupedForAggregation, includeOptional],
   );
 
   function updateServings(id: number, delta: number) {
@@ -181,7 +182,17 @@ export default function PlanPage() {
           </section>
 
           <section>
-            <h2 className="mb-3 text-xl font-semibold">Shopping list</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Shopping list</h2>
+              <label className="flex items-center gap-1 text-xs text-zinc-500">
+                <input
+                  type="checkbox"
+                  checked={includeOptional}
+                  onChange={(e) => setIncludeOptional(e.target.checked)}
+                />
+                include optional
+              </label>
+            </div>
             {shoppingList.length === 0 ? (
               <p className="text-zinc-500">No ingredients across these dishes.</p>
             ) : (

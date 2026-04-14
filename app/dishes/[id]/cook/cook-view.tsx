@@ -195,6 +195,7 @@ export default function CookView({
           {scaledIngredients.map((ing, i) => {
             const unit = visibleUnit(ing.unit);
             const pantry = !!ing.pantry;
+            const optional = !!ing.optional;
             return (
               <li
                 key={i}
@@ -203,6 +204,11 @@ export default function CookView({
                 <span className="font-mono">{formatQty(ing.quantity)}</span>
                 {unit ? ` ${unit}` : ""}
                 {ing.descriptor ? ` ${ing.descriptor}` : ""} {ing.name}
+                {optional && (
+                  <span className="ml-1 text-xs text-zinc-500">
+                    (optional)
+                  </span>
+                )}
                 {pantry && (
                   <span className="ml-1 text-[10px] uppercase tracking-wide text-zinc-400">
                     pantry

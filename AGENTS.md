@@ -54,17 +54,28 @@ When ingesting a pasted recipe, do **not** cram everything into `name`. Each
 ingredient is a JSON object:
 
 ```ts
-{ quantity: number, unit?: string, descriptor?: string, name: string, preparation?: string, pantry?: boolean }
+{
+  quantity: number,
+  unit?: string,
+  descriptor?: string,
+  name: string,
+  preparation?: string,
+  pantry?: boolean,
+  scalable?: boolean,  // default true
+  optional?: boolean,  // default false
+}
 ```
 
 | Field | Meaning | Examples | Shown on shopping list? |
 |---|---|---|---|
-| `name` | Bare purchasable thing | `green chili`, `aubergine`, `tomato`, `garlic`, `red pepper` | always (unless pantry) |
-| `descriptor` | Size/quality modifier that changes what you'd buy | `small`, `medium`, `large`, `ripe` | yes (unless pantry) |
+| `name` | Bare purchasable thing | `green chili`, `aubergine`, `tomato`, `garlic`, `red pepper` | yes (unless pantry / skipped optional) |
+| `descriptor` | Size/quality modifier that changes what you'd buy | `small`, `medium`, `large`, `ripe` | yes (unless pantry / skipped optional) |
 | `preparation` | Cut/cook prep | `thinly sliced`, `peeled and cut into 3cm dice`, `chopped`, `trimmed` | **no** (dropped) |
-| `unit` | Measurement unit if any | `g`, `ml`, `tbsp`, `piece`, `clove`, `handful` | yes (unless pantry) |
-| `quantity` | Number (float OK) | `2`, `0.5`, `110` | yes (unless pantry) |
-| `pantry` | True if Mirko always has this in stock | `true` for water, salt, pepper, olive oil, sugar, basic flour | **no** — pantry items are excluded from the shopping list and Todoist push entirely. Still shown on the dish detail in muted italic with a "pantry" badge. |
+| `unit` | Measurement unit if any | `g`, `ml`, `tbsp`, `piece`, `clove`, `handful` | yes (unless pantry / skipped optional) |
+| `quantity` | Number (float OK) | `2`, `0.5`, `110` | yes (unless pantry / skipped optional) |
+| `pantry` | True if Mirko always has this in stock | `true` for water, salt, pepper, olive oil, sugar, basic flour | **no** — excluded from shopping list / Todoist entirely. Still shown on dish detail. |
+| `scalable` | `false` if the quantity is FIXED regardless of servings. Default = scalable. | `false` for `1 bay leaf`, `1 cinnamon stick`, `1 stock cube`, `1 star anise` | yes, with the literal fixed quantity (scaler is a no-op). |
+| `optional` | `true` if the recipe explicitly lists the ingredient as optional / garnish. Default = required. | `true` for `(optional) coriander garnish`, `(optional) chilli flakes`, `lime wedges to serve` | excluded by default; user can opt in via `/plan` toggle. |
 
 Rules:
 - **`fresh` is implied** — never put `fresh` in `descriptor`. Everything's assumed fresh.
@@ -120,8 +131,9 @@ The full list lives in `lib/vocabulary.ts::STANDARD_INGREDIENTS` (~150 items acr
 - **Next 16 typegen**: `RouteContext<'/api/dishes/[id]'>` and `PageProps<'/dishes/[id]'>` are globally available types generated into `.next/dev/types/` by `next dev`, `next build`, or `next typegen`. If tsc complains about `Cannot find name 'RouteContext'`, run `npx next typegen` first.
 - **`params` is a Promise**: always `await ctx.params` / `await props.params` in route handlers and pages.
 - **Schema is applied manually**: no migration framework. On first setup (and after schema edits), run `psql "$DATABASE_URL" -f db/schema.sql`. The file uses `CREATE TABLE IF NOT EXISTS` so it's re-runnable for additive changes, but column alterations still need hand-written DDL.
-- **Ingredient aggregation does no unit conversion**: `100 g flour` and `1 cup flour` list separately. Aggregation key is `(name.toLowerCase().trim(), (unit||'').toLowerCase().trim())`.
-- **Servings scaling** multiplies `quantity * servings / baseServings`. `baseServings` is the source of truth — stored per dish.
+- **Ingredient aggregation converts within same-category units but not across**: weights merge via grams (`1 kg + 500 g → 1.5 kg`), volumes merge via ml (`2 tbsp + 30 ml → 60 ml`). Density conversions (`1 cup flour` ↔ `g flour`) are NOT supported and list separately — we don't have per-ingredient density. Aggregation key is `(name, unitCategory, descriptor)` where category is `weight` / `volume` / literal unit for count/imprecise. See `lib/units.ts` and `lib/ingredients.ts::aggregate`.
+- **Servings scaling** multiplies `quantity * servings / baseServings`, unless `scalable: false` (then it's a no-op). `baseServings` is the source of truth — stored per dish.
+- **Optional ingredients** (`optional: true`) are excluded from the shopping list by default. `/plan` has an "include optional" toggle that flips it. Pantry and optional flags compose — a pantry+optional item is excluded by both conditions.
 - **Tag filter is AND, not OR**: a dish must contain every selected tag. Implemented with Postgres `tags @> $1::text[]`.
 - **Auth for mutations**: `POST /api/dishes`, `PATCH|DELETE /api/dishes/[id]`, and `POST /api/todoist` all accept either a valid admin cookie **or** a bearer `API_TOKEN`. The bearer path exists so Mirko can curl-post dishes from scripts without touching the UI.
 
