@@ -7,51 +7,30 @@ session can pick it up cold.
 
 ## Known limitations
 
-### Unit conversion in aggregation
+_All three items in this section were implemented in commit `670c431`.
+Cross-ingredient density conversion (`cup flour ↔ g flour`) is still a
+gap — documented under "Non-obvious wishlist" below._
 
-**Problem.** When two dishes both use `olive oil` but one says `2 tbsp` and
-the other says `30 ml`, the shopping list lists them as separate lines.
-Same for `1 kg flour` vs `500 g flour`. The aggregation key is
-`(name, unit, descriptor)` and there's no unit conversion.
+### ~~Unit conversion in aggregation~~ ✅
 
-**Sketch.** Add a canonical-unit layer in `lib/ingredients.ts`:
+Implemented via `lib/units.ts`. Weight (`g/kg/oz/lb`) and volume
+(`ml/l/tsp/tbsp/cup/fl oz`) convert to canonical units before aggregating,
+then display in the biggest sensible unit (kg/g, l/ml). Count/imprecise
+units still group by literal. Density-based cross-category conversions
+(cup flour ↔ g flour) remain out of scope — no per-ingredient density
+table.
 
-- Weight: everything converts to grams for aggregation (`1 kg = 1000 g`, `1 oz ≈ 28.35 g`, `1 lb ≈ 453.6 g`).
-- Volume: everything converts to millilitres (`1 tsp = 5 ml`, `1 tbsp = 15 ml`, `1 cup = 240 ml`, `1 l = 1000 ml`, `1 fl oz ≈ 30 ml`).
-- Count/imprecise units stay as-is — no conversion for `piece`, `clove`, `handful`, `to taste`, etc.
+### ~~"Unscalable" flag for ingredients~~ ✅
 
-At aggregation time, convert each ingredient to its canonical unit before
-summing, then convert back to a sensible display unit (e.g. show grams if
-any input was in grams, else ml). Keep the original per-dish rendering in
-the dish detail view unchanged — the conversion only matters for the
-shopping list.
+Implemented as an optional `scalable: boolean` field on `Ingredient`.
+`scalable: false` makes `scaleIngredient()` a no-op for that ingredient.
+Admin form has a "fixed" checkbox next to "pantry".
 
-### "Unscalable" flag for ingredients
+### ~~Optional ingredients~~ ✅
 
-**Problem.** `1 tsp salt` at 4 servings doesn't really become `2 tsp salt`
-at 8 servings. The current scaler multiplies everything linearly. Pantry
-items are excluded from the shopping list anyway, so this mostly bites on
-seasonings that are pantry and therefore invisible. But non-pantry edge
-cases exist: `1 bay leaf` for any number of servings; a single `cinnamon
-stick` for a curry regardless of size.
-
-**Sketch.** New optional `scalable: boolean` field on `Ingredient` (default
-`true`). When `false`, `scaleIngredient()` returns the ingredient unchanged.
-Admin form gets a small "scales" checkbox alongside "pantry". Aggregation
-still merges across dishes (so two non-scalable `1 bay leaf` entries become
-`2 bay leaf`), but per-dish scaling skips them.
-
-### Optional ingredients
-
-**Problem.** Some ingredients are genuinely optional (`1 handful coriander
-(optional)` in the Ratatouille). There's no schema support today — the
-"(optional)" gets dropped or ends up awkwardly in `preparation`. The
-shopping list and Todoist push assume all ingredients are required.
-
-**Sketch.** Add `optional?: boolean` to `Ingredient`. Dish detail renders
-optional items with a small `(optional)` suffix. On `/plan`, add a toggle:
-**Include optional ingredients in shopping list**, default off. Aggregation
-honours the toggle. Simple schema change, no DDL (jsonb).
+Implemented as an optional `optional: boolean` field. Excluded from the
+shopping list by default; `/plan` has an "include optional" toggle.
+Dish detail + cook mode render an `(optional)` suffix.
 
 ## Feature ideas
 
