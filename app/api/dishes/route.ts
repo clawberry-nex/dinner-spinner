@@ -20,8 +20,21 @@ export async function GET(request: Request) {
 
   const rows =
     tags.length > 0
-      ? await sql`SELECT * FROM dishes WHERE tags @> ${tags} ORDER BY title ASC`
-      : await sql`SELECT * FROM dishes ORDER BY title ASC`;
+      ? await sql`
+          SELECT d.*, (
+            SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id
+          ) AS last_cooked_at
+          FROM dishes d
+          WHERE tags @> ${tags}
+          ORDER BY title ASC
+        `
+      : await sql`
+          SELECT d.*, (
+            SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id
+          ) AS last_cooked_at
+          FROM dishes d
+          ORDER BY title ASC
+        `;
 
   return Response.json(rows.map(rowToDish));
 }
@@ -57,14 +70,19 @@ export async function POST(request: Request) {
     ingredients: await applyPantryDefaults(parsed.data.ingredients),
   };
   const rows = await sql`
-    INSERT INTO dishes (title, subtitle, recipe, tags, ingredients, base_servings)
+    INSERT INTO dishes (
+      title, subtitle, recipe, tags, ingredients, base_servings,
+      favorite, image_url
+    )
     VALUES (
       ${d.title},
       ${d.subtitle ?? null},
       ${d.recipe ?? null},
       ${d.tags},
       ${JSON.stringify(d.ingredients)}::jsonb,
-      ${d.baseServings}
+      ${d.baseServings},
+      ${d.favorite ?? false},
+      ${d.imageUrl ?? null}
     )
     RETURNING *
   `;

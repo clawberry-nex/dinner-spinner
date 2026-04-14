@@ -6,6 +6,30 @@ import type { Dish } from "@/lib/types";
 
 const FILTER_KEY = "spinnerFilters";
 
+// Weighted pick that:
+// - gives favourites a 2× base weight boost
+// - de-weights dishes cooked recently: weight × min(1, daysSinceLast/14)
+// - never-cooked dishes get the full base weight
+function pickWeighted(dishes: Dish[]): Dish {
+  const now = Date.now();
+  const weights = dishes.map((d) => {
+    let w = d.favorite ? 2 : 1;
+    if (d.lastCookedAt) {
+      const days = (now - new Date(d.lastCookedAt).getTime()) / 86_400_000;
+      w *= Math.min(1, Math.max(0, days) / 14);
+    }
+    // Floor so a dish that's cooked today isn't impossible.
+    return Math.max(0.05, w);
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < dishes.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return dishes[i];
+  }
+  return dishes[dishes.length - 1];
+}
+
 export default function SpinnerPage() {
   const router = useRouter();
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -62,7 +86,7 @@ export default function SpinnerPage() {
         i += 1;
         if (i >= frames) {
           clearInterval(interval);
-          const picked = dishes[Math.floor(Math.random() * dishes.length)];
+          const picked = pickWeighted(dishes);
           setSpinLabel(picked.title);
           setSpinning(false);
           setTimeout(() => router.push(`/dishes/${picked.id}`), 400);

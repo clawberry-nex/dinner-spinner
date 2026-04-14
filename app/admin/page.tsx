@@ -38,6 +38,8 @@ type Draft = {
   recipe: string;
   tagsInput: string;
   baseServings: string;
+  imageUrl: string;
+  favorite: boolean;
   ingredients: IngredientDraft[];
 };
 
@@ -48,6 +50,8 @@ const EMPTY_DRAFT: Draft = {
   recipe: "",
   tagsInput: "",
   baseServings: "4",
+  imageUrl: "",
+  favorite: false,
   ingredients: [{ ...EMPTY_INGREDIENT }],
 };
 
@@ -59,6 +63,8 @@ function dishToDraft(d: Dish): Draft {
     recipe: d.recipe ?? "",
     tagsInput: d.tags.join(", "),
     baseServings: String(d.baseServings),
+    imageUrl: d.imageUrl ?? "",
+    favorite: d.favorite,
     ingredients:
       d.ingredients.length > 0
         ? d.ingredients.map((i) => ({
@@ -108,6 +114,8 @@ function draftToPayload(d: Draft) {
     tags,
     ingredients,
     baseServings: Number(d.baseServings) || 4,
+    imageUrl: d.imageUrl.trim() || null,
+    favorite: d.favorite,
   };
 }
 
@@ -366,6 +374,37 @@ export default function AdminPage() {
               className="w-24 rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
             />
           </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium">Image URL</span>
+            <input
+              type="url"
+              placeholder="https://…"
+              value={draft.imageUrl}
+              onChange={(e) =>
+                setDraft({ ...draft, imageUrl: e.target.value })
+              }
+              className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            {draft.imageUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={draft.imageUrl}
+                alt="preview"
+                className="mt-2 h-32 w-auto rounded border border-zinc-200 object-cover dark:border-zinc-800"
+              />
+            )}
+          </label>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={draft.favorite}
+              onChange={(e) =>
+                setDraft({ ...draft, favorite: e.target.checked })
+              }
+            />
+            ★ favourite
+          </label>
 
           <div>
             <span className="text-sm font-medium">Ingredients</span>
@@ -608,6 +647,21 @@ export default function AdminPage() {
                   className="text-sm text-emerald-600 hover:underline"
                 >
                   edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft({
+                      ...dishToDraft(d),
+                      id: null,
+                      title: `${d.title} (copy)`,
+                    });
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="text-sm text-zinc-500 hover:underline"
+                  title="Duplicate this dish as a new draft"
+                >
+                  copy
                 </button>
                 <button
                   type="button"

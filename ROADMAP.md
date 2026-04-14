@@ -34,52 +34,48 @@ Dish detail + cook mode render an `(optional)` suffix.
 
 ## Feature ideas
 
-### Dish images
+### ~~Dish images~~ ✅ (URL input)
 
-**Problem.** Dishes are text-only. The spinner, browse page, and dish
-detail would all be more useful with a photo.
+Shipped as a URL-paste flow: new `image_url` column on `dishes`, URL
+input on the admin form with a live preview, hero image at the top of
+`/dishes/[id]`, 48×48 thumbnail on `/dishes`. Placeholder gradient when
+no image.
 
-**Sketch.** Add an optional `image_url` column on `dishes`. Store images
-via Vercel Blob (built-in, no extra service). Admin form gets a file upload
-that POSTs to a signed upload URL, then saves the resulting public URL on
-the dish. Fallback to a placeholder gradient in the UI.
+**Open follow-up**: a Vercel Blob store (`dinner-spinner-images`,
+`store_ZNW6YfxPkg7c0mOr`, `iad1`) was already created but couldn't be
+linked to the project via the CLI (needs an interactive dashboard
+step). When that's wired up and `BLOB_READ_WRITE_TOKEN` is available
+as an env var, swap the URL input for a file upload that uses
+`@vercel/blob`'s `put()` server-side under a new `/api/upload` route.
 
-### Text search on `/dishes`
+### ~~Text search on `/dishes`~~ ✅
 
-**Problem.** With enough dishes, tag filtering alone isn't enough. Sometimes
-you just want to search for "lasagna" or "curry".
+Shipped. Client-side filter input that matches against title +
+subtitle, combined with the tag filter and the new "favourites only"
+toggle. About 10 lines of logic in a `useMemo`.
 
-**Sketch.** Postgres full-text search or a simple ILIKE over `title || ' ' ||
-subtitle`. Client-side filter input on `/dishes` next to the tag bar.
-Trivial — maybe 30 lines.
+### ~~Favourite dishes~~ ✅
 
-### Favourite dishes
+Shipped. New `favorite` boolean column. Star button on dish detail,
+star toggle on `/dishes`, filter chip for "just favourites", and a
+favourite-aware weighted spinner. Dedicated `PATCH /api/dishes/[id]/favorite`
+endpoint for the toggle so the client doesn't have to resend the whole
+dish.
 
-**Problem.** No way to mark a dish as a favourite or de-prioritize
-something you cooked and didn't like.
+### ~~Cooking history~~ ✅
 
-**Sketch.** New `favorite: boolean` column on `dishes`. Star button on dish
-detail and in the browse list. Spinner optionally prefers favourites
-(weighted random). Filter chip on `/dishes` for "just favourites".
+Shipped. New `cook_log` table (`dish_id`, `cooked_at`), `POST /api/cook-log`,
+and the dish list response includes `lastCookedAt` via a correlated
+subquery. "Cooked it" button on the dish detail page. "last cooked X
+ago" stamp on the browse list. Spinner de-weights recently-cooked
+dishes: `weight × min(1, daysSinceLast/14)`, with a 0.05 floor so a
+dish cooked today isn't impossible. Favourites get 2× base weight.
 
-### Cooking history
+### ~~Copy-dish shortcut~~ ✅
 
-**Problem.** The spinner doesn't know what you've cooked recently, so it
-might pick the same dish three weeks in a row.
-
-**Sketch.** New `cook_log` table: `(dish_id, cooked_at)`. Mark as cooked
-via a button on the dish detail page or automatically on "Send to
-Todoist". Spinner can de-weight dishes cooked in the last N days. `/dishes`
-can show "last cooked: 12 days ago".
-
-### Copy-dish shortcut
-
-**Problem.** When you want to riff on an existing dish (e.g. "curry madras
-but with lamb"), you have to retype everything.
-
-**Sketch.** "Duplicate" button next to "edit" and "delete" in `/admin`.
-POSTs a new dish with the source's fields copied, title suffixed with
-" (copy)". One-handler implementation.
+Shipped. "copy" button next to edit/delete in `/admin` populates the
+draft with the source dish's fields, id cleared, title suffixed with
+" (copy)". One handler, no new endpoint.
 
 ## Small cleanups / polish
 

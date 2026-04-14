@@ -20,7 +20,13 @@ export async function GET(
   ctx: RouteContext<"/api/dishes/[id]">,
 ) {
   const { id } = await ctx.params;
-  const rows = await sql`SELECT * FROM dishes WHERE id = ${Number(id)}`;
+  const rows = await sql`
+    SELECT d.*, (
+      SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id
+    ) AS last_cooked_at
+    FROM dishes d
+    WHERE id = ${Number(id)}
+  `;
   if (rows.length === 0) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -62,6 +68,8 @@ export async function PATCH(
       tags = ${d.tags},
       ingredients = ${JSON.stringify(d.ingredients)}::jsonb,
       base_servings = ${d.baseServings},
+      favorite = ${d.favorite ?? false},
+      image_url = ${d.imageUrl ?? null},
       updated_at = now()
     WHERE id = ${Number(id)}
     RETURNING *

@@ -6,11 +6,17 @@ CREATE TABLE IF NOT EXISTS dishes (
   tags          text[] NOT NULL DEFAULT '{}',
   ingredients   jsonb  NOT NULL DEFAULT '[]',
   base_servings int    NOT NULL DEFAULT 4,
+  favorite      boolean NOT NULL DEFAULT false,
+  image_url     text,
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS dishes_tags_gin ON dishes USING gin (tags);
+
+-- Backward-compatible adds for existing installs.
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS favorite boolean NOT NULL DEFAULT false;
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS image_url text;
 
 -- User-curated pantry defaults. Ingredient names stored lowercased.
 -- applyPantryDefaults() auto-flags matching ingredients as pantry:true
@@ -30,3 +36,14 @@ CREATE TABLE IF NOT EXISTS meal_plan (
 );
 INSERT INTO meal_plan (id, entries) VALUES (1, '[]')
   ON CONFLICT (id) DO NOTHING;
+
+-- Per-dish cooking log. /api/cook-log POST appends a row. The dishes GET
+-- response includes the most-recent cooked_at via a LATERAL subquery so
+-- the spinner can de-weight recently-cooked dishes.
+CREATE TABLE IF NOT EXISTS cook_log (
+  id         serial PRIMARY KEY,
+  dish_id    int NOT NULL REFERENCES dishes(id) ON DELETE CASCADE,
+  cooked_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS cook_log_dish_id_cooked_at_idx
+  ON cook_log (dish_id, cooked_at DESC);

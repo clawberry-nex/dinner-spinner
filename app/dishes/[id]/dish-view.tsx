@@ -8,9 +8,32 @@ import { formatQty, scaleIngredient, visibleUnit } from "@/lib/ingredients";
 import type { Ingredient } from "@/lib/types";
 import { mutatePlan } from "@/lib/meal-plan";
 
-export default function DishView({ dish }: { dish: Dish }) {
-  const [servings, setServings] = useState<number>(dish.baseServings);
+function formatRelativeDate(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "recently";
+  const now = Date.now();
+  const seconds = Math.max(0, Math.floor((now - then) / 1000));
+  const days = Math.floor(seconds / 86400);
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) {
+    const weeks = Math.floor(days / 7);
+    return weeks === 1 ? "1 week ago" : `${weeks} weeks ago`;
+  }
+  if (days < 365) {
+    const months = Math.floor(days / 30);
+    return months === 1 ? "1 month ago" : `${months} months ago`;
+  }
+  const years = Math.floor(days / 365);
+  return years === 1 ? "1 year ago" : `${years} years ago`;
+}
+
+export default function DishView({ dish: initialDish }: { dish: Dish }) {
+  const [dish, setDish] = useState<Dish>(initialDish);
+  const [servings, setServings] = useState<number>(initialDish.baseServings);
   const [addedMsg, setAddedMsg] = useState<string | null>(null);
+  const [cookedMsg, setCookedMsg] = useState<string | null>(null);
 
   function addToPlan() {
     const next = mutatePlan((prev) => {
@@ -26,19 +49,75 @@ export default function DishView({ dish }: { dish: Dish }) {
     setTimeout(() => setAddedMsg(null), 2500);
   }
 
+  async function toggleFavorite() {
+    const next = !dish.favorite;
+    setDish((d) => ({ ...d, favorite: next }));
+    const res = await fetch(`/api/dishes/${dish.id}/favorite`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ favorite: next }),
+    });
+    if (!res.ok) {
+      setDish((d) => ({ ...d, favorite: !next }));
+    }
+  }
+
+  async function markCooked() {
+    const res = await fetch(`/api/cook-log`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dishId: dish.id }),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { cookedAt?: string };
+      setDish((d) => ({ ...d, lastCookedAt: data.cookedAt ?? new Date().toISOString() }));
+      setCookedMsg("Logged as cooked.");
+      setTimeout(() => setCookedMsg(null), 2500);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-8">
       <Link href="/" className="text-sm text-zinc-500 hover:underline">
         ← Back to spinner
       </Link>
 
+      {dish.imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={dish.imageUrl}
+          alt={dish.title}
+          className="max-h-80 w-full rounded-lg object-cover"
+        />
+      )}
+
       <header>
-        <h1 className="text-3xl font-bold">{dish.title}</h1>
-        {dish.subtitle && (
-          <p className="mt-1 text-lg text-zinc-600 dark:text-zinc-400">
-            {dish.subtitle}
-          </p>
-        )}
+        <div className="flex items-start gap-3">
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold">{dish.title}</h1>
+            {dish.subtitle && (
+              <p className="mt-1 text-lg text-zinc-600 dark:text-zinc-400">
+                {dish.subtitle}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={toggleFavorite}
+            className="text-3xl leading-none"
+            aria-label={dish.favorite ? "Remove from favourites" : "Add to favourites"}
+          >
+            <span
+              className={
+                dish.favorite
+                  ? "text-amber-500"
+                  : "text-zinc-300 hover:text-amber-500 dark:text-zinc-700"
+              }
+            >
+              ★
+            </span>
+          </button>
+        </div>
         {dish.tags.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {dish.tags.map((t) => (
@@ -51,10 +130,15 @@ export default function DishView({ dish }: { dish: Dish }) {
             ))}
           </div>
         )}
+        {dish.lastCookedAt && (
+          <p className="mt-2 text-xs text-zinc-500">
+            Last cooked {formatRelativeDate(dish.lastCookedAt)}
+          </p>
+        )}
       </header>
 
       <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-        <div className="mb-4 flex items-center gap-3">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
           <span className="font-semibold">Serves:</span>
           <button
             type="button"
@@ -71,12 +155,19 @@ export default function DishView({ dish }: { dish: Dish }) {
           >
             +
           </button>
-          <span className="ml-2 text-xs text-zinc-500">
+          <span className="text-xs text-zinc-500">
             (base: {dish.baseServings})
           </span>
+          <button
+            type="button"
+            onClick={markCooked}
+            className="ml-auto rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            ✓ Cooked it
+          </button>
           <Link
             href={`/dishes/${dish.id}/cook?servings=${servings}`}
-            className="ml-auto rounded-md border border-emerald-600 px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+            className="rounded-md border border-emerald-600 px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
           >
             Cook mode
           </Link>
@@ -89,6 +180,7 @@ export default function DishView({ dish }: { dish: Dish }) {
           </button>
         </div>
         {addedMsg && <p className="mb-2 text-sm text-emerald-600">{addedMsg}</p>}
+        {cookedMsg && <p className="mb-2 text-sm text-emerald-600">{cookedMsg}</p>}
 
         {dish.ingredients.length > 0 ? (
           <ul className="list-disc space-y-1 pl-6">
