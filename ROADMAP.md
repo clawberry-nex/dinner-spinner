@@ -5,6 +5,174 @@ prioritize as needed. Items are grouped by "why" rather than "when". Each
 entry is a short problem statement + a sketch of an approach so the next
 session can pick it up cold.
 
+## Next up
+
+A fresh batch of ideas after the first round shipped most of the v1 wishlist.
+
+### Recipe import from URL
+
+**Problem.** Adding a recipe means either typing it from scratch or pasting
+into Nex and asking the agent to parse. Fine for the occasional dish, tedious
+if you're trying to batch-import a dozen things from a food blog.
+
+**Sketch.** New admin action: paste a URL → `POST /api/import` fetches the
+page server-side, extracts a `schema.org/Recipe` JSON-LD block (most food
+blogs embed one), maps to the dinner-spinner shape, pre-fills the admin
+form. When JSON-LD isn't present, fall back to showing the page title and
+leaving the form empty. Ingredient mapping still relies on the existing
+vocabulary + pantry defaults logic — so imported rows still get pantry
+flags and canonical names applied on save. Bonus: a retry button that
+re-runs parsing if the initial extraction is off.
+
+### Week-view meal plan
+
+**Problem.** Current `/plan` is a flat list of dishes. For real weekly
+planning you want to slot dishes into days (Mon → Sun) so you can reason
+about "what am I eating Tuesday", thaw proteins ahead, and aggregate the
+shopping list by "this week".
+
+**Sketch.** Evolve the `meal_plan` entries shape from `{id, servings}` to
+`{id, servings, day?: 0..6}` (day is optional — unassigned dishes hang
+out in a "pool" column). `/plan` renders a 7-column grid with dishes as
+cards. Drag/tap to move dishes between days. Shopping list aggregates
+across the whole week regardless of day assignment. Week start rolls
+forward on Monday by default; small "reset week" control wipes
+assignments but keeps the dishes.
+
+### Timers in cook mode
+
+**Problem.** Recipe steps like "simmer for 15 minutes" or "bake for 30 min"
+are where you most need a timer — and you're currently holding a wooden
+spoon, not tapping a clock app.
+
+**Sketch.** In `linkifyStep` (already parsing step text), also match
+duration patterns (`\d+\s*(min|minutes|hour|hours|h)`). Each match becomes
+a small inline button: "start 15m". Button starts a client-side timer,
+swaps to a live countdown, plays a short `<audio>` ping when it hits
+zero. Multiple concurrent timers stack in a fixed bottom-right panel.
+Timers persist through the wake-lock — they're just `setTimeout` +
+state, no backgrounding issue.
+
+### Dietary tags (auto-derived)
+
+**Problem.** Today you can filter by free-form tags, but a dish is only
+"vegetarian" if someone remembered to tag it. Auto-derivation from the
+ingredient list would be more reliable and would surface dishes you'd
+otherwise miss.
+
+**Sketch.** New `lib/diet.ts` with per-ingredient attribute maps —
+`{ name → { vegan, vegetarian, contains: ['dairy', 'nuts', 'gluten'] } }`.
+Keyed off `STANDARD_INGREDIENTS`. At render time on `/dishes/[id]`,
+compute the dish's effective diet flags as the intersection/union across
+ingredients. Show as read-only computed chips ("vegetarian", "contains
+dairy"). Filter chips on `/dishes`. Don't store in `dishes.tags` —
+keep it derived so adding an ingredient immediately updates the
+classification. Unknown ingredients degrade gracefully: "contains: dairy"
+is still correct even if one ingredient's attributes are unknown.
+
+### Star ratings + cook notes
+
+**Problem.** After cooking a dish, you've got real feedback: "the chili
+was too much", "need to halve the sugar next time", "kids loved it". No
+place to put that today, and the spinner has no signal beyond the binary
+favourite flag.
+
+**Sketch.** Extend `cook_log` with `rating smallint` (1–5, nullable) and
+`note text`. Dish-detail "Cooked it" button opens a small form: stars +
+note textarea. History section on the dish detail shows past cooks with
+their notes. Average rating feeds into spinner weight (favourites become
+"anything ≥ 4"). Notes render as timestamped sticky notes above the
+recipe.
+
+### Remember last-chosen servings per dish
+
+**Problem.** Every time you visit a dish page, servings resets to
+`baseServings`. If you usually cook for 6 people, you re-click the +
+button every single time.
+
+**Sketch.** Store `lastServings` in localStorage keyed by dish id on
+every stepper change. Dish detail reads it on mount, falling back to
+`baseServings`. Small "reset to base" link next to the stepper. Pure
+client-side, no API.
+
+### PWA / install prompt
+
+**Problem.** On mobile the app lives behind a browser tab. It deserves
+to be a first-class citizen on the home screen, especially when
+shopping or cooking.
+
+**Sketch.** Add `app/manifest.webmanifest`, 192/512px icons under
+`public/icons/`, `<link rel="manifest">` in root layout. Minimal
+service worker that caches the spinner + /dishes shell + recently
+viewed dish JSON for offline read. Next.js has a `next-pwa` plugin
+but hand-rolling is fine — we just need the manifest and a simple
+`sw.js`. Install prompt shows on iOS when you add to home screen;
+on Android the browser offers it automatically.
+
+### Export / import JSON backup
+
+**Problem.** All dishes live in one Neon Postgres row — you're trusting
+Neon's backups for DR. A one-click "download everything as JSON"
+button costs nothing and unblocks quick recovery + portability.
+
+**Sketch.** `/admin` button → `GET /api/dishes?format=export` returns
+all dishes (including pantry_names and meal_plan) as a single JSON
+payload. "Import" button on the same page accepts that JSON,
+upserting by id. Two handlers, no new routes needed if we extend
+`/api/dishes` with a query param.
+
+### Spinner "why this one?" explanation
+
+**Problem.** The spinner silently weights favourites and recency, but
+you have no way to know why a given dish came up. When it keeps
+picking the same thing, you can't tell if the weighting is broken or
+just unlucky.
+
+**Sketch.** Return a 1-line rationale alongside the picked dish on
+the spinner result: "picked from 7 vegetarian dishes; favourite
+(2×); cooked 3 weeks ago (0.83×)". Tiny UI addition, trust builder.
+Logic already exists in `pickWeighted` — just return the chosen
+weight breakdown.
+
+### Drag-to-reorder ingredients in admin
+
+**Problem.** Ingredient order matters for the recipe read-through.
+Today, inserting an ingredient in the middle means typing it at the
+end and… that's it. No reorder at all.
+
+**Sketch.** Add a ⋮⋮ grip handle to each ingredient row. Use the
+native HTML5 drag-and-drop API for simplicity (no library). Reorder
+mutates `draft.ingredients` array on drop. Keyboard-accessible
+alternative: "move up / move down" buttons next to the × remove
+button.
+
+### Per-dish notes field
+
+**Problem.** The recipe markdown holds the cooking steps. But there's
+no good spot for persistent meta-notes like "Finn won't eat this if
+there are mushrooms" or "Usually 1.5× the chili" that should stay
+out of the recipe body.
+
+**Sketch.** New `notes text` column on `dishes` (nullable). Admin
+form has a small "Notes" textarea, separate from the recipe textarea.
+Dish detail renders it as a yellow sticky-note style box above the
+ingredient section, hidden when empty. Unlike ratings/cook-notes,
+this is a single persistent note per dish — a "scratch pad" rather
+than a log.
+
+### Temporary skip ("don't spin this")
+
+**Problem.** Sometimes you've got leftovers and specifically don't
+want a dish to come up for a few days, but you don't want to
+permanently unfavourite or delete it.
+
+**Sketch.** Optional `skip_until timestamptz` column on `dishes`.
+Button on dish detail: "skip for 3 / 7 / 14 days" → sets
+`skip_until` to `now() + interval`. Spinner filters out dishes where
+`skip_until > now()`. `/dishes` shows a small "skipped for Nd" chip
+on those rows with a clear button. Expires silently — no cron
+needed, just a comparison in the query.
+
 ## Known limitations
 
 _All three items in this section were implemented in commit `670c431`.
