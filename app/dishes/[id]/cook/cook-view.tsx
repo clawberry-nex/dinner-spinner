@@ -8,65 +8,101 @@ import {
   scaleIngredient,
   visibleUnit,
 } from "@/lib/ingredients";
+import { findTimers } from "@/lib/timer-parse";
+import { useTimers } from "./use-timers";
+import TimerPanel from "./timer-panel";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Linkify an ingredient reference inside a step's plain text. Longest
-// ingredient names match first (so "green chili" wins over "chili"),
-// and a trailing `s` is tolerated so "onion" matches "onions". Each
-// matched span is turned into a clickable button that calls onTap with
-// the ingredient's index in the ingredients array.
-function linkifyStep(
-  text: string,
-  ingredients: Ingredient[],
-  onTap: (index: number) => void,
-): React.ReactNode[] {
-  if (ingredients.length === 0) return [text];
+type Span =
+  | { kind: "ingredient"; start: number; end: number; idx: number }
+  | { kind: "timer"; start: number; end: number; seconds: number; label: string };
 
-  // Sort name-index pairs by name length desc so longest matches win.
+function findIngredientSpans(text: string, ingredients: Ingredient[]): Span[] {
+  if (ingredients.length === 0) return [];
   const entries = ingredients
     .map((ing, idx) => ({ name: ing.name.trim(), idx }))
-    .filter((e) => e.name.length >= 3) // skip tiny names to avoid noise
+    .filter((e) => e.name.length >= 3)
     .sort((a, b) => b.name.length - a.name.length);
+  if (entries.length === 0) return [];
 
-  if (entries.length === 0) return [text];
-
-  // Build a single alternation regex — longest first means the first
-  // alternative that matches at a given position wins.
-  const alternation = entries
-    .map((e) => escapeRegex(e.name))
-    .join("|");
+  const alternation = entries.map((e) => escapeRegex(e.name)).join("|");
   const re = new RegExp(`\\b(?:${alternation})s?\\b`, "gi");
+  const spans: Span[] = [];
 
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-
-  while ((match = re.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-    const matched = match[0];
-    // Find which ingredient this is — case-insensitive, strip trailing s.
-    const normalized = matched
-      .replace(/s$/i, "")
-      .toLowerCase();
+  for (const m of text.matchAll(re)) {
+    const matched = m[0];
+    const normalized = matched.replace(/s$/i, "").toLowerCase();
     const hit = entries.find(
       (e) =>
         e.name.toLowerCase() === normalized ||
         e.name.toLowerCase() === matched.toLowerCase(),
     );
-    if (hit) {
+    if (!hit) continue;
+    const start = m.index ?? 0;
+    spans.push({
+      kind: "ingredient",
+      start,
+      end: start + matched.length,
+      idx: hit.idx,
+    });
+  }
+  return spans;
+}
+
+// Linkify a step's plain text. Matches ingredient names (clickable to
+// scroll their row into view) and duration patterns like "15 min" /
+// "2 hours" (clickable to start a countdown timer). Overlapping spans
+// resolve earliest-start-wins; equal starts favor the longer span.
+function linkifyStep(
+  text: string,
+  ingredients: Ingredient[],
+  onTapIngredient: (index: number) => void,
+  onStartTimer: (label: string, seconds: number) => void,
+): React.ReactNode[] {
+  const ingredientSpans = findIngredientSpans(text, ingredients);
+  const timerSpans: Span[] = findTimers(text).map((t) => ({
+    kind: "timer",
+    start: t.start,
+    end: t.end,
+    seconds: t.seconds,
+    label: t.label,
+  }));
+
+  const all = [...ingredientSpans, ...timerSpans].sort((a, b) => {
+    if (a.start !== b.start) return a.start - b.start;
+    return b.end - b.start - (a.end - a.start);
+  });
+
+  // Drop overlapping spans — earlier (or longer, on tie) wins.
+  const picked: Span[] = [];
+  let cursor = 0;
+  for (const s of all) {
+    if (s.start < cursor) continue;
+    picked.push(s);
+    cursor = s.end;
+  }
+
+  if (picked.length === 0) return [text];
+
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+  for (const s of picked) {
+    if (s.start > lastIndex) {
+      parts.push(text.slice(lastIndex, s.start));
+    }
+    const matched = text.slice(s.start, s.end);
+    if (s.kind === "ingredient") {
       parts.push(
         <button
           key={`ing-${key++}`}
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onTap(hit.idx);
+            onTapIngredient(s.idx);
           }}
           className="inline underline decoration-dotted decoration-emerald-500 underline-offset-2 hover:bg-emerald-100 dark:hover:bg-emerald-950"
         >
@@ -74,15 +110,25 @@ function linkifyStep(
         </button>,
       );
     } else {
-      parts.push(matched);
+      parts.push(
+        <button
+          key={`tmr-${key++}`}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onStartTimer(s.label, s.seconds);
+          }}
+          title={`Start ${s.label} timer`}
+          className="mx-0.5 inline-flex items-center gap-1 rounded-md border border-amber-400 bg-amber-50 px-1.5 py-0 align-baseline text-[13px] font-semibold text-amber-800 hover:bg-amber-100 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900"
+        >
+          <span aria-hidden="true">⏱</span>
+          {matched}
+        </button>,
+      );
     }
-    lastIndex = match.index + matched.length;
+    lastIndex = s.end;
   }
-
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
-
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
   return parts;
 }
 
@@ -200,6 +246,7 @@ export default function CookView({
   const [highlightedIdx, setHighlightedIdx] = useState<number | null>(null);
   const ingredientRefs = useRef<Array<HTMLLIElement | null>>([]);
   const wakeLock = useWakeLock();
+  const timers = useTimers();
 
   const sections = useMemo(
     () => (dish.recipe ? parseRecipe(dish.recipe) : []),
@@ -364,6 +411,7 @@ export default function CookView({
                             step,
                             scaledIngredients,
                             scrollToIngredient,
+                            timers.start,
                           )}
                         </span>
                       </button>
@@ -384,6 +432,8 @@ export default function CookView({
           ← Back to dish
         </Link>
       </div>
+
+      <TimerPanel api={timers} />
     </div>
   );
 }

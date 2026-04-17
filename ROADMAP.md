@@ -39,19 +39,16 @@ across the whole week regardless of day assignment. Week start rolls
 forward on Monday by default; small "reset week" control wipes
 assignments but keeps the dishes.
 
-### Timers in cook mode
+### ~~Timers in cook mode~~ ✅
 
-**Problem.** Recipe steps like "simmer for 15 minutes" or "bake for 30 min"
-are where you most need a timer — and you're currently holding a wooden
-spoon, not tapping a clock app.
-
-**Sketch.** In `linkifyStep` (already parsing step text), also match
-duration patterns (`\d+\s*(min|minutes|hour|hours|h)`). Each match becomes
-a small inline button: "start 15m". Button starts a client-side timer,
-swaps to a live countdown, plays a short `<audio>` ping when it hits
-zero. Multiple concurrent timers stack in a fixed bottom-right panel.
-Timers persist through the wake-lock — they're just `setTimeout` +
-state, no backgrounding issue.
+Shipped. `lib/timer-parse.ts::findTimers` extracts duration phrases
+(`15 min`, `1 hour`, `1.5 hours`, `30min`, `2 hrs`) from step text.
+`linkifyStep` now merges ingredient and timer spans non-overlappingly and
+renders timer matches as amber inline buttons with a ⏱ glyph. Clicking
+spawns a countdown in `useTimers` (React state, 250ms tick) and
+`TimerPanel` stacks them fixed bottom-right. Finished timers play a
+two-tone Web Audio beep, flash red, and stay until dismissed. Multiple
+concurrent timers supported.
 
 ### Dietary tags (auto-derived)
 
