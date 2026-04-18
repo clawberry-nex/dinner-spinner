@@ -18,6 +18,7 @@ export default function PlanPage() {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [dishesLoading, setDishesLoading] = useState(true);
   const [includeOptional, setIncludeOptional] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
   const [sendState, setSendState] = useState<
     { kind: "idle" } | { kind: "sending" } | { kind: "ok"; count: number } | { kind: "err"; msg: string }
   >({ kind: "idle" });
@@ -30,6 +31,11 @@ export default function PlanPage() {
       .then((r) => r.json() as Promise<Dish[]>)
       .then(setDishes)
       .finally(() => setDishesLoading(false));
+    // Check if user is authenticated (controls Todoist button visibility).
+    fetch("/api/auth/check")
+      .then((r) => r.json() as Promise<{ authenticated: boolean }>)
+      .then((d) => setAuthenticated(d.authenticated))
+      .catch(() => {});
   }, []);
 
   const planWithDish = useMemo(
@@ -207,7 +213,7 @@ export default function PlanPage() {
                 ))}
               </ul>
             )}
-            {shoppingList.length > 0 && (
+            {shoppingList.length > 0 && authenticated && (
               <div className="mt-4 flex items-center gap-3">
                 <button
                   type="button"
