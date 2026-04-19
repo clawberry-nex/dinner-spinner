@@ -144,7 +144,6 @@ function LogoutButton() {
 }
 
 export default function AdminPage() {
-  const router = useRouter();
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
@@ -243,6 +242,7 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     reload().catch(() => {});
   }, []);
 

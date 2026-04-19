@@ -87,14 +87,11 @@ export function useMealPlan(): {
   setPlan: (next: PlanEntry[]) => void;
   loading: boolean;
 } {
-  const [plan, setPlanState] = useState<PlanEntry[]>([]);
+  const [plan, setPlanState] = useState<PlanEntry[]>(readPlanLocal);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Instant: local.
-    setPlanState(readPlanLocal());
-
-    // Then try the server and, if it has something, override.
+    // Then try the server and, if it has something, override local state.
     let cancelled = false;
     fetchPlanFromServer().then((serverPlan) => {
       if (cancelled) return;

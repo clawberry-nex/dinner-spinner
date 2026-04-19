@@ -59,7 +59,10 @@ export default function SpinnerPage() {
     return data;
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [selected.join(",")]);
+  // `load` is stable enough for this effect; re-creating it on every render
+  // would cause an infinite loop. selected.join(",") is the real trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [selected.join(",")]);
 
   const toggleTag = (t: string) => {
     setLanded(null);

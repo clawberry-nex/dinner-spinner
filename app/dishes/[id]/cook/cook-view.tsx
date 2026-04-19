@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/refs */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -193,6 +194,8 @@ function useWakeLock() {
 
   useEffect(() => {
     const hasApi = typeof navigator !== "undefined" && "wakeLock" in navigator;
+    // One-time synchronous check on mount — not a cascading render concern.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSupported(hasApi);
     if (!hasApi) return;
 
