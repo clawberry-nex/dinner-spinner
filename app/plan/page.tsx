@@ -95,7 +95,8 @@ export default function PlanPage() {
           </div>
         ) : (
           <>
-            <section className="px-5 pt-4">
+            <div className="flex flex-col gap-6 px-5 pt-4 md:grid md:grid-cols-2 md:gap-6">
+            <section>
               <h2 className="m-0 text-[20px] italic font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>Dishes</h2>
               <ul className="mt-2 flex flex-col divide-y divide-rule-soft rounded-lg border border-rule bg-paper">
                 {dishList.map(({ entry, dish }) => (
@@ -129,7 +130,7 @@ export default function PlanPage() {
               </button>
             </section>
 
-            <section className="px-5 pt-6">
+            <section>
               <div className="flex items-center justify-between">
                 <h2 className="m-0 text-[20px] italic font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>Shopping list</h2>
                 <label className="flex items-center gap-[6px] text-[12px] text-ink-2">
@@ -157,6 +158,7 @@ export default function PlanPage() {
                 </div>
               ) : null}
             </section>
+            </div>
 
             {pantry.length > 0 && (
               <section className="px-5 pt-6">

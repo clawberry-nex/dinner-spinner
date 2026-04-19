@@ -76,7 +76,7 @@ export default function DishView({ dish: initial }: { dish: Dish }) {
     <div className="flex min-h-screen flex-col bg-bg">
       <AppHeader back />
       <div className="flex-1 overflow-auto pb-20">
-        <div className="px-4"><DishArt dish={dish} size="100%" corner="var(--radius-lg)" /></div>
+        <div className="px-4"><DishArt dish={dish} size="100%" corner="var(--radius-lg)" className="md:max-h-[320px] md:object-cover" /></div>
 
         <div className="px-5 pt-5 pb-3">
           <div className="flex items-start gap-3">

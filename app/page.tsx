@@ -154,7 +154,7 @@ function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
   const slices = pool.slice(0, 10);
   const n = Math.max(slices.length, 1);
   const sliceDeg = 360 / n;
-  const size = 280;
+  const size = "min(340px, calc(100vw - 80px))";
   return (
     <div
       className={[
@@ -184,7 +184,7 @@ function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
                 key={d.id}
                 className="absolute left-1/2 top-1/2 origin-left text-paper"
                 style={{
-                  transform: `rotate(${mid}deg) translateX(50px)`,
+                  transform: `rotate(${mid}deg) translateX(60px)`,
                   fontFamily: "var(--font-disp)", fontSize: 14, fontWeight: 500,
                   textShadow: "0 1px 2px rgba(0,0,0,0.3)",
                 }}

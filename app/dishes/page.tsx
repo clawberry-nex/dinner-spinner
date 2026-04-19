@@ -112,7 +112,7 @@ export default function DishesPage() {
             {entries.length} in plan · <Link href="/plan" className="underline">view plan</Link>
           </div>
         )}
-        <ul className="mx-4 my-4 flex flex-col gap-4">
+        <ul className="mx-4 my-4 grid grid-cols-1 gap-4 md:grid-cols-2">
           {filtered.map((d) => (
             <li key={d.id} className="overflow-hidden rounded-lg border border-rule bg-paper">
               <Link href={`/dishes/${d.id}`} className="block">
