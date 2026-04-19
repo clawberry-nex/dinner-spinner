@@ -287,7 +287,7 @@ export default function CookView({
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <header className="flex items-center gap-3 border-b border-rule-soft bg-paper px-4 py-3">
         <button
           type="button"

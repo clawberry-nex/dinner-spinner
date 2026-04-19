@@ -316,7 +316,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader title="Admin" right={<LogoutButton />} />
       <div className="flex-1 overflow-auto px-4 pb-20">
       <div className="flex flex-col gap-8 py-6">

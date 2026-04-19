@@ -73,7 +73,7 @@ export default function DishView({ dish: initial }: { dish: Dish }) {
   const ratio = servings / dish.baseServings;
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader back />
       <div className="flex-1 overflow-auto pb-20">
         <div className="px-4"><DishArt dish={dish} size="100%" corner="var(--radius-lg)" className="md:max-h-[320px] md:object-cover" /></div>

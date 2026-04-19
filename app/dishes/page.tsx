@@ -82,7 +82,7 @@ export default function DishesPage() {
   }, [dishes, q, favOnly, selected]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader title="Dishes" subtitle={`${filtered.length} of ${dishes.length}`} />
 
       <div className="flex flex-col gap-3 border-b border-rule-soft bg-bg px-4 pt-3 pb-4">

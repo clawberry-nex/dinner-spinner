@@ -98,7 +98,7 @@ export default function SpinnerPage() {
   const weekday = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: "long" }), []);
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader />
       <div className="flex-1 overflow-auto pb-20">
         <div className="px-5 pt-2 pb-5">
@@ -181,18 +181,24 @@ function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
         />
         <div className="absolute inset-0" style={{ transform: `rotate(${rotation}deg)`, transition: spinning ? "transform 2.2s cubic-bezier(0.15, 0.85, 0.2, 1)" : "transform 0.4s" }}>
           {slices.map((d, i) => {
-            const mid = (i + 0.5) * sliceDeg;
+            const midDeg = (i + 0.5) * sliceDeg - 90;
+            const rad = (midDeg * Math.PI) / 180;
+            const cx = 50 + Math.cos(rad) * 32;
+            const cy = 50 + Math.sin(rad) * 32;
+            const label = d.emoji || d.title.trim().charAt(0).toUpperCase() || "·";
             return (
               <div
                 key={d.id}
-                className="absolute left-1/2 top-1/2 origin-left text-paper"
+                className="absolute flex h-9 w-9 items-center justify-center text-paper"
                 style={{
-                  transform: `rotate(${mid}deg) translateX(60px)`,
-                  fontFamily: "var(--font-disp)", fontSize: 14, fontWeight: 500,
-                  textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+                  left: `${cx}%`,
+                  top: `${cy}%`,
+                  transform: "translate(-50%, -50%)",
+                  fontFamily: "var(--font-disp)", fontSize: 22, fontWeight: 600,
+                  textShadow: "0 1px 2px rgba(0,0,0,0.35)",
                 }}
               >
-                {d.emoji || "·"}
+                {label}
               </div>
             );
           })}

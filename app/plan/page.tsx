@@ -86,7 +86,7 @@ export default function PlanPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader title="Plan" />
       <div className="flex-1 overflow-auto pb-20">
         {!dishList.length ? (
