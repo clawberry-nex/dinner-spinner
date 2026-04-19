@@ -2,276 +2,182 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import type { Dish, Ingredient } from "@/lib/types";
+import { AppHeader } from "../_components/app-header";
+import { Button, StepperButton } from "../_components/ui";
 import {
   aggregateIngredients,
   aggregatePantryItems,
-  formatQty,
-  formatShoppingGroup,
   groupByName,
-  visibleUnit,
+  formatShoppingGroup,
 } from "@/lib/ingredients";
-import { useMealPlan, type PlanEntry } from "@/lib/meal-plan";
+import type { Dish } from "@/lib/types";
+
+type Entry = { id: number; servings: number };
 
 export default function PlanPage() {
-  const { plan, setPlan, loading: planLoading } = useMealPlan();
   const [dishes, setDishes] = useState<Dish[]>([]);
-  const [dishesLoading, setDishesLoading] = useState(true);
+  const [entries, setEntries] = useState<Entry[]>([]);
   const [includeOptional, setIncludeOptional] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [sendState, setSendState] = useState<
-    { kind: "idle" } | { kind: "sending" } | { kind: "ok"; count: number } | { kind: "err"; msg: string }
-  >({ kind: "idle" });
-
-  const loading = planLoading || dishesLoading;
+  const [authed, setAuthed] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const [pushMsg, setPushMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
-    // Fetch all dishes once; we filter client-side by the plan entries.
-    fetch(`/api/dishes`)
-      .then((r) => r.json() as Promise<Dish[]>)
-      .then(setDishes)
-      .finally(() => setDishesLoading(false));
-    // Check if user is authenticated (controls Todoist button visibility).
-    fetch("/api/auth/check")
-      .then((r) => r.json() as Promise<{ authenticated: boolean }>)
-      .then((d) => setAuthenticated(d.authenticated))
+    fetch("/api/dishes").then((r) => r.json()).then(setDishes).catch(() => {});
+    fetch("/api/auth/check").then((r) => r.json()).then((j) => setAuthed(!!j?.authenticated)).catch(() => {});
+    try {
+      const raw = localStorage.getItem("mealPlan");
+      if (raw) setEntries(JSON.parse(raw));
+    } catch {}
+    fetch("/api/meal-plan")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.entries) {
+          setEntries(d.entries);
+          try { localStorage.setItem("mealPlan", JSON.stringify(d.entries)); } catch {}
+        }
+      })
       .catch(() => {});
   }, []);
 
-  const planWithDish = useMemo(
-    () =>
-      plan
-        .map((e) => ({ entry: e, dish: dishes.find((d) => d.id === e.id) }))
-        .filter((x): x is { entry: PlanEntry; dish: Dish } => !!x.dish),
-    [plan, dishes],
-  );
+  const write = (next: Entry[]) => {
+    setEntries(next);
+    try { localStorage.setItem("mealPlan", JSON.stringify(next)); } catch {}
+    fetch("/api/meal-plan", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entries: next }),
+    }).catch(() => {});
+  };
 
-  const groupedForAggregation = useMemo(
-    () =>
-      planWithDish.map(({ entry, dish }) => ({
-        ingredients: dish.ingredients,
-        servings: entry.servings,
-        baseServings: dish.baseServings,
-      })),
-    [planWithDish],
-  );
+  const byId = useMemo(() => new Map(dishes.map((d) => [d.id, d])), [dishes]);
+  const dishList = entries
+    .map((e) => ({ entry: e, dish: byId.get(e.id) }))
+    .filter((x): x is { entry: Entry; dish: Dish } => !!x.dish);
 
-  const shoppingList: Ingredient[] = useMemo(
-    () => aggregateIngredients(groupedForAggregation, { includeOptional }),
-    [groupedForAggregation, includeOptional],
-  );
+  const { shopping, pantry } = useMemo(() => {
+    const groups = dishList.map(({ entry, dish }) => ({
+      ingredients: dish.ingredients,
+      servings: entry.servings,
+      baseServings: dish.baseServings,
+    }));
+    const agg = aggregateIngredients(groups, { includeOptional });
+    const pan = aggregatePantryItems(groups);
+    return { shopping: groupByName(agg), pantry: groupByName(pan) };
+  }, [dishList, includeOptional]);
 
-  // Group entries with the same name + descriptor but different units
-  // (e.g. "2 can coconut milk" + "400 ml coconut milk") into one line.
-  const shoppingGroups = useMemo(
-    () => groupByName(shoppingList),
-    [shoppingList],
-  );
-
-  const pantryList: Ingredient[] = useMemo(
-    () => aggregatePantryItems(groupedForAggregation, { includeOptional }),
-    [groupedForAggregation, includeOptional],
-  );
-
-  const pantryGroups = useMemo(
-    () => groupByName(pantryList),
-    [pantryList],
-  );
-
-  function updateServings(id: number, delta: number) {
-    const next = plan.map((e) =>
-      e.id === id ? { ...e, servings: Math.max(1, e.servings + delta) } : e,
-    );
-    setPlan(next);
-  }
-
-  function remove(id: number) {
-    setPlan(plan.filter((e) => e.id !== id));
-  }
-
-  function clearAll() {
-    setPlan([]);
-  }
-
-  async function sendToTodoist() {
-    setSendState({ kind: "sending" });
+  const pushTodoist = async () => {
+    setPushing(true); setPushMsg(null);
     try {
-      // Pre-format each group as one task so multi-unit items land as
-      // one line ("2 can + 400 ml coconut milk").
-      const tasks = shoppingGroups.map(formatShoppingGroup);
+      const tasks = shopping.map(formatShoppingGroup);
       const res = await fetch("/api/todoist", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ tasks }),
       });
-      const data = (await res.json()) as { ok?: boolean; created?: number; error?: string };
-      if (!res.ok || !data.ok) {
-        setSendState({ kind: "err", msg: data.error ?? `HTTP ${res.status}` });
-        return;
-      }
-      setSendState({ kind: "ok", count: data.created ?? 0 });
-    } catch (e) {
-      setSendState({ kind: "err", msg: e instanceof Error ? e.message : "Error" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "Failed");
+      setPushMsg({ text: `Created ${j.created} tasks.`, ok: true });
+    } catch (err) {
+      setPushMsg({ text: err instanceof Error ? err.message : "Failed", ok: false });
+    } finally {
+      setPushing(false);
     }
-  }
-
-  if (loading) return <p>Loading meal plan…</p>;
+  };
 
   return (
-    <div className="flex flex-col gap-8">
-      <h1 className="text-3xl font-bold">Meal plan</h1>
-
-      {planWithDish.length === 0 ? (
-        <p className="text-zinc-500">
-          No dishes in your plan yet. Spin one and add it from the dish page.
-        </p>
-      ) : (
-        <>
-          <section>
-            <h2 className="mb-3 text-xl font-semibold">Dishes</h2>
-            <ul className="divide-y divide-zinc-200 rounded border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-              {planWithDish.map(({ entry, dish }) => (
-                <li
-                  key={dish.id}
-                  className="flex items-center gap-3 px-4 py-3"
-                >
-                  <Link
-                    href={`/dishes/${dish.id}`}
-                    className="flex-1 font-medium hover:underline"
-                  >
-                    {dish.title}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => updateServings(dish.id, -1)}
-                    className="h-7 w-7 rounded border border-zinc-300 dark:border-zinc-700"
-                  >
-                    −
-                  </button>
-                  <span className="w-8 text-center font-mono">
-                    {entry.servings}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => updateServings(dish.id, +1)}
-                    className="h-7 w-7 rounded border border-zinc-300 dark:border-zinc-700"
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => remove(dish.id)}
-                    className="ml-2 text-sm text-red-600 hover:underline"
-                  >
-                    remove
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              onClick={clearAll}
-              className="mt-2 text-sm text-zinc-500 hover:underline"
-            >
-              Clear all
-            </button>
-          </section>
-
-          <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Shopping list</h2>
-              <label className="flex items-center gap-1 text-xs text-zinc-500">
-                <input
-                  type="checkbox"
-                  checked={includeOptional}
-                  onChange={(e) => setIncludeOptional(e.target.checked)}
-                />
-                include optional
-              </label>
-            </div>
-            {shoppingGroups.length === 0 ? (
-              <p className="text-zinc-500">No ingredients across these dishes.</p>
-            ) : (
-              <ul className="list-disc space-y-1 pl-6">
-                {shoppingGroups.map((group, i) => (
-                  <li key={i}>
-                    {group.items.map((ing, j) => {
-                      const unit = visibleUnit(ing.unit);
-                      return (
-                        <span key={j}>
-                          {j > 0 && <span className="text-zinc-400"> + </span>}
-                          <span className="font-mono">
-                            {formatQty(ing.quantity)}
-                          </span>
-                          {unit ? ` ${unit}` : ""}
-                        </span>
-                      );
-                    })}
-                    {group.descriptor ? ` ${group.descriptor}` : ""}{" "}
-                    {group.name}
+    <div className="flex min-h-screen flex-col bg-bg">
+      <AppHeader title="Plan" />
+      <div className="flex-1 overflow-auto pb-20">
+        {!dishList.length ? (
+          <div className="mx-4 mt-6 rounded-lg border border-dashed border-rule p-6 text-center text-[14px] text-ink-3">
+            No dishes in your plan yet. Spin one and add it from the dish page.
+          </div>
+        ) : (
+          <>
+            <section className="px-5 pt-4">
+              <h2 className="m-0 text-[20px] italic font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>Dishes</h2>
+              <ul className="mt-2 flex flex-col divide-y divide-rule-soft rounded-lg border border-rule bg-paper">
+                {dishList.map(({ entry, dish }) => (
+                  <li key={dish.id} className="flex items-center gap-3 p-3">
+                    <Link href={`/dishes/${dish.id}`} className="flex-1 text-[15px] text-ink hover:underline" style={{ fontFamily: "var(--font-disp)" }}>
+                      {dish.title}
+                    </Link>
+                    <StepperButton
+                      kind="minus"
+                      onClick={() => write(entries.map((e) => (e.id === dish.id ? { ...e, servings: Math.max(1, e.servings - 1) } : e)))}
+                      ariaLabel="Fewer"
+                    />
+                    <span className="min-w-6 text-center text-[14px]" style={{ fontFamily: "var(--font-mono)" }}>{entry.servings}</span>
+                    <StepperButton
+                      kind="plus"
+                      onClick={() => write(entries.map((e) => (e.id === dish.id ? { ...e, servings: e.servings + 1 } : e)))}
+                      ariaLabel="More"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => write(entries.filter((e) => e.id !== dish.id))}
+                      className="px-1 text-[12px] text-warn hover:underline"
+                    >
+                      remove
+                    </button>
                   </li>
                 ))}
               </ul>
-            )}
-            {shoppingList.length > 0 && authenticated && (
-              <div className="mt-4 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={sendToTodoist}
-                  disabled={sendState.kind === "sending"}
-                  className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-70"
-                >
-                  {sendState.kind === "sending"
-                    ? "Sending…"
-                    : "Send to Todoist"}
-                </button>
-                {sendState.kind === "ok" && (
-                  <span className="text-emerald-600">
-                    Created {sendState.count} tasks.
-                  </span>
-                )}
-                {sendState.kind === "err" && (
-                  <span className="text-red-600">{sendState.msg}</span>
-                )}
-              </div>
-            )}
-          </section>
-
-          {pantryGroups.length > 0 && (
-            <section>
-              <h2 className="mb-1 text-xl font-semibold text-zinc-600 dark:text-zinc-400">
-                Pantry check ({pantryGroups.length})
-              </h2>
-              <p className="mb-3 text-xs text-zinc-500">
-                Skipped from the shopping list because you already have
-                them. Glance over to make sure you&rsquo;re not running low.
-              </p>
-              <ul className="list-disc space-y-1 pl-6 italic text-zinc-500">
-                {pantryGroups.map((group, i) => (
-                  <li key={i}>
-                    {group.items.map((ing, j) => {
-                      const unit = visibleUnit(ing.unit);
-                      return (
-                        <span key={j}>
-                          {j > 0 && (
-                            <span className="text-zinc-400"> + </span>
-                          )}
-                          <span className="font-mono not-italic">
-                            {formatQty(ing.quantity)}
-                          </span>
-                          {unit ? ` ${unit}` : ""}
-                        </span>
-                      );
-                    })}
-                    {group.descriptor ? ` ${group.descriptor}` : ""}{" "}
-                    {group.name}
-                  </li>
-                ))}
-              </ul>
+              <button type="button" onClick={() => write([])} className="mt-2 text-[12px] text-ink-3 hover:underline">
+                Clear all
+              </button>
             </section>
-          )}
-        </>
-      )}
+
+            <section className="px-5 pt-6">
+              <div className="flex items-center justify-between">
+                <h2 className="m-0 text-[20px] italic font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>Shopping list</h2>
+                <label className="flex items-center gap-[6px] text-[12px] text-ink-2">
+                  <input type="checkbox" checked={includeOptional} onChange={(e) => setIncludeOptional(e.target.checked)} />
+                  include optional
+                </label>
+              </div>
+              {shopping.length ? (
+                <ul className="mt-2 list-disc pl-5 text-[14px]">
+                  {shopping.map((g, i) => <li key={i} className="my-[2px]">{formatShoppingGroup(g)}</li>)}
+                </ul>
+              ) : (
+                <div className="mt-2 text-[13px] text-ink-3">No ingredients across these dishes.</div>
+              )}
+              {shopping.length > 0 && authed ? (
+                <div className="mt-3">
+                  <Button variant="primary" size="md" onClick={pushTodoist} disabled={pushing}>
+                    {pushing ? "Sending…" : "Send to Todoist"}
+                  </Button>
+                  {pushMsg && (
+                    <div className={["mt-2 text-[12px]", pushMsg.ok ? "text-good" : "text-warn"].join(" ")}>
+                      {pushMsg.text}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </section>
+
+            {pantry.length > 0 && (
+              <section className="px-5 pt-6">
+                <h2 className="m-0 text-[18px] italic font-medium text-ink-2" style={{ fontFamily: "var(--font-disp)" }}>Pantry check ({pantry.length})</h2>
+                <p className="mt-1 text-[12px] text-ink-3">
+                  Skipped from the shopping list because you already have them. Glance over to make sure you&rsquo;re not running low.
+                </p>
+                <ul className="mt-2 list-disc pl-5 text-[14px] italic text-ink-3">
+                  {pantry.map((g, i) => (
+                    <li key={i} className="my-[2px]">
+                      <span className="not-italic text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
+                        {formatShoppingGroup(g)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
