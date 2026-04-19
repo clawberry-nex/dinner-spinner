@@ -7,6 +7,8 @@ import { Chip, DishArt } from "../_components/ui";
 import { Icon } from "../_components/icon";
 import type { Dish } from "@/lib/types";
 
+type Entry = { id: number; servings: number };
+
 function relTime(iso: string | null): string {
   if (!iso) return "never cooked";
   const d = (Date.now() - new Date(iso).getTime()) / 86400000;
@@ -24,11 +26,36 @@ export default function DishesPage() {
   const [favOnly, setFavOnly] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<Entry[]>([]);
 
   useEffect(() => {
     fetch("/api/dishes").then((r) => r.json()).then((data: Dish[]) => { setDishes(data); setLoading(false); }).catch(() => setLoading(false));
     fetch("/api/tags").then((r) => r.json()).then(setAllTags).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("mealPlan");
+      if (raw) setEntries(JSON.parse(raw) as Entry[]);
+    } catch { /* ignore */ }
+  }, []);
+
+  const writeEntries = (next: Entry[]) => {
+    setEntries(next);
+    try { localStorage.setItem("mealPlan", JSON.stringify(next)); } catch { /* ignore */ }
+    fetch("/api/meal-plan", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entries: next }),
+    }).catch(() => {});
+  };
+
+  const togglePlan = (d: Dish, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const inPlan = entries.some((en) => en.id === d.id);
+    writeEntries(inPlan ? entries.filter((en) => en.id !== d.id) : [...entries, { id: d.id, servings: d.baseServings }]);
+  };
 
   const toggleFav = async (id: number, favorite: boolean) => {
     setDishes((ds) => ds.map((d) => (d.id === id ? { ...d, favorite } : d)));
@@ -80,6 +107,11 @@ export default function DishesPage() {
       </div>
 
       <div className="flex-1 overflow-auto pb-20">
+        {entries.length > 0 && (
+          <div className="mx-4 mt-4 text-[12px] text-ink-3">
+            {entries.length} in plan · <Link href="/plan" className="underline">view plan</Link>
+          </div>
+        )}
         <ul className="mx-4 my-4 flex flex-col gap-4">
           {filtered.map((d) => (
             <li key={d.id} className="overflow-hidden rounded-lg border border-rule bg-paper">
@@ -93,14 +125,28 @@ export default function DishesPage() {
                       </h3>
                       {d.subtitle && <div className="mt-[2px] text-[13px] italic text-ink-3">{d.subtitle}</div>}
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(d.id, !d.favorite); }}
-                      aria-label={d.favorite ? "Remove favourite" : "Mark as favourite"}
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-pill border border-rule bg-bg text-ink-2 hover:border-ink-3"
-                    >
-                      <Icon name={d.favorite ? "star-fill" : "star"} size={16} />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => togglePlan(d, e)}
+                        className={[
+                          "inline-flex items-center justify-center gap-2 rounded-pill font-medium transition-opacity",
+                          "px-3 py-2 text-[12px] bg-transparent border border-rule hover:border-ink-3",
+                          entries.some((en) => en.id === d.id) ? "text-good" : "text-accent",
+                        ].join(" ")}
+                        style={{ letterSpacing: 0.2 }}
+                      >
+                        {entries.some((en) => en.id === d.id) ? "✓ in plan" : "+ add to plan"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(d.id, !d.favorite); }}
+                        aria-label={d.favorite ? "Remove favourite" : "Mark as favourite"}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-pill border border-rule bg-bg text-ink-2 hover:border-ink-3"
+                      >
+                        <Icon name={d.favorite ? "star-fill" : "star"} size={16} />
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-x-[10px] gap-y-[4px] text-[11px] uppercase tracking-[0.1em] text-ink-3">
                     {d.tags.map((t) => <span key={t}>· {t}</span>)}
