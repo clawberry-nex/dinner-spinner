@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
-import { ThemeProvider, themeScript } from "@/components/theme-provider";
+import { ThemeProvider, themeScript } from "./_components/theme-provider";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
