@@ -1,145 +1,260 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AppHeader } from "./_components/app-header";
+import { Chip, DishArt, Button } from "./_components/ui";
+import { Icon } from "./_components/icon";
 import type { Dish } from "@/lib/types";
 
-const FILTER_KEY = "spinnerFilters";
-
-// Weighted pick that:
-// - gives favourites a 2× base weight boost
-// - de-weights dishes cooked recently: weight × min(1, daysSinceLast/14)
-// - never-cooked dishes get the full base weight
-function pickWeighted(dishes: Dish[]): Dish {
-  const now = Date.now();
-  const weights = dishes.map((d) => {
+function pickWeighted(candidates: Dish[]): Dish {
+  const weights = candidates.map((d) => {
     let w = d.favorite ? 2 : 1;
     if (d.lastCookedAt) {
-      const days = (now - new Date(d.lastCookedAt).getTime()) / 86_400_000;
-      w *= Math.min(1, Math.max(0, days) / 14);
+      const days = (Date.now() - new Date(d.lastCookedAt).getTime()) / 86400000;
+      w *= Math.min(1, days / 14);
     }
-    // Floor so a dish that's cooked today isn't impossible.
     return Math.max(0.05, w);
   });
-  const total = weights.reduce((a, b) => a + b, 0);
+  const total = weights.reduce((s, w) => s + w, 0);
   let r = Math.random() * total;
-  for (let i = 0; i < dishes.length; i++) {
+  for (let i = 0; i < candidates.length; i++) {
     r -= weights[i];
-    if (r <= 0) return dishes[i];
+    if (r <= 0) return candidates[i];
   }
-  return dishes[dishes.length - 1];
+  return candidates[candidates.length - 1];
 }
 
 export default function SpinnerPage() {
   const router = useRouter();
+  const [dishes, setDishes] = useState<Dish[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
-  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
   const [spinning, setSpinning] = useState(false);
-  const [spinLabel, setSpinLabel] = useState<string>("Press Spin");
-  const [error, setError] = useState<string | null>(null);
+  const [landed, setLanded] = useState<Dish | null>(null);
+  const [cycleIdx, setCycleIdx] = useState(0);
+  const [rotation, setRotation] = useState(0);
+  const timerRef = useRef<number | null>(null);
 
+  // Hydrate filters from localStorage after mount (no SSR mismatch).
   useEffect(() => {
-    fetch("/api/tags")
-      .then((r) => r.json() as Promise<string[]>)
-      .then(setAllTags)
-      .catch(() => setAllTags([]));
     try {
-      const saved = localStorage.getItem(FILTER_KEY);
-      if (saved) setActiveTags(JSON.parse(saved));
+      const raw = localStorage.getItem("spinnerFilters");
+      if (raw) setSelected(JSON.parse(raw));
     } catch {}
   }, []);
+  useEffect(() => {
+    try { localStorage.setItem("spinnerFilters", JSON.stringify(selected)); } catch {}
+  }, [selected]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(FILTER_KEY, JSON.stringify(activeTags));
-    } catch {}
-  }, [activeTags]);
+    fetch("/api/tags").then((r) => r.json()).then(setAllTags).catch(() => {});
+  }, []);
 
-  function toggleTag(tag: string) {
-    setActiveTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-    );
-  }
+  const load = async (): Promise<Dish[]> => {
+    const qs = selected.length ? `?tags=${encodeURIComponent(selected.join(","))}` : "";
+    const res = await fetch(`/api/dishes${qs}`);
+    const data: Dish[] = await res.json();
+    setDishes(data);
+    return data;
+  };
 
-  async function spin() {
-    setError(null);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [selected.join(",")]);
+
+  const toggleTag = (t: string) => {
+    setLanded(null);
+    setSelected((ts) => (ts.includes(t) ? ts.filter((x) => x !== t) : [...ts, t]));
+  };
+
+  const spin = async () => {
+    if (spinning) return;
+    const pool = await load();
+    if (!pool.length) return;
+    const winner = pickWeighted(pool);
     setSpinning(true);
-    const qs = activeTags.length
-      ? `?tags=${encodeURIComponent(activeTags.join(","))}`
-      : "";
-    try {
-      const res = await fetch(`/api/dishes${qs}`);
-      if (!res.ok) throw new Error("Failed to load dishes");
-      const dishes = (await res.json()) as Dish[];
-      if (dishes.length === 0) {
+    setLanded(null);
+    setRotation((r) => r + 360 * 5 + Math.random() * 360);
+    const frames = Math.max(18, pool.length * 3);
+    let i = 0;
+    const tick = () => {
+      setCycleIdx(i % pool.length);
+      i++;
+      if (i < frames) {
+        timerRef.current = window.setTimeout(tick, 60 + Math.pow(i / frames, 3) * 180);
+      } else {
         setSpinning(false);
-        setError("No dishes match the current filter.");
-        setSpinLabel("Press Spin");
-        return;
+        setLanded(winner);
       }
+    };
+    tick();
+  };
 
-      const shuffle = [...dishes].sort(() => Math.random() - 0.5);
-      const frames = Math.min(20, shuffle.length * 3);
-      let i = 0;
-      const interval = setInterval(() => {
-        setSpinLabel(shuffle[i % shuffle.length].title);
-        i += 1;
-        if (i >= frames) {
-          clearInterval(interval);
-          const picked = pickWeighted(dishes);
-          setSpinLabel(picked.title);
-          setSpinning(false);
-          setTimeout(() => router.push(`/dishes/${picked.id}`), 400);
-        }
-      }, 80);
-    } catch (e) {
-      setSpinning(false);
-      setError(e instanceof Error ? e.message : "Error");
-    }
-  }
+  useEffect(() => () => { if (timerRef.current) window.clearTimeout(timerRef.current); }, []);
+
+  const displayed = landed || dishes[cycleIdx] || dishes[0];
+  const weekday = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: "long" }), []);
 
   return (
-    <div className="flex flex-col items-center gap-8">
-      <h1 className="text-4xl font-bold">Dinner Spinner</h1>
-
-      {allTags.length > 0 && (
-        <div className="w-full">
-          <h2 className="mb-2 text-sm font-semibold uppercase text-zinc-500">
-            Filter by tags (must match all)
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {allTags.map((tag) => {
-              const active = activeTags.includes(tag);
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => toggleTag(tag)}
-                  className={`rounded-full border px-3 py-1 text-sm transition ${
-                    active
-                      ? "border-emerald-600 bg-emerald-600 text-white"
-                      : "border-zinc-300 bg-white hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
-                  }`}
-                >
-                  {tag}
-                </button>
-              );
-            })}
+    <div className="flex min-h-screen flex-col bg-bg">
+      <AppHeader />
+      <div className="flex-1 overflow-auto pb-20">
+        <div className="px-5 pt-2 pb-5">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">
+            Tonight · {weekday}
           </div>
+          <h1 className="m-0 text-[40px] font-medium leading-[1.02] tracking-[-0.03em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
+            What&rsquo;s for<br />
+            <em className="italic text-accent">dinner?</em>
+          </h1>
+          <p className="mt-[6px] max-w-[280px] text-[13px] text-ink-2">
+            {dishes.length} {dishes.length === 1 ? "dish" : "dishes"} in the pool.{" "}
+            {selected.length ? `Filtered by ${selected.join(" + ")}.` : "Nothing ruled out."}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-[6px] px-4 pb-2">
+          {allTags.slice(0, 12).map((t) => (
+            <Chip key={t} active={selected.includes(t)} onClick={() => toggleTag(t)}>{t}</Chip>
+          ))}
+        </div>
+
+        <div className="relative mx-4 min-h-[360px] flex flex-col items-center pt-2">
+          <WheelStage
+            pool={dishes}
+            displayed={displayed}
+            spinning={spinning}
+            landed={landed}
+            rotation={rotation}
+            onSpin={spin}
+          />
+          {landed && !spinning && (
+            <LandedCard
+              dish={landed}
+              onDismiss={() => setLanded(null)}
+              onView={() => router.push(`/dishes/${landed.id}`)}
+              onSpinAgain={spin}
+            />
+          )}
+        </div>
+
+        {!dishes.length && (
+          <div className="mx-4 my-4 rounded-lg border border-dashed border-rule p-6 text-center text-[13px] text-ink-3">
+            No dishes match the current filter.
+          </div>
+        )}
+        <style>{`@keyframes revealUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }`}</style>
+      </div>
+    </div>
+  );
+}
+
+function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
+  pool: Dish[]; displayed?: Dish; spinning: boolean; landed: Dish | null; rotation: number; onSpin: () => void;
+}) {
+  const slices = pool.slice(0, 10);
+  const n = Math.max(slices.length, 1);
+  const sliceDeg = 360 / n;
+  const size = 280;
+  return (
+    <div
+      className={[
+        "relative flex flex-col items-center transition-[opacity,transform] duration-300",
+        landed && !spinning ? "pointer-events-none scale-[0.92] opacity-25" : "",
+      ].join(" ")}
+    >
+      <div className="relative" style={{ width: size, height: size }}>
+        <div
+          className="absolute inset-0 rounded-full border-4 border-paper shadow-[0_16px_40px_rgba(0,0,0,0.12)]"
+          style={{
+            transform: `rotate(${rotation}deg)`,
+            transition: spinning ? "transform 2.2s cubic-bezier(0.15, 0.85, 0.2, 1)" : "transform 0.4s",
+            background: slices.length ? `conic-gradient(${slices.map((d, i) => {
+              const accent = d.accent || `oklch(${60 + (i % 3) * 8}% 0.12 ${(i * 37) % 360})`;
+              const a = (i / n) * 360;
+              const b = ((i + 1) / n) * 360;
+              return `${accent} ${a}deg ${b}deg`;
+            }).join(", ")})` : "var(--bg-alt)",
+          }}
+        />
+        <div className="absolute inset-0" style={{ transform: `rotate(${rotation}deg)`, transition: spinning ? "transform 2.2s cubic-bezier(0.15, 0.85, 0.2, 1)" : "transform 0.4s" }}>
+          {slices.map((d, i) => {
+            const mid = (i + 0.5) * sliceDeg;
+            return (
+              <div
+                key={d.id}
+                className="absolute left-1/2 top-1/2 origin-left text-paper"
+                style={{
+                  transform: `rotate(${mid}deg) translateX(50px)`,
+                  fontFamily: "var(--font-disp)", fontSize: 14, fontWeight: 500,
+                  textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+                }}
+              >
+                {d.emoji || "·"}
+              </div>
+            );
+          })}
+        </div>
+        <div
+          className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1"
+          style={{ borderLeft: "10px solid transparent", borderRight: "10px solid transparent", borderTop: "16px solid var(--ink)" }}
+        />
+        <button
+          type="button"
+          onClick={onSpin}
+          className="absolute left-1/2 top-1/2 grid h-28 w-28 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-rule bg-paper text-ink shadow-[0_8px_20px_rgba(0,0,0,0.15)] disabled:opacity-60"
+          disabled={spinning || !pool.length}
+          aria-label="Spin"
+        >
+          <span className="text-center">
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3">
+              {spinning ? "…" : "Tap"}
+            </span>
+            <span className="block text-[22px] font-medium" style={{ fontFamily: "var(--font-disp)" }}>
+              {spinning ? "spinning" : "Spin"}
+            </span>
+          </span>
+        </button>
+      </div>
+      {displayed && (
+        <div className="mt-4 text-center">
+          <div className="text-[11px] uppercase tracking-[0.14em] text-ink-3">Currently showing</div>
+          <div className="text-[18px] font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>{displayed.title}</div>
         </div>
       )}
+    </div>
+  );
+}
 
-      <button
-        type="button"
-        onClick={spin}
-        disabled={spinning}
-        className="h-40 w-40 rounded-full bg-emerald-600 text-2xl font-bold text-white shadow-lg transition hover:bg-emerald-500 disabled:opacity-70"
-      >
-        {spinning ? "…" : "Spin!"}
-      </button>
-
-      <div className="min-h-8 text-center text-xl">{spinLabel}</div>
-      {error && <div className="text-red-600">{error}</div>}
+function LandedCard({ dish, onDismiss, onView, onSpinAgain }: {
+  dish: Dish; onDismiss: () => void; onView: () => void; onSpinAgain: () => void;
+}) {
+  return (
+    <div
+      className="absolute left-0 right-0 top-0 flex flex-col gap-3 rounded-lg border border-rule bg-paper p-[18px] shadow-[0_20px_40px_-8px_rgba(0,0,0,0.25),0_4px_12px_rgba(0,0,0,0.08)]"
+      style={{ animation: "revealUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1)" }}
+    >
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent">✦ Tonight&rsquo;s pick</div>
+        <button type="button" onClick={onDismiss} aria-label="Dismiss" className="p-1 text-lg leading-none text-ink-3">×</button>
+      </div>
+      <div className="flex items-center gap-[14px]">
+        <DishArt dish={dish} size={76} />
+        <div className="min-w-0 flex-1">
+          <div className="text-[26px] font-medium leading-[1.05] tracking-[-0.02em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
+            {dish.title}
+          </div>
+          {dish.subtitle && <div className="mt-[2px] text-[12px] italic text-ink-3">{dish.subtitle}</div>}
+          {dish.tags?.length ? (
+            <div className="mt-[6px] flex gap-[10px] text-[11px] text-ink-2" style={{ fontFamily: "var(--font-mono)" }}>
+              <span>{dish.tags.slice(0, 3).join(" · ")}</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-1 flex gap-2">
+        <Button variant="primary" size="md" onClick={onView} className="flex-1">View recipe</Button>
+        <Button variant="ghost" size="md" onClick={onSpinAgain} aria-label="Spin again"><Icon name="dice" size={16} /></Button>
+      </div>
     </div>
   );
 }
