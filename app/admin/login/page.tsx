@@ -2,57 +2,47 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button, BrandMark } from "../../_components/ui";
 
 export default function LoginPage() {
   const router = useRouter();
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
+    setLoading(true); setError(null);
     try {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ password }),
       });
-      if (!res.ok) {
-        const data = (await res.json()) as { error?: string };
-        setError(data.error ?? "Login failed");
-        setLoading(false);
-        return;
-      }
+      if (res.status === 401) { setError("Wrong password"); return; }
+      if (!res.ok) { setError("Error"); return; }
       router.push("/admin");
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
-      setLoading(false);
-    }
-  }
+    } catch { setError("Error"); }
+    finally { setLoading(false); }
+  };
 
   return (
-    <div className="mx-auto mt-16 max-w-sm">
-      <h1 className="mb-6 text-2xl font-bold">Admin login</h1>
-      <form onSubmit={submit} className="flex flex-col gap-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-bg px-6">
+      <form onSubmit={submit} className="flex w-full max-w-xs flex-col items-center gap-6 rounded-lg border border-rule bg-paper p-8">
+        <BrandMark size={44} />
+        <h1 className="m-0 text-[26px] italic font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>Admin</h1>
         <input
           type="password"
-          placeholder="Password"
           autoFocus
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+          placeholder="Password"
+          className="w-full rounded-pill border border-rule bg-bg px-4 py-3 text-center text-[15px] text-ink placeholder:text-ink-3 focus:border-ink-3 focus:outline-none"
         />
-        <button
-          type="submit"
-          disabled={loading || !password}
-          className="rounded-md bg-emerald-600 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-70"
-        >
+        <Button variant="primary" size="md" type="submit" disabled={!password || loading}>
           {loading ? "…" : "Log in"}
-        </button>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        </Button>
+        {error && <div className="text-center text-[12px] text-warn">{error}</div>}
       </form>
     </div>
   );

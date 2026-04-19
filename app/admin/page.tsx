@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Dish, Ingredient } from "@/lib/types";
 import { PANTRY_DEFAULTS, STANDARD_INGREDIENTS, STANDARD_UNITS } from "@/lib/vocabulary";
+import { AppHeader } from "../_components/app-header";
+import { Button } from "../_components/ui";
 
 type IngredientDraft = {
   quantity: string;
@@ -39,6 +41,8 @@ type Draft = {
   tagsInput: string;
   baseServings: string;
   imageUrl: string;
+  emoji: string;
+  accent: string;
   favorite: boolean;
   ingredients: IngredientDraft[];
 };
@@ -51,6 +55,8 @@ const EMPTY_DRAFT: Draft = {
   tagsInput: "",
   baseServings: "4",
   imageUrl: "",
+  emoji: "",
+  accent: "",
   favorite: false,
   ingredients: [{ ...EMPTY_INGREDIENT }],
 };
@@ -64,6 +70,8 @@ function dishToDraft(d: Dish): Draft {
     tagsInput: d.tags.join(", "),
     baseServings: String(d.baseServings),
     imageUrl: d.imageUrl ?? "",
+    emoji: d.emoji ?? "",
+    accent: d.accent ?? "",
     favorite: d.favorite,
     ingredients:
       d.ingredients.length > 0
@@ -115,8 +123,24 @@ function draftToPayload(d: Draft) {
     ingredients,
     baseServings: Number(d.baseServings) || 4,
     imageUrl: d.imageUrl.trim() || null,
+    emoji: d.emoji.trim() || null,
+    accent: d.accent.trim() || null,
     favorite: d.favorite,
   };
+}
+
+function LogoutButton() {
+  const router = useRouter();
+  async function logout() {
+    await fetch("/api/admin/login", { method: "DELETE" });
+    router.push("/admin/login");
+    router.refresh();
+  }
+  return (
+    <Button variant="ghost" size="sm" onClick={logout}>
+      Log out
+    </Button>
+  );
 }
 
 export default function AdminPage() {
@@ -257,12 +281,6 @@ export default function AdminPage() {
     if (res.ok) reload();
   }
 
-  async function logout() {
-    await fetch("/api/admin/login", { method: "DELETE" });
-    router.push("/admin/login");
-    router.refresh();
-  }
-
   function updateIngredient(i: number, patch: Partial<IngredientDraft>) {
     setDraft((d) => {
       const next = [...d.ingredients];
@@ -298,17 +316,10 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Admin</h1>
-        <button
-          type="button"
-          onClick={logout}
-          className="text-sm text-zinc-500 hover:underline"
-        >
-          Log out
-        </button>
-      </div>
+    <div className="flex min-h-screen flex-col bg-bg">
+      <AppHeader title="Admin" right={<LogoutButton />} />
+      <div className="flex-1 overflow-auto px-4 pb-20">
+      <div className="flex flex-col gap-8 py-6">
 
       <section>
         <h2 className="mb-3 text-xl font-semibold">
@@ -393,6 +404,28 @@ export default function AdminPage() {
                 className="mt-2 h-32 w-auto rounded border border-zinc-200 object-cover dark:border-zinc-800"
               />
             )}
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Emoji
+            <input
+              type="text"
+              value={draft.emoji}
+              onChange={(e) => setDraft({ ...draft, emoji: e.target.value })}
+              maxLength={8}
+              placeholder="🍲"
+              className="w-24 rounded-md border border-zinc-300 bg-white px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Accent
+            <input
+              type="text"
+              value={draft.accent}
+              onChange={(e) => setDraft({ ...draft, accent: e.target.value })}
+              maxLength={60}
+              placeholder="oklch(70% 0.14 40)"
+              className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
+            />
           </label>
           <label className="flex items-center gap-2 text-sm font-medium">
             <input
@@ -737,6 +770,8 @@ export default function AdminPage() {
           </div>
         )}
       </section>
+      </div>
+      </div>
     </div>
   );
 }
