@@ -1,251 +1,187 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import ReactMarkdown from "react-markdown";
+import { useRouter } from "next/navigation";
+import { AppHeader } from "@/app/_components/app-header";
+import { DishArt, Badge, Button, StepperButton, useToast } from "@/app/_components/ui";
+import { Icon } from "@/app/_components/icon";
+import { MarkdownLite } from "@/app/_components/markdown-lite";
 import type { Dish } from "@/lib/types";
-import { formatQty, scaleIngredient, visibleUnit } from "@/lib/ingredients";
-import type { Ingredient } from "@/lib/types";
-import { mutatePlan } from "@/lib/meal-plan";
 
-function formatRelativeDate(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return "recently";
-  const now = Date.now();
-  const seconds = Math.max(0, Math.floor((now - then) / 1000));
-  const days = Math.floor(seconds / 86400);
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) {
-    const weeks = Math.floor(days / 7);
-    return weeks === 1 ? "1 week ago" : `${weeks} weeks ago`;
-  }
-  if (days < 365) {
-    const months = Math.floor(days / 30);
-    return months === 1 ? "1 month ago" : `${months} months ago`;
-  }
-  const years = Math.floor(days / 365);
-  return years === 1 ? "1 year ago" : `${years} years ago`;
+function relTime(iso: string | null): string {
+  if (!iso) return "never";
+  const d = (Date.now() - new Date(iso).getTime()) / 86400000;
+  if (d < 1) return "today";
+  if (d < 2) return "yesterday";
+  if (d < 14) return `${Math.floor(d)}d ago`;
+  if (d < 60) return `${Math.floor(d / 7)}w ago`;
+  return `${Math.floor(d / 30)}mo ago`;
+}
+function formatQty(q: number): string {
+  return String(Math.round(q * 100) / 100).replace(/\.?0+$/, "");
 }
 
-export default function DishView({ dish: initialDish }: { dish: Dish }) {
-  const [dish, setDish] = useState<Dish>(initialDish);
-  const [servings, setServings] = useState<number>(initialDish.baseServings);
-  const [addedMsg, setAddedMsg] = useState<string | null>(null);
-  const [cookedMsg, setCookedMsg] = useState<string | null>(null);
+export default function DishView({ dish: initial }: { dish: Dish }) {
+  const router = useRouter();
+  const [dish, setDish] = useState(initial);
+  const [servings, setServings] = useState(initial.baseServings);
+  const [inPlan, setInPlan] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return (JSON.parse(localStorage.getItem("mealPlan") || "[]") as { id: number }[]).some((e) => e.id === initial.id);
+    } catch { return false; }
+  });
+  const toast = useToast();
 
-  function addToPlan() {
-    const next = mutatePlan((prev) => {
-      const existing = prev.findIndex((p) => p.id === dish.id);
-      if (existing >= 0) {
-        const copy = [...prev];
-        copy[existing] = { id: dish.id, servings };
-        return copy;
-      }
-      return [...prev, { id: dish.id, servings }];
-    });
-    setAddedMsg(`Added to meal plan (${next.length} dishes).`);
-    setTimeout(() => setAddedMsg(null), 2500);
-  }
-
-  async function toggleFavorite() {
+  const favorite = async () => {
     const next = !dish.favorite;
     setDish((d) => ({ ...d, favorite: next }));
-    const res = await fetch(`/api/dishes/${dish.id}/favorite`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ favorite: next }),
-    });
-    if (!res.ok) {
-      setDish((d) => ({ ...d, favorite: !next }));
-    }
-  }
+    try {
+      const res = await fetch(`/api/dishes/${dish.id}/favorite`, {
+        method: "PATCH", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ favorite: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch { setDish((d) => ({ ...d, favorite: !next })); }
+  };
 
-  async function markCooked() {
-    const res = await fetch(`/api/cook-log`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ dishId: dish.id }),
-    });
-    if (res.ok) {
-      const data = (await res.json()) as { cookedAt?: string };
-      setDish((d) => ({ ...d, lastCookedAt: data.cookedAt ?? new Date().toISOString() }));
-      setCookedMsg("Logged as cooked.");
-      setTimeout(() => setCookedMsg(null), 2500);
-    }
-  }
+  const cooked = async () => {
+    try {
+      const res = await fetch("/api/cook-log", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dishId: dish.id }),
+      });
+      if (res.ok) { setDish((d) => ({ ...d, lastCookedAt: new Date().toISOString() })); toast.show("Logged as cooked"); }
+    } catch {}
+  };
+
+  const addToPlan = () => {
+    try {
+      const raw = localStorage.getItem("mealPlan");
+      const list: { id: number; servings: number }[] = raw ? JSON.parse(raw) : [];
+      const existing = list.find((e) => e.id === dish.id);
+      const next = existing
+        ? list.map((e) => (e.id === dish.id ? { ...e, servings } : e))
+        : [...list, { id: dish.id, servings }];
+      localStorage.setItem("mealPlan", JSON.stringify(next));
+      fetch("/api/meal-plan", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ entries: next }) }).catch(() => {});
+      setInPlan(true);
+      toast.show(existing ? `Updated to ${servings} servings` : `Added at ${servings} servings`);
+    } catch {}
+  };
+
+  const ratio = servings / dish.baseServings;
 
   return (
-    <div className="flex flex-col gap-8">
-      <Link href="/" className="text-sm text-zinc-500 hover:underline">
-        ← Back to spinner
-      </Link>
+    <div className="flex min-h-screen flex-col bg-bg">
+      <AppHeader back />
+      <div className="flex-1 overflow-auto pb-20">
+        <div className="px-4"><DishArt dish={dish} size="100%" corner="var(--radius-lg)" /></div>
 
-      {dish.imageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={dish.imageUrl}
-          alt={dish.title}
-          className="max-h-80 w-full rounded-lg object-cover"
-        />
-      )}
-
-      <header>
-        <div className="flex items-start gap-3">
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold">{dish.title}</h1>
-            {dish.subtitle && (
-              <p className="mt-1 text-lg text-zinc-600 dark:text-zinc-400">
-                {dish.subtitle}
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={toggleFavorite}
-            className="text-3xl leading-none"
-            aria-label={dish.favorite ? "Remove from favourites" : "Add to favourites"}
-          >
-            <span
-              className={
-                dish.favorite
-                  ? "text-amber-500"
-                  : "text-zinc-300 hover:text-amber-500 dark:text-zinc-700"
-              }
+        <div className="px-5 pt-5 pb-3">
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <h1 className="m-0 text-[32px] font-medium leading-[1.05] tracking-[-0.025em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
+                {dish.title}
+              </h1>
+              {dish.subtitle && <div className="mt-1 text-[14px] italic text-ink-2">{dish.subtitle}</div>}
+            </div>
+            <button
+              type="button"
+              onClick={favorite}
+              aria-label={dish.favorite ? "Remove favourite" : "Mark as favourite"}
+              className={[
+                "grid h-10 w-10 place-items-center rounded-pill border",
+                dish.favorite ? "border-accent bg-accent text-accent-ink" : "border-rule bg-paper text-ink-2",
+              ].join(" ")}
             >
-              ★
-            </span>
-          </button>
-        </div>
-        {dish.tags.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {dish.tags.map((t) => (
-              <span
-                key={t}
-                className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs dark:bg-zinc-800"
-              >
-                {t}
-              </span>
-            ))}
+              <Icon name={dish.favorite ? "star-fill" : "star"} size={18} />
+            </button>
           </div>
-        )}
-        {dish.lastCookedAt && (
-          <p className="mt-2 text-xs text-zinc-500">
-            Last cooked {formatRelativeDate(dish.lastCookedAt)}
-          </p>
-        )}
-      </header>
-
-      <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <span className="font-semibold">Serves:</span>
-          <button
-            type="button"
-            onClick={() => setServings((s) => Math.max(1, s - 1))}
-            className="h-8 w-8 rounded border border-zinc-300 dark:border-zinc-700"
-          >
-            −
-          </button>
-          <span className="w-8 text-center font-mono text-lg">{servings}</span>
-          <button
-            type="button"
-            onClick={() => setServings((s) => s + 1)}
-            className="h-8 w-8 rounded border border-zinc-300 dark:border-zinc-700"
-          >
-            +
-          </button>
-          <span className="text-xs text-zinc-500">
-            (base: {dish.baseServings})
-          </span>
-          <button
-            type="button"
-            onClick={markCooked}
-            className="ml-auto rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            ✓ Cooked it
-          </button>
-          <Link
-            href={`/dishes/${dish.id}/cook?servings=${servings}`}
-            className="rounded-md border border-emerald-600 px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
-          >
-            Cook mode
-          </Link>
-          <button
-            type="button"
-            onClick={addToPlan}
-            className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
-          >
-            Add to meal plan
-          </button>
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {dish.tags.map((t) => (
+              <span key={t} className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-3">· {t}</span>
+            ))}
+            <span className="flex-1" />
+            <span className="text-[11px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>last cooked {relTime(dish.lastCookedAt)}</span>
+          </div>
         </div>
-        {addedMsg && <p className="mb-2 text-sm text-emerald-600">{addedMsg}</p>}
-        {cookedMsg && <p className="mb-2 text-sm text-emerald-600">{cookedMsg}</p>}
 
-        {dish.ingredients.length > 0 ? (
-          <ul className="list-disc space-y-1 pl-6">
+        <div className="mx-4 mb-4 rounded-lg border border-rule bg-paper p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">Serves</div>
+              <div className="text-[13px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>base: {dish.baseServings}</div>
+            </div>
+            <StepperButton kind="minus" onClick={() => setServings((s) => Math.max(1, s - 1))} ariaLabel="Fewer servings" />
+            <div className="min-w-9 text-center text-[28px] font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>{servings}</div>
+            <StepperButton kind="plus" onClick={() => setServings((s) => s + 1)} ariaLabel="More servings" />
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Button variant="ink" size="md" onClick={() => router.push(`/dishes/${dish.id}/cook?servings=${servings}`)} className="flex-1">
+              <Icon name="flame" size={16} /> Cook mode
+            </Button>
+            <Button variant="ghost" size="md" onClick={cooked}>
+              <Icon name="check" size={14} /> Cooked
+            </Button>
+          </div>
+          <Button variant="ghost" size="md" onClick={addToPlan} className={["mt-2 w-full", inPlan ? "!text-good" : ""].join(" ")}>
+            <Icon name={inPlan ? "check" : "cart"} size={14} />
+            {inPlan ? `In plan (update to ${servings})` : "Add to meal plan"}
+          </Button>
+        </div>
+
+        <div className="px-5 pb-2">
+          <SectionHeader>Ingredients</SectionHeader>
+          <div className="mt-2">
             {dish.ingredients.map((ing, i) => {
-              const scaled: Ingredient = scaleIngredient(
-                ing,
-                servings,
-                dish.baseServings,
-              );
-              const pantry = !!scaled.pantry;
-              const optional = !!scaled.optional;
-              const fixed = scaled.scalable === false;
-              const unit = visibleUnit(scaled.unit);
+              const qty = (ing.quantity ?? 0) * (ing.scalable === false ? 1 : ratio);
+              const unit = ing.unit && ing.unit !== "piece" ? ` ${ing.unit}` : "";
               return (
-                <li
+                <div
                   key={i}
-                  className={pantry ? "italic text-zinc-400 dark:text-zinc-500" : ""}
+                  className={["flex items-baseline gap-3 border-b border-rule-soft py-[10px]", ing.pantry ? "italic text-ink-3" : "text-ink"].join(" ")}
                 >
-                  <span className="font-mono">
-                    {formatQty(scaled.quantity)}
+                  <span className="min-w-[52px] text-right text-[12px] font-medium text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
+                    {ing.quantity ? formatQty(qty) : ""}{unit}
                   </span>
-                  {unit ? ` ${unit}` : ""}
-                  {scaled.descriptor ? ` ${scaled.descriptor}` : ""}{" "}
-                  {scaled.name}
-                  {scaled.alternatives && scaled.alternatives.length > 0 && (
-                    <span className="text-zinc-500">
-                      {" "}
-                      (or {scaled.alternatives.join(", ")})
-                    </span>
-                  )}
-                  {scaled.preparation && (
-                    <span className={pantry ? "" : "text-zinc-500"}>
-                      , {scaled.preparation}
-                    </span>
-                  )}
-                  {optional && (
-                    <span className="ml-1 text-xs text-zinc-500">
-                      (optional)
-                    </span>
-                  )}
-                  {fixed && (
-                    <span className="ml-2 rounded-full border border-zinc-300 px-1.5 py-0.5 text-[10px] uppercase not-italic tracking-wide text-zinc-500 dark:border-zinc-700">
-                      fixed
-                    </span>
-                  )}
-                  {pantry && (
-                    <span className="ml-2 rounded-full border border-zinc-300 px-1.5 py-0.5 text-[10px] uppercase not-italic tracking-wide text-zinc-500 dark:border-zinc-700">
-                      pantry
-                    </span>
-                  )}
-                </li>
+                  <span className="flex-1 text-[14px] leading-snug" style={{ fontFamily: "var(--font-sans)" }}>
+                    {ing.descriptor && <span className="text-ink-3">{ing.descriptor} </span>}
+                    {ing.name}
+                    {ing.alternatives?.length ? <span className="text-ink-3"> (or {ing.alternatives.join(", ")})</span> : null}
+                    {ing.preparation && <span className="text-ink-3">, {ing.preparation}</span>}
+                    {ing.optional && <span className="text-ink-3"> (optional)</span>}
+                  </span>
+                  <span className="flex gap-1">
+                    {ing.pantry && <Badge>pantry</Badge>}
+                    {ing.scalable === false && <Badge>fixed</Badge>}
+                  </span>
+                </div>
               );
             })}
-          </ul>
-        ) : (
-          <p className="text-zinc-500">No ingredients listed.</p>
-        )}
-      </section>
+            {!dish.ingredients.length && <div className="py-4 text-[13px] text-ink-3">No ingredients listed.</div>}
+          </div>
+        </div>
 
-      {dish.recipe && (
-        <section className="prose prose-zinc max-w-none dark:prose-invert">
-          <h2 className="text-xl font-semibold">Recipe</h2>
-          <ReactMarkdown>{dish.recipe}</ReactMarkdown>
-        </section>
-      )}
+        {dish.recipe && (
+          <div className="px-5 pt-4 pb-8">
+            <SectionHeader>The recipe</SectionHeader>
+            <div className="mt-3 text-[15px] leading-[1.55] text-ink" style={{ fontFamily: "var(--font-sans)" }}>
+              <MarkdownLite text={dish.recipe} />
+            </div>
+          </div>
+        )}
+      </div>
+      {toast.el}
+    </div>
+  );
+}
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-4 flex items-center gap-[10px]">
+      <h2 className="m-0 text-[22px] italic font-medium tracking-[-0.01em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>{children}</h2>
+      <div className="h-px flex-1 bg-rule" />
     </div>
   );
 }
