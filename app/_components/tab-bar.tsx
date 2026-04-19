@@ -23,7 +23,10 @@ export function TabBar({ planCount = 0 }: { planCount?: number }) {
     : "spinner";
 
   return (
-    <nav className="relative z-10 flex border-t border-rule bg-paper px-1 pt-[6px] pb-2">
+    <nav
+      className="sticky bottom-0 z-10 flex flex-shrink-0 border-t border-rule bg-paper px-1 pt-[6px]"
+      style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}
+    >
       {tabs.map((t) => {
         const on = activeId === t.id;
         return (
