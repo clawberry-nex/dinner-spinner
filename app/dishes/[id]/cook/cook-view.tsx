@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Dish, Ingredient } from "@/lib/types";
+import { Icon } from "@/app/_components/icon";
+import { StepperButton } from "@/app/_components/ui";
 import {
   formatQty,
   scaleIngredient,
@@ -241,6 +243,7 @@ export default function CookView({
   dish: Dish;
   initialServings: number;
 }) {
+  const router = useRouter();
   const [servings, setServings] = useState<number>(initialServings);
   const [doneSteps, setDoneSteps] = useState<Set<string>>(new Set());
   const [highlightedIdx, setHighlightedIdx] = useState<number | null>(null);
@@ -281,108 +284,78 @@ export default function CookView({
   }, []);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-start gap-3">
-        <div className="flex-1">
-          <div className="text-xs uppercase tracking-wide text-zinc-500">
-            Cooking
-          </div>
-          <h1 className="text-2xl font-bold sm:text-3xl">{dish.title}</h1>
-          {dish.subtitle && (
-            <p className="text-sm text-zinc-500">{dish.subtitle}</p>
-          )}
-        </div>
-        <Link
-          href={`/dishes/${dish.id}`}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+    <div className="flex min-h-screen flex-col bg-bg">
+      <header className="flex items-center gap-3 border-b border-rule-soft bg-paper px-4 py-3">
+        <button
+          type="button"
+          onClick={() => router.push(`/dishes/${dish.id}`)}
+          aria-label="Exit"
+          className="grid h-9 w-9 place-items-center rounded-pill border border-rule bg-bg text-ink"
         >
-          ✕ Exit
-        </Link>
-      </div>
-
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mb-3 flex items-center gap-3">
-          <span className="text-sm font-semibold">Serves:</span>
-          <button
-            type="button"
-            onClick={() => setServings((s) => Math.max(1, s - 1))}
-            className="h-8 w-8 rounded border border-zinc-300 text-lg dark:border-zinc-700"
-          >
-            −
-          </button>
-          <span className="w-8 text-center font-mono text-lg">{servings}</span>
-          <button
-            type="button"
-            onClick={() => setServings((s) => s + 1)}
-            className="h-8 w-8 rounded border border-zinc-300 text-lg dark:border-zinc-700"
-          >
-            +
-          </button>
-          <span className="ml-auto text-xs text-zinc-500">
-            {wakeLock.supported === false
-              ? "screen may auto-lock"
-              : wakeLock.active
-                ? "screen lock prevented"
-                : "…"}
-          </span>
+          <Icon name="x" size={16} />
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3">Cooking</div>
+          <div className="truncate text-[18px] font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>
+            {dish.title}
+          </div>
         </div>
-        <ul className="grid grid-cols-1 gap-1 text-[17px] sm:grid-cols-2">
+        <div className="flex items-center gap-1 text-[12px] text-ink-2" style={{ fontFamily: "var(--font-mono)" }}>
+          <StepperButton kind="minus" onClick={() => setServings((s) => Math.max(1, s - 1))} ariaLabel="Fewer" />
+          <span className="min-w-6 text-center">{servings}</span>
+          <StepperButton kind="plus" onClick={() => setServings((s) => s + 1)} ariaLabel="More" />
+        </div>
+      </header>
+
+      <div className="flex max-h-[40vh] flex-shrink-0 flex-col border-b border-rule bg-paper">
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">
+            Ingredients · serves {servings}
+          </div>
+          <div className="text-[10px] text-ink-3">
+            {wakeLock.supported === false ? "screen may auto-lock" : wakeLock.active ? "screen lock prevented" : "…"}
+          </div>
+        </div>
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-1 overflow-auto px-4 pb-3 text-[14px]">
           {scaledIngredients.map((ing, i) => {
             const unit = visibleUnit(ing.unit);
             const pantry = !!ing.pantry;
             const optional = !!ing.optional;
-            const isHighlighted = highlightedIdx === i;
+            const highlighted = highlightedIdx === i;
             return (
               <li
                 key={i}
-                ref={(el) => {
-                  ingredientRefs.current[i] = el;
-                }}
-                className={`rounded px-1 transition-colors ${
-                  pantry ? "italic text-zinc-400" : ""
-                } ${
-                  isHighlighted
-                    ? "bg-emerald-200 dark:bg-emerald-900"
-                    : ""
-                }`}
+                ref={(el) => { ingredientRefs.current[i] = el; }}
+                className={[
+                  "rounded-md px-2 py-1 transition-colors",
+                  highlighted ? "bg-accent-tint" : "",
+                  pantry ? "italic text-ink-3" : "text-ink",
+                ].join(" ")}
               >
-                <span className="font-mono">{formatQty(ing.quantity)}</span>
-                {unit ? ` ${unit}` : ""}
-                {ing.descriptor ? ` ${ing.descriptor}` : ""} {ing.name}
-                {ing.alternatives && ing.alternatives.length > 0 && (
-                  <span className="text-zinc-500">
-                    {" "}
-                    (or {ing.alternatives.join(", ")})
-                  </span>
-                )}
-                {optional && (
-                  <span className="ml-1 text-xs text-zinc-500">
-                    (optional)
-                  </span>
-                )}
-                {pantry && (
-                  <span className="ml-1 text-[10px] uppercase tracking-wide text-zinc-400">
-                    pantry
-                  </span>
-                )}
+                <span className="text-[12px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
+                  {formatQty(ing.quantity)}{unit ? ` ${unit}` : ""}
+                </span>{" "}
+                {ing.descriptor && <span className="text-ink-3">{ing.descriptor} </span>}
+                {ing.name}
+                {optional && <span className="text-[11px] text-ink-3"> (optional)</span>}
               </li>
             );
           })}
         </ul>
-      </section>
+      </div>
 
-      <section className="flex flex-col gap-6">
+      <div className="flex-1 overflow-auto px-4 py-4">
         {sections.length === 0 ? (
-          <p className="text-zinc-500">No recipe text.</p>
+          <p className="text-[13px] text-ink-3">No recipe text.</p>
         ) : (
           sections.map((section, si) => (
-            <div key={si} className="flex flex-col gap-2">
+            <section key={si} className="mb-6">
               {section.title && (
-                <h2 className="text-xl font-semibold text-emerald-700 dark:text-emerald-400">
+                <h2 className="mb-2 text-[18px] italic font-medium text-accent" style={{ fontFamily: "var(--font-disp)" }}>
                   {section.title}
                 </h2>
               )}
-              <ol className="flex flex-col gap-2">
+              <ol className="m-0 flex list-none flex-col gap-2 p-0">
                 {section.steps.map((step, stepIdx) => {
                   const key = `${si}:${stepIdx}`;
                   const done = doneSteps.has(key);
@@ -391,46 +364,33 @@ export default function CookView({
                       <button
                         type="button"
                         onClick={() => toggleStep(key)}
-                        className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left text-[17px] leading-snug transition ${
+                        className={[
+                          "flex w-full items-start gap-3 rounded-lg border p-3 text-left text-[15px] leading-snug transition-colors",
                           done
-                            ? "border-zinc-200 bg-zinc-100 text-zinc-400 line-through dark:border-zinc-800 dark:bg-zinc-900/50"
-                            : "border-zinc-300 bg-white hover:border-emerald-500 dark:border-zinc-700 dark:bg-zinc-900"
-                        }`}
+                            ? "border-rule-soft bg-bg text-ink-3 line-through"
+                            : "border-rule bg-paper text-ink hover:border-ink-3",
+                        ].join(" ")}
                       >
                         <span
-                          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
-                            done
-                              ? "border-emerald-500 bg-emerald-500 text-white"
-                              : "border-zinc-400 text-zinc-400"
-                          }`}
+                          className={[
+                            "mt-[2px] grid h-6 w-6 shrink-0 place-items-center rounded-pill border text-[11px] font-semibold",
+                            done ? "border-accent bg-accent text-accent-ink" : "border-rule bg-bg text-ink-2",
+                          ].join(" ")}
+                          style={{ fontFamily: "var(--font-mono)" }}
                         >
-                          {done ? "✓" : stepIdx + 1}
+                          {done ? <Icon name="check" size={12} /> : stepIdx + 1}
                         </span>
                         <span className="flex-1">
-                          {linkifyStep(
-                            step,
-                            scaledIngredients,
-                            scrollToIngredient,
-                            timers.start,
-                          )}
+                          {linkifyStep(step, scaledIngredients, scrollToIngredient, timers.start)}
                         </span>
                       </button>
                     </li>
                   );
                 })}
               </ol>
-            </div>
+            </section>
           ))
         )}
-      </section>
-
-      <div className="py-6 text-center">
-        <Link
-          href={`/dishes/${dish.id}`}
-          className="text-sm text-zinc-500 hover:underline"
-        >
-          ← Back to dish
-        </Link>
       </div>
 
       <TimerPanel api={timers} />
