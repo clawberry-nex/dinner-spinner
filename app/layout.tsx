@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider, themeScript } from "./_components/theme-provider";
+import { RootShell } from "./_components/root-shell";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-screen bg-bg text-ink">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <RootShell>{children}</RootShell>
+        </ThemeProvider>
       </body>
     </html>
   );

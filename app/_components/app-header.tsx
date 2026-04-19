@@ -1,0 +1,63 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
+import { BrandMark } from "./ui";
+import { Icon } from "./icon";
+import { useTheme } from "./theme-provider";
+
+type Props = { back?: boolean | string; title?: string; subtitle?: string; right?: ReactNode; flat?: boolean };
+
+export function AppHeader({ back, title, subtitle, right, flat }: Props) {
+  const router = useRouter();
+  const { dark, toggleDark } = useTheme();
+
+  const onBack = () => {
+    if (typeof back === "string") router.push(back);
+    else router.back();
+  };
+
+  return (
+    <div
+      className={[
+        "relative z-[3] flex min-h-12 items-center gap-[10px] bg-bg px-4 pt-[10px] pb-3",
+        flat ? "" : "border-b border-rule-soft",
+      ].join(" ")}
+    >
+      {back ? (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="grid h-9 w-9 place-items-center rounded-pill border border-rule bg-paper text-ink"
+        >
+          <Icon name="chev-left" size={18} />
+        </button>
+      ) : (
+        <Link href="/" className="flex items-center gap-2">
+          <BrandMark size={30} />
+          <span className="text-lg font-semibold text-ink" style={{ fontFamily: "var(--font-disp)", letterSpacing: -0.3 }}>
+            Dinner Spinner
+          </span>
+        </Link>
+      )}
+      <div className="flex-1">
+        {title && <div className="text-[14px] font-medium text-ink-2">{title}</div>}
+        {subtitle && <div className="text-[12px] text-ink-3">{subtitle}</div>}
+      </div>
+      {right}
+      {!back && (
+        <button
+          type="button"
+          onClick={toggleDark}
+          aria-label="Toggle dark mode"
+          className="grid h-9 w-9 place-items-center rounded-pill border border-rule bg-paper text-ink-2"
+          title={dark ? "Light mode" : "Dark mode"}
+        >
+          <Icon name={dark ? "sun" : "moon"} size={18} />
+        </button>
+      )}
+    </div>
+  );
+}
