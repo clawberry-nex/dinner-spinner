@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   const rows = await sql`
     INSERT INTO dishes (
       title, subtitle, recipe, tags, ingredients, base_servings,
-      favorite, image_url
+      favorite, image_url, emoji, accent
     )
     VALUES (
       ${d.title},
@@ -82,7 +82,9 @@ export async function POST(request: Request) {
       ${JSON.stringify(d.ingredients)}::jsonb,
       ${d.baseServings},
       ${d.favorite ?? false},
-      ${d.imageUrl ?? null}
+      ${d.imageUrl ?? null},
+      ${d.emoji ?? null},
+      ${d.accent ?? null}
     )
     RETURNING *
   `;

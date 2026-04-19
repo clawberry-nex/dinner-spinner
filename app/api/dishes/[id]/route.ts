@@ -70,6 +70,8 @@ export async function PATCH(
       base_servings = ${d.baseServings},
       favorite = ${d.favorite ?? false},
       image_url = ${d.imageUrl ?? null},
+      emoji = ${d.emoji ?? null},
+      accent = ${d.accent ?? null},
       updated_at = now()
     WHERE id = ${Number(id)}
     RETURNING *
