@@ -1,0 +1,2 @@
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS emoji text;
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS accent text;

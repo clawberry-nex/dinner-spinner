@@ -31,6 +31,8 @@ export const DishInputSchema = z.object({
   baseServings: z.number().int().positive().max(100).default(4),
   favorite: z.boolean().optional(),
   imageUrl: z.string().url().nullable().optional(),
+  emoji: z.string().trim().max(16).nullable().optional(),
+  accent: z.string().trim().max(60).nullable().optional(),
 });
 
 export type DishInput = z.infer<typeof DishInputSchema>;
@@ -45,6 +47,8 @@ export type Dish = {
   baseServings: number;
   favorite: boolean;
   imageUrl: string | null;
+  emoji: string | null;
+  accent: string | null;
   lastCookedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -61,6 +65,8 @@ export function rowToDish(row: Record<string, unknown>): Dish {
     baseServings: row.base_servings as number,
     favorite: (row.favorite as boolean | null) ?? false,
     imageUrl: (row.image_url as string | null) ?? null,
+    emoji: (row.emoji as string | null) ?? null,
+    accent: (row.accent as string | null) ?? null,
     lastCookedAt: row.last_cooked_at ? String(row.last_cooked_at) : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),

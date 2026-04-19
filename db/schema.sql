@@ -17,6 +17,8 @@ CREATE INDEX IF NOT EXISTS dishes_tags_gin ON dishes USING gin (tags);
 -- Backward-compatible adds for existing installs.
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS favorite boolean NOT NULL DEFAULT false;
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS image_url text;
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS emoji text;
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS accent text;
 
 -- User-curated pantry defaults. Ingredient names stored lowercased.
 -- applyPantryDefaults() auto-flags matching ingredients as pantry:true
