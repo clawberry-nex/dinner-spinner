@@ -1,27 +1,73 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* Dark mode is driven by [data-mode=dark] on <html>, set by ThemeProvider. */
+@custom-variant dark (&:where([data-mode=dark], [data-mode=dark] *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg:        #F5EFE3;
+  --bg-alt:    #EDE5D3;
+  --paper:     #FBF7EE;
+  --ink:       #1E1A14;
+  --ink-2:     #4A4237;
+  --ink-3:     #8A8172;
+  --rule:      #D9CFBA;
+  --rule-soft: #E8DFC9;
+  --accent:    oklch(58% 0.14 38);
+  --accent-ink:#FFF8EE;
+  --accent-tint:oklch(92% 0.04 38);
+  --warn:      oklch(60% 0.17 55);
+  --good:      oklch(55% 0.1 155);
+  --r-sm: 6px;
+  --r-md: 12px;
+  --r-lg: 20px;
+  --r-pill: 999px;
+}
+
+[data-mode=dark] {
+  --bg:        #14110C;
+  --bg-alt:    #1E1A12;
+  --paper:     #1C1812;
+  --ink:       #F5EFE3;
+  --ink-2:     #C8BFA8;
+  --ink-3:     #8A8172;
+  --rule:      #332C20;
+  --rule-soft: #28221A;
+  --accent:    oklch(72% 0.14 38);
+  --accent-ink:#1C1812;
+  --accent-tint:oklch(30% 0.05 38);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg:         var(--bg);
+  --color-bg-alt:     var(--bg-alt);
+  --color-paper:      var(--paper);
+  --color-ink:        var(--ink);
+  --color-ink-2:      var(--ink-2);
+  --color-ink-3:      var(--ink-3);
+  --color-rule:       var(--rule);
+  --color-rule-soft:  var(--rule-soft);
+  --color-accent:     var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-tint:var(--accent-tint);
+  --color-warn:       var(--warn);
+  --color-good:       var(--good);
+  --radius-sm:   var(--r-sm);
+  --radius-md:   var(--r-md);
+  --radius-lg:   var(--r-lg);
+  --radius-pill: var(--r-pill);
+  --font-disp: var(--font-fraunces), Georgia, serif;
+  --font-sans: var(--font-inter), -apple-system, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html, body { margin: 0; padding: 0; }
+html { color-scheme: light; }
+html[data-mode=dark] { color-scheme: dark; }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
+::selection { background: var(--accent); color: var(--accent-ink); }
