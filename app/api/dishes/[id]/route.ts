@@ -73,6 +73,7 @@ export async function PATCH(
       image_url = ${d.imageUrl ?? null},
       emoji = ${d.emoji ?? null},
       accent = ${d.accent ?? null},
+      notes = ${d.notes ?? null},
       updated_at = now()
     WHERE id = ${Number(id)}
     RETURNING *

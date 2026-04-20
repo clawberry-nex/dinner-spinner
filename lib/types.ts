@@ -33,6 +33,10 @@ export const DishInputSchema = z.object({
   imageUrl: z.string().url().nullable().optional(),
   emoji: z.string().trim().max(16).nullable().optional(),
   accent: z.string().trim().max(60).nullable().optional(),
+  // Persistent scratch-pad notes per dish (e.g. "Finn won't eat this
+  // if there are mushrooms"). Distinct from cook_log.note, which is
+  // a timestamped per-cook entry.
+  notes: z.string().max(5_000).nullable().optional(),
 });
 
 export type DishInput = z.infer<typeof DishInputSchema>;
@@ -49,6 +53,7 @@ export type Dish = {
   imageUrl: string | null;
   emoji: string | null;
   accent: string | null;
+  notes: string | null;
   lastCookedAt: string | null;
   averageRating: number | null;
   ratingCount: number;
@@ -71,6 +76,7 @@ export function rowToDish(row: Record<string, unknown>): Dish {
     imageUrl: (row.image_url as string | null) ?? null,
     emoji: (row.emoji as string | null) ?? null,
     accent: (row.accent as string | null) ?? null,
+    notes: (row.notes as string | null) ?? null,
     lastCookedAt: row.last_cooked_at ? String(row.last_cooked_at) : null,
     averageRating: avg == null ? null : Number(avg),
     ratingCount: count == null ? 0 : Number(count),

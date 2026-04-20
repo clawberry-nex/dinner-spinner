@@ -39,6 +39,7 @@ type Draft = {
   title: string;
   subtitle: string;
   recipe: string;
+  notes: string;
   tagsInput: string;
   baseServings: string;
   imageUrl: string;
@@ -53,6 +54,7 @@ const EMPTY_DRAFT: Draft = {
   title: "",
   subtitle: "",
   recipe: "",
+  notes: "",
   tagsInput: "",
   baseServings: "4",
   imageUrl: "",
@@ -68,6 +70,7 @@ function dishToDraft(d: Dish): Draft {
     title: d.title,
     subtitle: d.subtitle ?? "",
     recipe: d.recipe ?? "",
+    notes: d.notes ?? "",
     tagsInput: d.tags.join(", "),
     baseServings: String(d.baseServings),
     imageUrl: d.imageUrl ?? "",
@@ -120,6 +123,7 @@ function draftToPayload(d: Draft) {
     title: d.title.trim(),
     subtitle: d.subtitle.trim() || null,
     recipe: d.recipe.trim() || null,
+    notes: d.notes.trim() || null,
     tags,
     ingredients,
     baseServings: Number(d.baseServings) || 4,
@@ -797,6 +801,23 @@ export default function AdminPage() {
               value={draft.recipe}
               onChange={(e) => setDraft({ ...draft, recipe: e.target.value })}
               className="rounded border border-zinc-300 px-3 py-1.5 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium">Notes</span>
+            <span className="text-xs text-zinc-500">
+              Persistent scratch pad. Shown as a yellow sticky note above
+              the ingredients on the dish page. Use for things like
+              &ldquo;Finn won&rsquo;t eat this if there are mushrooms&rdquo;
+              or &ldquo;usually 1.5× the chili&rdquo;.
+            </span>
+            <textarea
+              rows={3}
+              maxLength={5000}
+              value={draft.notes}
+              onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+              className="rounded border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
           </label>
 

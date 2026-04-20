@@ -202,6 +202,23 @@ export default function DishView({
           </Button>
         </div>
 
+        {dish.notes && (
+          <div
+            className="mx-4 mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-ink dark:border-amber-700/60 dark:bg-amber-950/40"
+            aria-label="Dish notes"
+          >
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700 dark:text-amber-300">
+              Notes
+            </div>
+            <p
+              className="mt-1 whitespace-pre-wrap text-[14px] leading-snug"
+              style={{ fontFamily: "var(--font-sans)" }}
+            >
+              {dish.notes}
+            </p>
+          </div>
+        )}
+
         <div className="px-5 pb-2">
           <SectionHeader>Ingredients</SectionHeader>
           <div className="mt-2">
