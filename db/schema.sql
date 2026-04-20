@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS dishes (
   title         text NOT NULL,
   subtitle      text,
   recipe        text,
+  notes         text,
   tags          text[] NOT NULL DEFAULT '{}',
   ingredients   jsonb  NOT NULL DEFAULT '[]',
   base_servings int    NOT NULL DEFAULT 4,
@@ -19,6 +20,7 @@ ALTER TABLE dishes ADD COLUMN IF NOT EXISTS favorite boolean NOT NULL DEFAULT fa
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS image_url text;
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS emoji text;
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS accent text;
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS notes text;
 
 -- User-curated pantry defaults. Ingredient names stored lowercased.
 -- applyPantryDefaults() auto-flags matching ingredients as pantry:true
