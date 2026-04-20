@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "@/app/_components/app-header";
 import { DishArt, Badge, Button, StepperButton, useToast } from "@/app/_components/ui";
@@ -8,6 +8,7 @@ import { Icon } from "@/app/_components/icon";
 import { MarkdownLite } from "@/app/_components/markdown-lite";
 import type { CookLogEntry, Dish } from "@/lib/types";
 import { computeDietFlags, formatDietChips } from "@/lib/diet";
+import { clearLastServings, readLastServings, writeLastServings } from "@/lib/last-servings";
 
 function relTime(iso: string | null): string {
   if (!iso) return "never";
@@ -37,6 +38,18 @@ export default function DishView({
   const [dish, setDish] = useState(initial);
   const [history, setHistory] = useState<CookLogEntry[]>(initialHistory);
   const [servings, setServings] = useState(initial.baseServings);
+  // Hydrate from localStorage on mount so SSR/CSR agree on the first paint.
+  useEffect(() => {
+    const stored = readLastServings(initial.id);
+    if (stored != null && stored !== initial.baseServings) setServings(stored);
+  }, [initial.id, initial.baseServings]);
+  useEffect(() => {
+    writeLastServings(initial.id, servings);
+  }, [initial.id, servings]);
+  const resetServings = () => {
+    setServings(initial.baseServings);
+    clearLastServings(initial.id);
+  };
   const [cookFormOpen, setCookFormOpen] = useState(false);
   const [inPlan, setInPlan] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -155,7 +168,21 @@ export default function DishView({
           <div className="flex items-center gap-3">
             <div className="flex-1">
               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">Serves</div>
-              <div className="text-[13px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>base: {dish.baseServings}</div>
+              <div className="text-[13px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
+                base: {dish.baseServings}
+                {servings !== dish.baseServings && (
+                  <>
+                    {" · "}
+                    <button
+                      type="button"
+                      onClick={resetServings}
+                      className="underline decoration-ink-3/40 underline-offset-2 hover:text-ink-2"
+                    >
+                      reset
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             <StepperButton kind="minus" onClick={() => setServings((s) => Math.max(1, s - 1))} ariaLabel="Fewer servings" />
             <div className="min-w-9 text-center text-[28px] font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>{servings}</div>
