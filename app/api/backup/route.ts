@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     await sql`
       INSERT INTO dishes (
         id, title, subtitle, recipe, tags, ingredients, base_servings,
-        favorite, image_url, emoji, accent, created_at, updated_at
+        favorite, image_url, emoji, accent, notes, created_at, updated_at
       )
       VALUES (
         ${d.id},
@@ -95,6 +95,7 @@ export async function POST(request: Request) {
         ${d.imageUrl},
         ${d.emoji},
         ${d.accent},
+        ${d.notes ?? null},
         ${d.createdAt},
         ${d.updatedAt}
       )
@@ -109,6 +110,7 @@ export async function POST(request: Request) {
         image_url = EXCLUDED.image_url,
         emoji = EXCLUDED.emoji,
         accent = EXCLUDED.accent,
+        notes = EXCLUDED.notes,
         updated_at = EXCLUDED.updated_at
     `;
   }
