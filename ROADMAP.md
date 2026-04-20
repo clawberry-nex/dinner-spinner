@@ -24,20 +24,18 @@ vocabulary + pantry defaults logic — so imported rows still get pantry
 flags and canonical names applied on save. Bonus: a retry button that
 re-runs parsing if the initial extraction is off.
 
-### Week-view meal plan
+### ~~Week-view meal plan~~ ✅
 
-**Problem.** Current `/plan` is a flat list of dishes. For real weekly
-planning you want to slot dishes into days (Mon → Sun) so you can reason
-about "what am I eating Tuesday", thaw proteins ahead, and aggregate the
-shopping list by "this week".
-
-**Sketch.** Evolve the `meal_plan` entries shape from `{id, servings}` to
-`{id, servings, day?: 0..6}` (day is optional — unassigned dishes hang
-out in a "pool" column). `/plan` renders a 7-column grid with dishes as
-cards. Drag/tap to move dishes between days. Shopping list aggregates
-across the whole week regardless of day assignment. Week start rolls
-forward on Monday by default; small "reset week" control wipes
-assignments but keeps the dishes.
+Shipped in v0.4.0. `meal_plan` entries now carry an optional
+`day?: 0..6` (0 = Monday). `/plan` renders a Pool column plus seven
+day columns; each dish card has an inline day-picker chip row for
+tap-to-move (HTML5 drag-and-drop deferred as a desktop polish
+stretch). `lib/week-plan.ts` is the pure core —
+`groupByDay`/`moveEntry`/`resetWeek` — with tests in
+`lib/week-plan.test.ts`. "Reset week" strips day assignments without
+removing dishes; "Clear all" still nukes the plan. Shopping-list
+aggregation is unchanged: the whole week's entries flow in regardless
+of slot.
 
 ### ~~Timers in cook mode~~ ✅
 

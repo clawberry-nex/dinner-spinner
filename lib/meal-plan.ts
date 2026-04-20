@@ -10,7 +10,24 @@ import { useCallback, useEffect, useState } from "react";
 
 const PLAN_KEY = "mealPlan";
 
-export type PlanEntry = { id: number; servings: number };
+export type PlanEntry = { id: number; servings: number; day?: number | null };
+
+// Kept inline (rather than imported from week-plan) so this module stays
+// a leaf — bundlers and the native node:test runner agree on resolution.
+function isValidDay(day: unknown): day is number {
+  return (
+    typeof day === "number" && Number.isInteger(day) && day >= 0 && day <= 6
+  );
+}
+
+function normalizeEntry(raw: unknown): PlanEntry | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "number" || typeof r.servings !== "number") return null;
+  const entry: PlanEntry = { id: r.id, servings: r.servings };
+  if (isValidDay(r.day)) entry.day = r.day;
+  return entry;
+}
 
 export function readPlanLocal(): PlanEntry[] {
   try {
@@ -18,13 +35,9 @@ export function readPlanLocal(): PlanEntry[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (e): e is PlanEntry =>
-        typeof e === "object" &&
-        e !== null &&
-        typeof e.id === "number" &&
-        typeof e.servings === "number",
-    );
+    return parsed
+      .map(normalizeEntry)
+      .filter((e): e is PlanEntry => e !== null);
   } catch {
     return [];
   }
