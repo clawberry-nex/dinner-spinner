@@ -89,19 +89,25 @@ every stepper change. Dish detail reads it on mount, falling back to
 `baseServings`. Small "reset to base" link next to the stepper. Pure
 client-side, no API.
 
-### PWA / install prompt
+### ~~PWA / install prompt~~ ✅
 
-**Problem.** On mobile the app lives behind a browser tab. It deserves
-to be a first-class citizen on the home screen, especially when
-shopping or cooking.
-
-**Sketch.** Add `app/manifest.webmanifest`, 192/512px icons under
-`public/icons/`, `<link rel="manifest">` in root layout. Minimal
-service worker that caches the spinner + /dishes shell + recently
-viewed dish JSON for offline read. Next.js has a `next-pwa` plugin
-but hand-rolling is fine — we just need the manifest and a simple
-`sw.js`. Install prompt shows on iOS when you add to home screen;
-on Android the browser offers it automatically.
+Shipped in v0.7.0. `app/manifest.webmanifest` with 192/512 +
+maskable icons under `public/icons/`, matching the warm
+cream/burnt-orange palette. Metadata-driven `<link rel="manifest">`,
+`theme-color` viewport entries (light/dark), and `apple-touch-icon`
+are wired up in `app/layout.tsx`. Hand-rolled `public/sw.js` (no
+`next-pwa`): precaches the app shell (`/`, `/dishes`, `/offline`,
+manifest, icons); network-first for navigations and
+`/api/dishes/*` so recently-viewed dishes stay readable offline;
+cache-first for `/_next/static`; stale-while-revalidate for
+auxiliary APIs (tags, pantry defaults) and fonts/images; admin and
+auth traffic is explicitly not cached. `lib/install-prompt.ts` +
+tests hold the pure helpers (iOS UA detection, standalone
+detection, 30-day dismissal cooldown); `app/_components/pwa.tsx`
+registers the SW in production, captures
+`beforeinstallprompt` on Android, and shows a Share-sheet hint on
+iOS. Static `/offline` fallback page renders when both network and
+runtime cache miss.
 
 ### Export / import JSON backup
 
