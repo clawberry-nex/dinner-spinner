@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dishWeight, pickWeighted } from "./spinner.ts";
+import {
+  dishWeight,
+  dishWeightFactors,
+  formatMultiplier,
+  pickWeighted,
+  pickWithRationale,
+} from "./spinner.ts";
 
 type WeightInput = Parameters<typeof dishWeight>[0];
 
@@ -100,4 +106,150 @@ test("pickWeighted biases toward higher-weighted dishes", () => {
 test("pickWeighted handles a single-dish pool", () => {
   const pool: WeightInput[] = [{ favorite: false, lastCookedAt: null, averageRating: null }];
   assert.equal(pickWeighted(pool, () => 0.5), pool[0]);
+});
+
+// ---- Rationale / factor breakdown ------------------------------------------
+
+const refNow = new Date("2026-04-20T12:00:00Z").getTime();
+const daysAgo = (d: number) => new Date(refNow - d * 86400000).toISOString();
+
+test("dishWeightFactors weight matches dishWeight", () => {
+  const samples: WeightInput[] = [
+    base,
+    { ...base, favorite: true },
+    { ...base, averageRating: 4.2 },
+    { ...base, lastCookedAt: daysAgo(3) },
+    { ...base, averageRating: 5, lastCookedAt: daysAgo(7) },
+  ];
+  for (const s of samples) {
+    const fromDirect = dishWeight(s, refNow);
+    const fromFactors = dishWeightFactors(s, refNow).weight;
+    assert.ok(
+      Math.abs(fromDirect - fromFactors) < 1e-9,
+      `mismatch: ${fromDirect} vs ${fromFactors}`,
+    );
+  }
+});
+
+test("dishWeightFactors: baseline dish has no factors", () => {
+  const { factors } = dishWeightFactors(base, refNow);
+  assert.deepEqual(factors, []);
+});
+
+test("dishWeightFactors: favourite adds a 2× factor", () => {
+  const { factors } = dishWeightFactors({ ...base, favorite: true }, refNow);
+  assert.equal(factors.length, 1);
+  assert.equal(factors[0].label, "favourite");
+  assert.equal(factors[0].multiplier, 2);
+});
+
+test("dishWeightFactors: rating emits a rating factor and hides favourite", () => {
+  const { factors } = dishWeightFactors(
+    { favorite: true, lastCookedAt: null, averageRating: 5 },
+    refNow,
+  );
+  assert.equal(factors.length, 1);
+  assert.match(factors[0].label, /rated 5\.0★/);
+});
+
+test("dishWeightFactors: neutral rating (3) emits no factor", () => {
+  const { factors } = dishWeightFactors(
+    { ...base, averageRating: 3 },
+    refNow,
+  );
+  assert.deepEqual(factors, []);
+});
+
+test("dishWeightFactors: never-cooked has no recency factor", () => {
+  const { factors } = dishWeightFactors(
+    { ...base, favorite: true },
+    refNow,
+  );
+  assert.ok(!factors.some((f) => /cooked/.test(f.label)));
+});
+
+test("dishWeightFactors: cooked today / yesterday / 3 days / 1 week / 2 weeks labels", () => {
+  const cases: Array<[number, RegExp]> = [
+    [0, /^cooked today$/],
+    [1, /^cooked yesterday$/],
+    [3, /^cooked 3 days ago$/],
+    [7, /^cooked 1 week ago$/],
+    [12, /^cooked 2 weeks ago$/],
+  ];
+  for (const [days, re] of cases) {
+    const { factors } = dishWeightFactors(
+      { ...base, lastCookedAt: daysAgo(days) },
+      refNow,
+    );
+    const recency = factors.find((f) => /cooked/.test(f.label));
+    assert.ok(recency, `expected recency factor for ${days} days`);
+    assert.match(recency!.label, re);
+  }
+});
+
+test("dishWeightFactors: cooked 14+ days ago emits no recency factor", () => {
+  const { factors } = dishWeightFactors(
+    { ...base, lastCookedAt: daysAgo(21) },
+    refNow,
+  );
+  assert.ok(!factors.some((f) => /cooked/.test(f.label)));
+});
+
+test("formatMultiplier renders integers as Nx and non-integers to 2dp", () => {
+  assert.equal(formatMultiplier(2), "2×");
+  assert.equal(formatMultiplier(0.83), "0.83×");
+  assert.equal(formatMultiplier(1.5), "1.5×");
+  assert.equal(formatMultiplier(0.8333333), "0.83×");
+});
+
+test("pickWithRationale returns dish from pool and pool size", () => {
+  const pool: WeightInput[] = [base, { ...base, favorite: true }];
+  const res = pickWithRationale(pool, { rand: () => 0.99 });
+  assert.ok(pool.includes(res.dish));
+  assert.equal(res.poolSize, 2);
+});
+
+test("pickWithRationale: pool-size phrasing", () => {
+  const singleton: WeightInput[] = [base];
+  assert.match(
+    pickWithRationale(singleton, { rand: () => 0 }).rationale,
+    /^picked from 1 dish(;|$)/,
+  );
+
+  const many: WeightInput[] = Array.from({ length: 7 }, () => base);
+  assert.match(
+    pickWithRationale(many, { rand: () => 0 }).rationale,
+    /^picked from 7 dishes(;|$)/,
+  );
+
+  assert.match(
+    pickWithRationale(many, { tags: ["vegetarian"], rand: () => 0 }).rationale,
+    /^picked from 7 vegetarian dishes(;|$)/,
+  );
+
+  assert.match(
+    pickWithRationale(many, { tags: ["vegetarian", "quick"], rand: () => 0 })
+      .rationale,
+    /^picked from 7 vegetarian \+ quick dishes(;|$)/,
+  );
+});
+
+test("pickWithRationale: full example — favourite + cooked recently", () => {
+  const pool: WeightInput[] = [
+    { favorite: true, lastCookedAt: daysAgo(7), averageRating: null },
+  ];
+  const { rationale } = pickWithRationale(pool, {
+    tags: ["vegetarian"],
+    rand: () => 0,
+    now: refNow,
+  });
+  assert.match(rationale, /^picked from 1 vegetarian dish; /);
+  assert.match(rationale, /favourite \(2×\)/);
+  assert.match(rationale, /cooked 1 week ago \(0\.5×\)/);
+});
+
+test("pickWithRationale: baseline dish yields pool-size-only rationale", () => {
+  const pool: WeightInput[] = [base];
+  const { rationale } = pickWithRationale(pool, { rand: () => 0, now: refNow });
+  assert.equal(rationale, "picked from 1 dish");
 });

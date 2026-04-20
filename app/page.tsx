@@ -6,7 +6,7 @@ import { AppHeader } from "./_components/app-header";
 import { Chip, DishArt, Button } from "./_components/ui";
 import { Icon } from "./_components/icon";
 import type { Dish } from "@/lib/types";
-import { pickWeighted } from "@/lib/spinner";
+import { pickWithRationale } from "@/lib/spinner";
 
 export default function SpinnerPage() {
   const router = useRouter();
@@ -15,6 +15,7 @@ export default function SpinnerPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [spinning, setSpinning] = useState(false);
   const [landed, setLanded] = useState<Dish | null>(null);
+  const [rationale, setRationale] = useState<string | null>(null);
   const [cycleIdx, setCycleIdx] = useState(0);
   const [rotation, setRotation] = useState(0);
   const timerRef = useRef<number | null>(null);
@@ -49,6 +50,7 @@ export default function SpinnerPage() {
 
   const toggleTag = (t: string) => {
     setLanded(null);
+    setRationale(null);
     setSelected((ts) => (ts.includes(t) ? ts.filter((x) => x !== t) : [...ts, t]));
   };
 
@@ -56,9 +58,10 @@ export default function SpinnerPage() {
     if (spinning) return;
     const pool = await load();
     if (!pool.length) return;
-    const winner = pickWeighted(pool);
+    const result = pickWithRationale(pool, { tags: selected });
     setSpinning(true);
     setLanded(null);
+    setRationale(null);
     setRotation((r) => r + 360 * 5 + Math.random() * 360);
     const frames = Math.max(18, pool.length * 3);
     let i = 0;
@@ -69,7 +72,8 @@ export default function SpinnerPage() {
         timerRef.current = window.setTimeout(tick, 60 + Math.pow(i / frames, 3) * 180);
       } else {
         setSpinning(false);
-        setLanded(winner);
+        setLanded(result.dish);
+        setRationale(result.rationale);
       }
     };
     tick();
@@ -116,7 +120,11 @@ export default function SpinnerPage() {
           {landed && !spinning && (
             <LandedCard
               dish={landed}
-              onDismiss={() => setLanded(null)}
+              rationale={rationale}
+              onDismiss={() => {
+                setLanded(null);
+                setRationale(null);
+              }}
               onView={() => router.push(`/dishes/${landed.id}`)}
               onSpinAgain={spin}
             />
@@ -217,8 +225,8 @@ function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
   );
 }
 
-function LandedCard({ dish, onDismiss, onView, onSpinAgain }: {
-  dish: Dish; onDismiss: () => void; onView: () => void; onSpinAgain: () => void;
+function LandedCard({ dish, rationale, onDismiss, onView, onSpinAgain }: {
+  dish: Dish; rationale: string | null; onDismiss: () => void; onView: () => void; onSpinAgain: () => void;
 }) {
   return (
     <div
@@ -243,6 +251,15 @@ function LandedCard({ dish, onDismiss, onView, onSpinAgain }: {
           ) : null}
         </div>
       </div>
+      {rationale && (
+        <div
+          className="text-[11px] leading-[1.4] text-ink-3"
+          style={{ fontFamily: "var(--font-mono)" }}
+          title="Why this one?"
+        >
+          {rationale}
+        </div>
+      )}
       <div className="mt-1 flex gap-2">
         <Button variant="primary" size="md" onClick={onView} className="flex-1">View recipe</Button>
         <Button variant="ghost" size="md" onClick={onSpinAgain} aria-label="Spin again"><Icon name="dice" size={16} /></Button>

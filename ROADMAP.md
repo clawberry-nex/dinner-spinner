@@ -124,18 +124,24 @@ dedicated `/api/backup` path over overloading `/api/dishes` with a
 format query param; `cook_log` is intentionally excluded (historical
 log, not DR-critical).
 
-### Spinner "why this one?" explanation
+### ~~Spinner "why this one?" explanation~~ ✅
 
-**Problem.** The spinner silently weights favourites and recency, but
-you have no way to know why a given dish came up. When it keeps
-picking the same thing, you can't tell if the weighting is broken or
-just unlucky.
-
-**Sketch.** Return a 1-line rationale alongside the picked dish on
-the spinner result: "picked from 7 vegetarian dishes; favourite
-(2×); cooked 3 weeks ago (0.83×)". Tiny UI addition, trust builder.
-Logic already exists in `pickWeighted` — just return the chosen
-weight breakdown.
+Shipped in v0.9.0. `lib/spinner.ts` gained a pure
+`dishWeightFactors(d, now?)` that returns `{weight, factors}`; the
+existing `dishWeight` delegates to it so the numeric weight and
+human-readable labels can't drift. New `pickWithRationale(pool, {tags,
+rand, now})` returns `{dish, rationale, factors, poolSize}` with a
+rationale like `picked from 7 vegetarian dishes; favourite (2×); cooked
+1 week ago (0.5×)`. Factors only appear when their multiplier is
+non-neutral (rating ≠ 3, cooked within the 14-day recency window,
+favourite-without-rating). Recency labels: `today` / `yesterday` / `N
+days ago` / `1 week ago` / `N weeks ago`. Tag filter is inlined into
+the pool phrase (`7 vegetarian dishes`, multi-tag joins with `+`).
+`app/page.tsx` passes the active tag filter into the call and renders
+the rationale as a monospace muted line inside `LandedCard`. Tests in
+`lib/spinner.test.ts` cover factor shape, label phrasing,
+pluralisation, and multiplier formatting. `pickWeighted` is
+untouched.
 
 ### Drag-to-reorder ingredients in admin
 
