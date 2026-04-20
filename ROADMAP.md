@@ -109,17 +109,20 @@ registers the SW in production, captures
 iOS. Static `/offline` fallback page renders when both network and
 runtime cache miss.
 
-### Export / import JSON backup
+### ~~Export / import JSON backup~~ ✅
 
-**Problem.** All dishes live in one Neon Postgres row — you're trusting
-Neon's backups for DR. A one-click "download everything as JSON"
-button costs nothing and unblocks quick recovery + portability.
-
-**Sketch.** `/admin` button → `GET /api/dishes?format=export` returns
-all dishes (including pantry_names and meal_plan) as a single JSON
-payload. "Import" button on the same page accepts that JSON,
-upserting by id. Two handlers, no new routes needed if we extend
-`/api/dishes` with a query param.
+Shipped in v0.8.0. `/admin` gained a Backup section with Download and
+Import buttons. `GET /api/backup` returns a versioned envelope
+(`version`, `exportedAt`, `appVersion`, `dishes`, `pantryNames`,
+`mealPlan.entries`) as a downloadable JSON attachment. `POST /api/backup`
+validates with a zod schema (`lib/backup.ts`), upserts dishes by id
+(preserving ids and bumping `dishes_id_seq` to `MAX(id)` after), inserts
+pantry names additively, and replaces the single meal-plan row. The
+pure envelope logic lives in `lib/backup.ts` with `buildBackup` /
+`parseBackup`; tests in `lib/backup.test.ts`. Design note: we picked a
+dedicated `/api/backup` path over overloading `/api/dishes` with a
+format query param; `cook_log` is intentionally excluded (historical
+log, not DR-critical).
 
 ### Spinner "why this one?" explanation
 
