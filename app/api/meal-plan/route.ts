@@ -16,6 +16,8 @@ async function isAuthorized(request: Request): Promise<boolean> {
 const PlanEntrySchema = z.object({
   id: z.number().int().positive(),
   servings: z.number().int().positive().max(100),
+  // 0 = Monday .. 6 = Sunday. Missing/null = unassigned (pool column).
+  day: z.number().int().min(0).max(6).nullable().optional(),
 });
 
 const BodySchema = z.object({

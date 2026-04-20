@@ -3,16 +3,25 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppHeader } from "../_components/app-header";
-import { Button, StepperButton } from "../_components/ui";
+import { Button, DishArt, StepperButton } from "../_components/ui";
+import { Icon } from "../_components/icon";
 import {
   aggregateIngredients,
   aggregatePantryItems,
   groupByName,
   formatShoppingGroup,
 } from "@/lib/ingredients";
+import {
+  DAY_LABELS,
+  DAY_LABELS_LONG,
+  entryDay,
+  groupByDay,
+  moveEntry,
+  resetWeek,
+} from "@/lib/week-plan";
 import type { Dish } from "@/lib/types";
 
-type Entry = { id: number; servings: number };
+type Entry = { id: number; servings: number; day?: number | null };
 
 export default function PlanPage() {
   const [dishes, setDishes] = useState<Dish[]>([]);
@@ -55,6 +64,8 @@ export default function PlanPage() {
     .map((e) => ({ entry: e, dish: byId.get(e.id) }))
     .filter((x): x is { entry: Entry; dish: Dish } => !!x.dish);
 
+  const grouped = useMemo(() => groupByDay(entries), [entries]);
+
   const { shopping, pantry } = useMemo(() => {
     const groups = dishList.map(({ entry, dish }) => ({
       ingredients: dish.ingredients,
@@ -85,49 +96,79 @@ export default function PlanPage() {
     }
   };
 
+  const moveToDay = (dishId: number, day: number | null) =>
+    write(moveEntry(entries, dishId, day));
+  const changeServings = (dishId: number, delta: number) =>
+    write(entries.map((e) => (e.id === dishId ? { ...e, servings: Math.max(1, e.servings + delta) } : e)));
+  const removeFromPlan = (dishId: number) =>
+    write(entries.filter((e) => e.id !== dishId));
+
+  const hasEntries = entries.length > 0;
+  const hasAssignments = entries.some((e) => entryDay(e) !== null);
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader title="Plan" />
       <div className="flex-1 overflow-auto pb-20">
-        {!dishList.length ? (
+        {!hasEntries ? (
           <div className="mx-4 mt-6 rounded-lg border border-dashed border-rule p-6 text-center text-[14px] text-ink-3">
             No dishes in your plan yet. Spin one and add it from the dish page.
           </div>
         ) : (
-          <>
-            <div className="flex flex-col gap-6 px-5 pt-4 md:grid md:grid-cols-2 md:gap-6">
+          <div className="flex flex-col gap-6 px-5 pt-4">
             <section>
-              <h2 className="m-0 text-[20px] italic font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>Dishes</h2>
-              <ul className="mt-2 flex flex-col divide-y divide-rule-soft rounded-lg border border-rule bg-paper">
-                {dishList.map(({ entry, dish }) => (
-                  <li key={dish.id} className="flex items-center gap-3 p-3">
-                    <Link href={`/dishes/${dish.id}`} className="flex-1 text-[15px] text-ink hover:underline" style={{ fontFamily: "var(--font-disp)" }}>
-                      {dish.title}
-                    </Link>
-                    <StepperButton
-                      kind="minus"
-                      onClick={() => write(entries.map((e) => (e.id === dish.id ? { ...e, servings: Math.max(1, e.servings - 1) } : e)))}
-                      ariaLabel="Fewer"
-                    />
-                    <span className="min-w-6 text-center text-[14px]" style={{ fontFamily: "var(--font-mono)" }}>{entry.servings}</span>
-                    <StepperButton
-                      kind="plus"
-                      onClick={() => write(entries.map((e) => (e.id === dish.id ? { ...e, servings: e.servings + 1 } : e)))}
-                      ariaLabel="More"
-                    />
+              <div className="flex items-center justify-between">
+                <h2 className="m-0 text-[20px] italic font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>Week</h2>
+                <div className="flex gap-3 text-[12px]">
+                  {hasAssignments && (
                     <button
                       type="button"
-                      onClick={() => write(entries.filter((e) => e.id !== dish.id))}
-                      className="px-1 text-[12px] text-warn hover:underline"
+                      onClick={() => write(resetWeek(entries))}
+                      className="text-ink-3 hover:underline"
                     >
-                      remove
+                      Reset week
                     </button>
-                  </li>
-                ))}
-              </ul>
-              <button type="button" onClick={() => write([])} className="mt-2 text-[12px] text-ink-3 hover:underline">
-                Clear all
-              </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => write([])}
+                    className="text-warn hover:underline"
+                  >
+                    Clear all
+                  </button>
+                </div>
+              </div>
+              <p className="mt-1 text-[12px] text-ink-3">
+                Tap the day chips on a dish to slot it into the week. Unassigned dishes sit in the pool and still count for the shopping list.
+              </p>
+
+              <div className="mt-3 flex flex-col gap-3">
+                <DayColumn
+                  label="Pool"
+                  sublabel="Unassigned"
+                  entries={grouped.pool}
+                  byId={byId}
+                  onMove={moveToDay}
+                  onServings={changeServings}
+                  onRemove={removeFromPlan}
+                  activeDay={null}
+                />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-7">
+                  {DAY_LABELS.map((short, i) => (
+                    <DayColumn
+                      key={i}
+                      label={short}
+                      sublabel={DAY_LABELS_LONG[i]}
+                      entries={grouped.days[i]}
+                      byId={byId}
+                      onMove={moveToDay}
+                      onServings={changeServings}
+                      onRemove={removeFromPlan}
+                      activeDay={i}
+                    />
+                  ))}
+                </div>
+              </div>
             </section>
 
             <section>
@@ -158,10 +199,9 @@ export default function PlanPage() {
                 </div>
               ) : null}
             </section>
-            </div>
 
             {pantry.length > 0 && (
-              <section className="px-5 pt-6">
+              <section>
                 <h2 className="m-0 text-[18px] italic font-medium text-ink-2" style={{ fontFamily: "var(--font-disp)" }}>Pantry check ({pantry.length})</h2>
                 <p className="mt-1 text-[12px] text-ink-3">
                   Skipped from the shopping list because you already have them. Glance over to make sure you&rsquo;re not running low.
@@ -177,9 +217,158 @@ export default function PlanPage() {
                 </ul>
               </section>
             )}
-          </>
+          </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function DayColumn({
+  label,
+  sublabel,
+  entries,
+  byId,
+  onMove,
+  onServings,
+  onRemove,
+  activeDay,
+}: {
+  label: string;
+  sublabel: string;
+  entries: Entry[];
+  byId: Map<number, Dish>;
+  onMove: (dishId: number, day: number | null) => void;
+  onServings: (dishId: number, delta: number) => void;
+  onRemove: (dishId: number) => void;
+  activeDay: number | null;
+}) {
+  const dishList = entries
+    .map((e) => ({ entry: e, dish: byId.get(e.id) }))
+    .filter((x): x is { entry: Entry; dish: Dish } => !!x.dish);
+
+  return (
+    <div className="rounded-lg border border-rule bg-paper p-2">
+      <div className="flex items-baseline justify-between px-1 pb-1">
+        <span
+          className="text-[13px] font-medium italic text-ink"
+          style={{ fontFamily: "var(--font-disp)" }}
+          title={sublabel}
+        >
+          {label}
+        </span>
+        <span className="text-[10px] uppercase tracking-wider text-ink-3">
+          {dishList.length || ""}
+        </span>
+      </div>
+      {dishList.length === 0 ? (
+        <div className="py-3 text-center text-[11px] text-ink-3">—</div>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {dishList.map(({ entry, dish }) => (
+            <li key={dish.id}>
+              <DishCard
+                dish={dish}
+                entry={entry}
+                onMove={onMove}
+                onServings={onServings}
+                onRemove={onRemove}
+                activeDay={activeDay}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function DishCard({
+  dish,
+  entry,
+  onMove,
+  onServings,
+  onRemove,
+  activeDay,
+}: {
+  dish: Dish;
+  entry: Entry;
+  onMove: (dishId: number, day: number | null) => void;
+  onServings: (dishId: number, delta: number) => void;
+  onRemove: (dishId: number) => void;
+  activeDay: number | null;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-rule-soft bg-bg p-2">
+      <div className="flex items-center gap-2">
+        <DishArt dish={dish} size={28} corner="var(--radius-sm)" />
+        <Link
+          href={`/dishes/${dish.id}`}
+          className="min-w-0 flex-1 truncate text-[13px] text-ink hover:underline"
+          style={{ fontFamily: "var(--font-disp)" }}
+          title={dish.title}
+        >
+          {dish.title}
+        </Link>
+        <button
+          type="button"
+          onClick={() => onRemove(dish.id)}
+          className="grid h-5 w-5 place-items-center text-ink-3 hover:text-warn"
+          aria-label="Remove from plan"
+        >
+          <Icon name="x" size={12} />
+        </button>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <StepperButton kind="minus" onClick={() => onServings(dish.id, -1)} ariaLabel="Fewer" />
+        <span className="min-w-6 text-center text-[12px]" style={{ fontFamily: "var(--font-mono)" }}>
+          {entry.servings}
+        </span>
+        <StepperButton kind="plus" onClick={() => onServings(dish.id, 1)} ariaLabel="More" />
+        <span className="ml-auto text-[10px] text-ink-3">servings</span>
+      </div>
+
+      <DayPicker activeDay={activeDay} onPick={(d) => onMove(dish.id, d)} />
+    </div>
+  );
+}
+
+function DayPicker({
+  activeDay,
+  onPick,
+}: {
+  activeDay: number | null;
+  onPick: (day: number | null) => void;
+}) {
+  const base =
+    "inline-flex h-6 min-w-[22px] items-center justify-center rounded-sm text-[10px] font-medium transition-colors";
+  const inactive = "bg-bg-alt text-ink-3 hover:bg-rule-soft";
+  const active = "bg-ink text-paper";
+  return (
+    <div className="flex flex-wrap gap-[3px]">
+      <button
+        type="button"
+        onClick={() => onPick(null)}
+        className={`${base} px-[6px] ${activeDay === null ? active : inactive}`}
+        aria-label="Move to pool"
+        aria-pressed={activeDay === null}
+      >
+        Pool
+      </button>
+      {DAY_LABELS.map((d, i) => (
+        <button
+          key={i}
+          type="button"
+          onClick={() => onPick(i)}
+          className={`${base} px-[4px] ${activeDay === i ? active : inactive}`}
+          aria-label={`Move to ${DAY_LABELS_LONG[i]}`}
+          aria-pressed={activeDay === i}
+          title={DAY_LABELS_LONG[i]}
+        >
+          {d[0]}
+        </button>
+      ))}
     </div>
   );
 }
