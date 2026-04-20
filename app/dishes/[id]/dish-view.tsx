@@ -7,6 +7,7 @@ import { DishArt, Badge, Button, StepperButton, useToast } from "@/app/_componen
 import { Icon } from "@/app/_components/icon";
 import { MarkdownLite } from "@/app/_components/markdown-lite";
 import type { CookLogEntry, Dish } from "@/lib/types";
+import { computeDietFlags, formatDietChips } from "@/lib/diet";
 
 function relTime(iso: string | null): string {
   if (!iso) return "never";
@@ -147,6 +148,7 @@ export default function DishView({
               )}
             </span>
           </div>
+          <DietChipRow dish={dish} />
         </div>
 
         <div className="mx-4 mb-4 rounded-lg border border-rule bg-paper p-4">
@@ -382,6 +384,39 @@ function CookHistoryCard({ entry }: { entry: CookLogEntry }) {
           {entry.note}
         </p>
       )}
+    </div>
+  );
+}
+
+function DietChipRow({ dish }: { dish: Dish }) {
+  if (!dish.ingredients.length) return null;
+  const flags = computeDietFlags(dish.ingredients);
+  const chips = formatDietChips(flags);
+  if (!chips.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-[6px]" aria-label="Dietary info">
+      {chips.map((c) => (
+        <span
+          key={c.label}
+          className="inline-flex items-center rounded-pill border px-2 py-[3px] text-[10px] font-semibold uppercase tracking-[0.1em]"
+          style={
+            c.tone === "good"
+              ? {
+                  color: "var(--good)",
+                  borderColor: "color-mix(in oklch, var(--good) 40%, transparent)",
+                  background: "color-mix(in oklch, var(--good) 12%, transparent)",
+                }
+              : {
+                  color: "var(--ink-3)",
+                  borderColor: "var(--rule)",
+                  background: "var(--bg-alt)",
+                }
+          }
+          title={c.tone === "good" ? "Computed from ingredients" : "Heads-up, derived from ingredients"}
+        >
+          {c.label}
+        </span>
+      ))}
     </div>
   );
 }
