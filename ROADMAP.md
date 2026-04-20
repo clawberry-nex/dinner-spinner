@@ -48,22 +48,21 @@ spawns a countdown in `useTimers` (React state, 250ms tick) and
 two-tone Web Audio beep, flash red, and stay until dismissed. Multiple
 concurrent timers supported.
 
-### Dietary tags (auto-derived)
+### ~~Dietary tags (auto-derived)~~ ✅
 
-**Problem.** Today you can filter by free-form tags, but a dish is only
-"vegetarian" if someone remembered to tag it. Auto-derivation from the
-ingredient list would be more reliable and would surface dishes you'd
-otherwise miss.
-
-**Sketch.** New `lib/diet.ts` with per-ingredient attribute maps —
-`{ name → { vegan, vegetarian, contains: ['dairy', 'nuts', 'gluten'] } }`.
-Keyed off `STANDARD_INGREDIENTS`. At render time on `/dishes/[id]`,
-compute the dish's effective diet flags as the intersection/union across
-ingredients. Show as read-only computed chips ("vegetarian", "contains
-dairy"). Filter chips on `/dishes`. Don't store in `dishes.tags` —
-keep it derived so adding an ingredient immediately updates the
-classification. Unknown ingredients degrade gracefully: "contains: dairy"
-is still correct even if one ingredient's attributes are unknown.
+Shipped in v0.5.0. `lib/diet.ts` owns the per-ingredient attribute
+table plus `computeDietFlags(ingredients)` which returns
+`{ vegetarian, vegan, contains: Set<Allergen> }`. Allergens covered:
+`dairy | eggs | gluten | nuts | fish | shellfish | soy`.
+Classification is asymmetric on purpose — we only downgrade
+vegetarian/vegan on a *positive* animal cue (table hit or substring
+like `beef`/`chicken`), so unknown ingredients never accidentally
+flip a dish non-veg. Allergen flags, conversely, err on the side of
+warning. Dish detail renders a read-only chip row under the tag row;
+`/dishes` gets a new "Diet" chip group in the filter sheet with
+`vegetarian | vegan | no dairy | no gluten | no nuts` applied AND-wise
+alongside existing tag filters. Nothing is persisted — editing an
+ingredient updates the classification on next render.
 
 ### Star ratings + cook notes
 

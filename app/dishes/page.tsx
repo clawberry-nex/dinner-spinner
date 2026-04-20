@@ -6,6 +6,12 @@ import { AppHeader } from "../_components/app-header";
 import { Chip, DishArt } from "../_components/ui";
 import { Icon } from "../_components/icon";
 import type { Dish } from "@/lib/types";
+import {
+  DIET_FILTERS,
+  computeDietFlags,
+  dishMatchesDietFilter,
+  type DietFilter,
+} from "@/lib/diet";
 
 type Entry = { id: number; servings: number };
 
@@ -25,11 +31,12 @@ export default function DishesPage() {
   const [q, setQ] = useState("");
   const [favOnly, setFavOnly] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [dietFilters, setDietFilters] = useState<DietFilter[]>([]);
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const activeCount = selected.length + (favOnly ? 1 : 0);
+  const activeCount = selected.length + dietFilters.length + (favOnly ? 1 : 0);
 
   useEffect(() => {
     fetch("/api/dishes").then((r) => r.json()).then((data: Dish[]) => { setDishes(data); setLoading(false); }).catch(() => setLoading(false));
@@ -81,15 +88,26 @@ export default function DishesPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [sheetOpen]);
 
+  const dietByDish = useMemo(() => {
+    const map = new Map<number, ReturnType<typeof computeDietFlags>>();
+    for (const d of dishes) map.set(d.id, computeDietFlags(d.ingredients));
+    return map;
+  }, [dishes]);
+
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
     return dishes.filter((d) => {
       if (favOnly && !d.favorite) return false;
       if (selected.length && !selected.every((t) => d.tags.includes(t))) return false;
+      if (dietFilters.length) {
+        const flags = dietByDish.get(d.id);
+        if (!flags) return false;
+        if (!dietFilters.every((f) => dishMatchesDietFilter(flags, f))) return false;
+      }
       if (!query) return true;
       return `${d.title} ${d.subtitle ?? ""}`.toLowerCase().includes(query);
     });
-  }, [dishes, q, favOnly, selected]);
+  }, [dishes, q, favOnly, selected, dietFilters, dietByDish]);
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
@@ -133,6 +151,17 @@ export default function DishesPage() {
                 ★ Favourites <Icon name="x" size={11} />
               </button>
             )}
+            {dietFilters.map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setDietFilters((xs) => xs.filter((x) => x !== f))}
+                className="inline-flex items-center gap-[6px] rounded-pill border border-accent bg-accent px-3 py-[5px] text-[12px] font-medium text-accent-ink"
+                style={{ letterSpacing: 0.2 }}
+              >
+                {f} <Icon name="x" size={11} />
+              </button>
+            ))}
             {selected.map((t) => (
               <button
                 key={t}
@@ -235,6 +264,27 @@ export default function DishesPage() {
               </button>
             </div>
             <div className="max-h-[52vh] overflow-auto px-5 pt-4 pb-4">
+              <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-3">
+                Diet
+              </div>
+              <div className="flex flex-wrap gap-[6px]">
+                {DIET_FILTERS.map((f) => (
+                  <Chip
+                    key={f}
+                    active={dietFilters.includes(f)}
+                    onClick={() =>
+                      setDietFilters((xs) =>
+                        xs.includes(f) ? xs.filter((x) => x !== f) : [...xs, f],
+                      )
+                    }
+                  >
+                    {f}
+                  </Chip>
+                ))}
+              </div>
+              <div className="mt-4 mb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-3">
+                Tags
+              </div>
               <div className="flex flex-wrap gap-[6px]">
                 <Chip active={favOnly} onClick={() => setFavOnly((v) => !v)}>★ Favourites</Chip>
                 {allTags.map((t) => (
@@ -251,7 +301,7 @@ export default function DishesPage() {
             <div className="flex items-center justify-between border-t border-rule-soft px-5 py-3">
               <button
                 type="button"
-                onClick={() => { setFavOnly(false); setSelected([]); }}
+                onClick={() => { setFavOnly(false); setSelected([]); setDietFilters([]); }}
                 disabled={activeCount === 0}
                 className="text-[13px] text-ink-2 underline underline-offset-4 disabled:no-underline disabled:opacity-40"
               >
