@@ -143,17 +143,19 @@ the rationale as a monospace muted line inside `LandedCard`. Tests in
 pluralisation, and multiplier formatting. `pickWeighted` is
 untouched.
 
-### Drag-to-reorder ingredients in admin
+### ~~Drag-to-reorder ingredients in admin~~ ✅
 
-**Problem.** Ingredient order matters for the recipe read-through.
-Today, inserting an ingredient in the middle means typing it at the
-end and… that's it. No reorder at all.
-
-**Sketch.** Add a ⋮⋮ grip handle to each ingredient row. Use the
-native HTML5 drag-and-drop API for simplicity (no library). Reorder
-mutates `draft.ingredients` array on drop. Keyboard-accessible
-alternative: "move up / move down" buttons next to the × remove
-button.
+Shipped in v0.10.0. Each ingredient row in `/admin` gets a ⋮⋮ grip
+handle (left of the qty input) that drags via the native HTML5 DnD
+API — no library. `lib/reorder.ts::moveItem` is the pure core,
+covered by `lib/reorder.test.ts` with forward/backward/same-index
+cases and out-of-range guards. `draggable` is toggled per-row only
+while the grip's `onPointerDown` has fired, so clicking into one of
+the row's `<input>`s never accidentally starts a drag. Drop target
+gets a 2px emerald ring; source row fades to 60%. Keyboard-accessible
+↑ / ↓ buttons next to the × remove button call the same
+`reorderIngredient` helper so mouse and keyboard paths are
+behaviourally identical.
 
 ### Per-dish notes field
 
