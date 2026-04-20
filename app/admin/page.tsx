@@ -152,6 +152,8 @@ export default function AdminPage() {
   const [newPantryName, setNewPantryName] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const pantryDefaultsSet = useMemo(
     () => new Set(pantryDefaults.map((n) => n.toLowerCase())),
@@ -238,6 +240,96 @@ export default function AdminPage() {
       setPantryDefaults((prev) =>
         [...new Set([...prev, ...added])].sort((a, b) => a.localeCompare(b)),
       );
+    }
+  }
+
+  async function downloadBackup() {
+    setBackupMsg(null);
+    try {
+      const res = await fetch("/api/backup");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        setBackupMsg(data.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const today = new Date().toISOString().slice(0, 10);
+      a.download = `dinner-spinner-backup-${today}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setBackupMsg("Downloaded.");
+    } catch (err) {
+      setBackupMsg(err instanceof Error ? err.message : "Download failed");
+    }
+  }
+
+  async function importBackup(file: File) {
+    setBackupMsg(null);
+    setImporting(true);
+    try {
+      const text = await file.text();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        setBackupMsg("Not valid JSON");
+        return;
+      }
+      const envelope = parsed as {
+        dishes?: unknown[];
+        pantryNames?: unknown[];
+        mealPlan?: { entries?: unknown[] };
+      };
+      const dishCount = Array.isArray(envelope.dishes)
+        ? envelope.dishes.length
+        : 0;
+      const pantryCount = Array.isArray(envelope.pantryNames)
+        ? envelope.pantryNames.length
+        : 0;
+      const mealCount = Array.isArray(envelope.mealPlan?.entries)
+        ? envelope.mealPlan.entries.length
+        : 0;
+      const ok = confirm(
+        `Import ${dishCount} dishes, ${pantryCount} pantry names, ` +
+          `${mealCount} meal-plan entries?\n\n` +
+          "Dishes are upserted by id (existing dishes with matching ids " +
+          "are overwritten). Pantry names are additive. Meal plan is " +
+          "replaced.",
+      );
+      if (!ok) return;
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: text,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        counts?: {
+          dishes: number;
+          pantryNames: number;
+          mealPlanEntries: number;
+        };
+      };
+      if (!res.ok || !data.ok) {
+        setBackupMsg(data.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      setBackupMsg(
+        `Imported ${data.counts?.dishes ?? 0} dishes, ` +
+          `${data.counts?.pantryNames ?? 0} pantry names, ` +
+          `${data.counts?.mealPlanEntries ?? 0} meal-plan entries.`,
+      );
+      reload();
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -769,6 +861,39 @@ export default function AdminPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-xl font-semibold">Backup</h2>
+        <p className="mb-3 text-xs text-zinc-500">
+          Download a JSON snapshot of all dishes, pantry defaults, and meal
+          plan. Import the same file to restore. Dishes upsert by id; pantry
+          names are additive; meal plan is replaced.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={downloadBackup}
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
+          >
+            Download backup
+          </button>
+          <label className="cursor-pointer rounded-md border border-emerald-600 px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950">
+            {importing ? "Importing…" : "Import backup"}
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              disabled={importing}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importBackup(file);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          {backupMsg && <span className="text-sm">{backupMsg}</span>}
+        </div>
       </section>
       </div>
       </div>
