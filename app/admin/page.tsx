@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Dish, Ingredient } from "@/lib/types";
 import { PANTRY_DEFAULTS, STANDARD_INGREDIENTS, STANDARD_UNITS } from "@/lib/vocabulary";
+import { moveItem } from "@/lib/reorder";
 import { AppHeader } from "../_components/app-header";
 import { Button } from "../_components/ui";
 
@@ -154,6 +155,9 @@ export default function AdminPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [handleArmedIndex, setHandleArmedIndex] = useState<number | null>(null);
 
   const pantryDefaultsSet = useMemo(
     () => new Set(pantryDefaults.map((n) => n.toLowerCase())),
@@ -395,6 +399,19 @@ export default function AdminPage() {
     }));
   }
 
+  function reorderIngredient(from: number, to: number) {
+    setDraft((d) => ({
+      ...d,
+      ingredients: moveItem(d.ingredients, from, to),
+    }));
+  }
+
+  function resetDragState() {
+    setDragIndex(null);
+    setDropTargetIndex(null);
+    setHandleArmedIndex(null);
+  }
+
   function addTag(tag: string) {
     const current = draft.tagsInput
       .split(",")
@@ -546,12 +563,63 @@ export default function AdminPage() {
               added to the shopping list.
             </p>
             <div className="mt-1 flex flex-col gap-3">
-              {draft.ingredients.map((ing, i) => (
+              {draft.ingredients.map((ing, i) => {
+                const isDragSource = dragIndex === i;
+                const isDropTarget =
+                  dropTargetIndex === i &&
+                  dragIndex !== null &&
+                  dragIndex !== i;
+                return (
                 <div
                   key={i}
-                  className="rounded border border-zinc-200 p-2 dark:border-zinc-800"
+                  draggable={handleArmedIndex === i}
+                  onDragStart={(e) => {
+                    setDragIndex(i);
+                    e.dataTransfer.effectAllowed = "move";
+                    // Payload is unused but some browsers refuse to
+                    // start a drag without any data.
+                    e.dataTransfer.setData("text/plain", String(i));
+                  }}
+                  onDragOver={(e) => {
+                    if (dragIndex === null) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dropTargetIndex !== i) setDropTargetIndex(i);
+                  }}
+                  onDragLeave={() => {
+                    if (dropTargetIndex === i) setDropTargetIndex(null);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragIndex !== null && dragIndex !== i) {
+                      reorderIngredient(dragIndex, i);
+                    }
+                    resetDragState();
+                  }}
+                  onDragEnd={resetDragState}
+                  className={`rounded border p-2 transition-colors ${
+                    isDropTarget
+                      ? "border-emerald-500 ring-2 ring-emerald-500/30"
+                      : "border-zinc-200 dark:border-zinc-800"
+                  } ${isDragSource ? "opacity-60" : ""}`}
                 >
                   <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label="drag to reorder ingredient"
+                      title="Drag to reorder"
+                      onPointerDown={() => setHandleArmedIndex(i)}
+                      onPointerUp={() => setHandleArmedIndex(null)}
+                      onPointerCancel={() => setHandleArmedIndex(null)}
+                      onPointerLeave={() => {
+                        if (handleArmedIndex === i && dragIndex === null) {
+                          setHandleArmedIndex(null);
+                        }
+                      }}
+                      className="flex h-9 w-6 shrink-0 cursor-grab items-center justify-center text-zinc-400 select-none hover:text-zinc-600 active:cursor-grabbing dark:hover:text-zinc-200"
+                    >
+                      ⋮⋮
+                    </button>
                     <input
                       type="number"
                       step="any"
@@ -594,6 +662,26 @@ export default function AdminPage() {
                       }}
                       className="min-w-[10rem] flex-1 rounded border border-zinc-300 px-2 py-1.5 text-base dark:border-zinc-700 dark:bg-zinc-900"
                     />
+                    <button
+                      type="button"
+                      onClick={() => reorderIngredient(i, i - 1)}
+                      disabled={i === 0}
+                      className="flex h-9 w-8 shrink-0 items-center justify-center rounded border border-zinc-200 text-sm disabled:opacity-30 dark:border-zinc-800"
+                      aria-label="move ingredient up"
+                      title="Move up"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => reorderIngredient(i, i + 1)}
+                      disabled={i === draft.ingredients.length - 1}
+                      className="flex h-9 w-8 shrink-0 items-center justify-center rounded border border-zinc-200 text-sm disabled:opacity-30 dark:border-zinc-800"
+                      aria-label="move ingredient down"
+                      title="Move down"
+                    >
+                      ↓
+                    </button>
                     <button
                       type="button"
                       onClick={() => removeIngredient(i)}
@@ -677,7 +765,8 @@ export default function AdminPage() {
                     className="mt-2 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />
                 </div>
-              ))}
+                );
+              })}
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
