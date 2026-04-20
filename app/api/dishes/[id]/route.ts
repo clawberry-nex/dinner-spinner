@@ -21,9 +21,10 @@ export async function GET(
 ) {
   const { id } = await ctx.params;
   const rows = await sql`
-    SELECT d.*, (
-      SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id
-    ) AS last_cooked_at
+    SELECT d.*,
+      (SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id) AS last_cooked_at,
+      (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
+      (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
     FROM dishes d
     WHERE id = ${Number(id)}
   `;

@@ -6,24 +6,7 @@ import { AppHeader } from "./_components/app-header";
 import { Chip, DishArt, Button } from "./_components/ui";
 import { Icon } from "./_components/icon";
 import type { Dish } from "@/lib/types";
-
-function pickWeighted(candidates: Dish[]): Dish {
-  const weights = candidates.map((d) => {
-    let w = d.favorite ? 2 : 1;
-    if (d.lastCookedAt) {
-      const days = (Date.now() - new Date(d.lastCookedAt).getTime()) / 86400000;
-      w *= Math.min(1, days / 14);
-    }
-    return Math.max(0.05, w);
-  });
-  const total = weights.reduce((s, w) => s + w, 0);
-  let r = Math.random() * total;
-  for (let i = 0; i < candidates.length; i++) {
-    r -= weights[i];
-    if (r <= 0) return candidates[i];
-  }
-  return candidates[candidates.length - 1];
-}
+import { pickWeighted } from "@/lib/spinner";
 
 export default function SpinnerPage() {
   const router = useRouter();

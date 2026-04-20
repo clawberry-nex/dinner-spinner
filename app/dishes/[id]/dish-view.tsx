@@ -6,7 +6,7 @@ import { AppHeader } from "@/app/_components/app-header";
 import { DishArt, Badge, Button, StepperButton, useToast } from "@/app/_components/ui";
 import { Icon } from "@/app/_components/icon";
 import { MarkdownLite } from "@/app/_components/markdown-lite";
-import type { Dish } from "@/lib/types";
+import type { CookLogEntry, Dish } from "@/lib/types";
 
 function relTime(iso: string | null): string {
   if (!iso) return "never";
@@ -20,11 +20,23 @@ function relTime(iso: string | null): string {
 function formatQty(q: number): string {
   return String(Math.round(q * 100) / 100).replace(/\.?0+$/, "");
 }
+function fmtAvg(avg: number | null): string {
+  if (avg == null) return "—";
+  return (Math.round(avg * 10) / 10).toFixed(1);
+}
 
-export default function DishView({ dish: initial }: { dish: Dish }) {
+export default function DishView({
+  dish: initial,
+  history: initialHistory,
+}: {
+  dish: Dish;
+  history: CookLogEntry[];
+}) {
   const router = useRouter();
   const [dish, setDish] = useState(initial);
+  const [history, setHistory] = useState<CookLogEntry[]>(initialHistory);
   const [servings, setServings] = useState(initial.baseServings);
+  const [cookFormOpen, setCookFormOpen] = useState(false);
   const [inPlan, setInPlan] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -45,14 +57,34 @@ export default function DishView({ dish: initial }: { dish: Dish }) {
     } catch { setDish((d) => ({ ...d, favorite: !next })); }
   };
 
-  const cooked = async () => {
+  const submitCook = async (rating: number | null, note: string | null) => {
     try {
       const res = await fetch("/api/cook-log", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ dishId: dish.id }),
+        body: JSON.stringify({ dishId: dish.id, rating, note }),
       });
-      if (res.ok) { setDish((d) => ({ ...d, lastCookedAt: new Date().toISOString() })); toast.show("Logged as cooked"); }
-    } catch {}
+      if (!res.ok) throw new Error();
+      const saved = (await res.json()) as CookLogEntry;
+      const entry: CookLogEntry = {
+        id: saved.id, cookedAt: saved.cookedAt, rating: saved.rating, note: saved.note,
+      };
+      setHistory((h) => [entry, ...h]);
+      // Recompute average client-side so the header summary matches.
+      setDish((d) => {
+        const rated = [entry, ...history].filter((e) => e.rating != null) as Array<CookLogEntry & { rating: number }>;
+        const avg = rated.length ? rated.reduce((s, e) => s + e.rating, 0) / rated.length : null;
+        return {
+          ...d,
+          lastCookedAt: entry.cookedAt,
+          averageRating: avg,
+          ratingCount: rated.length,
+        };
+      });
+      setCookFormOpen(false);
+      toast.show(rating != null ? `Logged · ${rating}★` : "Logged as cooked");
+    } catch {
+      toast.show("Couldn’t save cook log");
+    }
   };
 
   const addToPlan = () => {
@@ -103,7 +135,17 @@ export default function DishView({ dish: initial }: { dish: Dish }) {
               <span key={t} className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-3">· {t}</span>
             ))}
             <span className="flex-1" />
-            <span className="text-[11px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>last cooked {relTime(dish.lastCookedAt)}</span>
+            <span className="text-[11px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
+              last cooked {relTime(dish.lastCookedAt)}
+              {dish.ratingCount > 0 && (
+                <>
+                  {" · "}
+                  <span aria-label={`Average rating ${fmtAvg(dish.averageRating)} from ${dish.ratingCount} cooks`}>
+                    ★ {fmtAvg(dish.averageRating)} ({dish.ratingCount})
+                  </span>
+                </>
+              )}
+            </span>
           </div>
         </div>
 
@@ -121,7 +163,7 @@ export default function DishView({ dish: initial }: { dish: Dish }) {
             <Button variant="ink" size="md" onClick={() => router.push(`/dishes/${dish.id}/cook?servings=${servings}`)} className="flex-1">
               <Icon name="flame" size={16} /> Cook mode
             </Button>
-            <Button variant="ghost" size="md" onClick={cooked}>
+            <Button variant="ghost" size="md" onClick={() => setCookFormOpen(true)}>
               <Icon name="check" size={14} /> Cooked
             </Button>
           </div>
@@ -163,6 +205,17 @@ export default function DishView({ dish: initial }: { dish: Dish }) {
           </div>
         </div>
 
+        {history.length > 0 && (
+          <div className="px-5 pt-4">
+            <SectionHeader>Cook history</SectionHeader>
+            <div className="mt-3 flex flex-col gap-[10px]">
+              {history.map((entry) => (
+                <CookHistoryCard key={entry.id} entry={entry} />
+              ))}
+            </div>
+          </div>
+        )}
+
         {dish.recipe && (
           <div className="px-5 pt-4 pb-8">
             <SectionHeader>The recipe</SectionHeader>
@@ -173,6 +226,12 @@ export default function DishView({ dish: initial }: { dish: Dish }) {
         )}
       </div>
       {toast.el}
+      {cookFormOpen && (
+        <CookLogForm
+          onCancel={() => setCookFormOpen(false)}
+          onSubmit={submitCook}
+        />
+      )}
     </div>
   );
 }
@@ -183,5 +242,156 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
       <h2 className="m-0 text-[22px] italic font-medium tracking-[-0.01em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>{children}</h2>
       <div className="h-px flex-1 bg-rule" />
     </div>
+  );
+}
+
+function StarPicker({ value, onChange }: { value: number | null; onChange: (n: number | null) => void }) {
+  return (
+    <div className="flex items-center gap-1" role="radiogroup" aria-label="Rating">
+      {[1, 2, 3, 4, 5].map((n) => {
+        const filled = value != null && n <= value;
+        return (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={value === n}
+            aria-label={`${n} star${n === 1 ? "" : "s"}`}
+            onClick={() => onChange(value === n ? null : n)}
+            className={[
+              "grid h-10 w-10 place-items-center rounded-pill border transition-colors",
+              filled ? "border-accent bg-accent text-accent-ink" : "border-rule bg-paper text-ink-3 hover:border-ink-3",
+            ].join(" ")}
+          >
+            <Icon name={filled ? "star-fill" : "star"} size={18} />
+          </button>
+        );
+      })}
+      {value != null && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="ml-2 text-[11px] uppercase tracking-[0.1em] text-ink-3 hover:text-ink-2"
+        >
+          clear
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CookLogForm({
+  onCancel,
+  onSubmit,
+}: {
+  onCancel: () => void;
+  onSubmit: (rating: number | null, note: string | null) => void | Promise<void>;
+}) {
+  const [rating, setRating] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await onSubmit(rating, note.trim() || null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Log a cook"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onCancel();
+      }}
+    >
+      <div
+        className="w-full max-w-[420px] rounded-t-xl border border-rule bg-paper p-5 shadow-[0_-16px_32px_rgba(0,0,0,0.12)] sm:rounded-lg sm:shadow-[0_16px_32px_rgba(0,0,0,0.18)]"
+        style={{ animation: "revealUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)" }}
+      >
+        <div className="mb-2 flex items-start justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">Log a cook</div>
+            <h3 className="m-0 mt-[2px] text-[22px] italic font-medium tracking-[-0.01em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
+              How did it go?
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Close"
+            disabled={busy}
+            className="p-1 text-lg leading-none text-ink-3 disabled:opacity-40"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="mt-3">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">Rating (optional)</div>
+          <StarPicker value={rating} onChange={setRating} />
+        </div>
+
+        <div className="mt-4">
+          <label htmlFor="cook-note" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">
+            Note (optional)
+          </label>
+          <textarea
+            id="cook-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Too much chili, kids loved it, halve the sugar next time…"
+            rows={3}
+            maxLength={2000}
+            className="w-full resize-y rounded-md border border-rule bg-bg px-3 py-2 text-[14px] text-ink placeholder:text-ink-3 focus:border-ink-3 focus:outline-none"
+          />
+        </div>
+
+        <div className="mt-5 flex gap-2">
+          <Button variant="ghost" size="md" onClick={onCancel} disabled={busy} className="flex-1">
+            Cancel
+          </Button>
+          <Button variant="ink" size="md" onClick={save} disabled={busy} className="flex-1">
+            <Icon name="check" size={14} /> {busy ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+      <style>{`@keyframes revealUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+    </div>
+  );
+}
+
+function CookHistoryCard({ entry }: { entry: CookLogEntry }) {
+  const when = new Date(entry.cookedAt);
+  const date = when.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return (
+    <div className="rounded-lg border border-rule bg-paper p-[14px]">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
+          {date} · {relTime(entry.cookedAt)}
+        </div>
+        {entry.rating != null && <StarRow value={entry.rating} />}
+      </div>
+      {entry.note && (
+        <p className="mt-2 whitespace-pre-wrap text-[14px] leading-snug text-ink">
+          {entry.note}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function StarRow({ value }: { value: number }) {
+  return (
+    <span className="flex items-center gap-[2px] text-accent" aria-label={`${value} star${value === 1 ? "" : "s"}`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Icon key={n} name={n <= value ? "star-fill" : "star"} size={14} style={n > value ? { color: "var(--ink-3)" } : undefined} />
+      ))}
+    </span>
   );
 }

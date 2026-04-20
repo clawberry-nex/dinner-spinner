@@ -50,11 +50,15 @@ export type Dish = {
   emoji: string | null;
   accent: string | null;
   lastCookedAt: string | null;
+  averageRating: number | null;
+  ratingCount: number;
   createdAt: string;
   updatedAt: string;
 };
 
 export function rowToDish(row: Record<string, unknown>): Dish {
+  const avg = row.avg_rating;
+  const count = row.rating_count;
   return {
     id: row.id as number,
     title: row.title as string,
@@ -68,7 +72,27 @@ export function rowToDish(row: Record<string, unknown>): Dish {
     emoji: (row.emoji as string | null) ?? null,
     accent: (row.accent as string | null) ?? null,
     lastCookedAt: row.last_cooked_at ? String(row.last_cooked_at) : null,
+    averageRating: avg == null ? null : Number(avg),
+    ratingCount: count == null ? 0 : Number(count),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+  };
+}
+
+export const CookLogEntrySchema = z.object({
+  id: z.number().int(),
+  cookedAt: z.string(),
+  rating: z.number().int().min(1).max(5).nullable(),
+  note: z.string().nullable(),
+});
+
+export type CookLogEntry = z.infer<typeof CookLogEntrySchema>;
+
+export function rowToCookLogEntry(row: Record<string, unknown>): CookLogEntry {
+  return {
+    id: row.id as number,
+    cookedAt: String(row.cooked_at),
+    rating: (row.rating as number | null) ?? null,
+    note: (row.note as string | null) ?? null,
   };
 }

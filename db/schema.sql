@@ -40,12 +40,29 @@ INSERT INTO meal_plan (id, entries) VALUES (1, '[]')
   ON CONFLICT (id) DO NOTHING;
 
 -- Per-dish cooking log. /api/cook-log POST appends a row. The dishes GET
--- response includes the most-recent cooked_at via a LATERAL subquery so
--- the spinner can de-weight recently-cooked dishes.
+-- response exposes most-recent cooked_at, avg_rating, and rating_count
+-- via correlated subqueries so the spinner can de-weight recently-cooked
+-- dishes and up-weight highly-rated ones. rating + note are captured
+-- from the dish-detail "Cooked it" form.
 CREATE TABLE IF NOT EXISTS cook_log (
   id         serial PRIMARY KEY,
   dish_id    int NOT NULL REFERENCES dishes(id) ON DELETE CASCADE,
-  cooked_at  timestamptz NOT NULL DEFAULT now()
+  cooked_at  timestamptz NOT NULL DEFAULT now(),
+  rating     smallint,
+  note       text,
+  CONSTRAINT cook_log_rating_check CHECK (rating IS NULL OR rating BETWEEN 1 AND 5)
 );
 CREATE INDEX IF NOT EXISTS cook_log_dish_id_cooked_at_idx
   ON cook_log (dish_id, cooked_at DESC);
+
+-- Backward-compatible adds for existing installs.
+ALTER TABLE cook_log ADD COLUMN IF NOT EXISTS rating smallint;
+ALTER TABLE cook_log ADD COLUMN IF NOT EXISTS note text;
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'cook_log_rating_check'
+  ) THEN
+    ALTER TABLE cook_log ADD CONSTRAINT cook_log_rating_check
+      CHECK (rating IS NULL OR rating BETWEEN 1 AND 5);
+  END IF;
+END $$;

@@ -6,6 +6,7 @@ import {
   checkApiToken,
   verifySessionCookieValue,
 } from "@/lib/auth";
+import { rowToCookLogEntry } from "@/lib/types";
 
 async function isAuthorized(request: Request): Promise<boolean> {
   if (checkApiToken(request.headers.get("authorization"))) return true;
@@ -15,7 +16,29 @@ async function isAuthorized(request: Request): Promise<boolean> {
 
 const BodySchema = z.object({
   dishId: z.number().int().positive(),
+  rating: z.number().int().min(1).max(5).nullable().optional(),
+  note: z.string().trim().max(2000).nullable().optional(),
 });
+
+export async function GET(request: Request) {
+  if (!(await isAuthorized(request))) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const url = new URL(request.url);
+  const dishIdParam = url.searchParams.get("dishId");
+  const dishId = dishIdParam ? Number(dishIdParam) : NaN;
+  if (!Number.isFinite(dishId) || dishId <= 0) {
+    return Response.json({ error: "dishId required" }, { status: 400 });
+  }
+  const rows = await sql`
+    SELECT id, cooked_at, rating, note
+    FROM cook_log
+    WHERE dish_id = ${dishId}
+    ORDER BY cooked_at DESC
+    LIMIT 100
+  `;
+  return Response.json(rows.map(rowToCookLogEntry));
+}
 
 export async function POST(request: Request) {
   if (!(await isAuthorized(request))) {
@@ -37,14 +60,13 @@ export async function POST(request: Request) {
     );
   }
 
+  const { dishId, rating, note } = parsed.data;
+  const trimmedNote = note?.trim() || null;
   const rows = await sql`
-    INSERT INTO cook_log (dish_id)
-    VALUES (${parsed.data.dishId})
-    RETURNING id, cooked_at
+    INSERT INTO cook_log (dish_id, rating, note)
+    VALUES (${dishId}, ${rating ?? null}, ${trimmedNote})
+    RETURNING id, cooked_at, rating, note
   `;
-  return Response.json({
-    ok: true,
-    id: rows[0].id,
-    cookedAt: String(rows[0].cooked_at),
-  });
+  const entry = rowToCookLogEntry(rows[0]);
+  return Response.json({ ok: true, ...entry });
 }

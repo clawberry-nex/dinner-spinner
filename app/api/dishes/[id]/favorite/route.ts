@@ -48,7 +48,9 @@ export async function PATCH(
     UPDATE dishes SET favorite = ${parsed.data.favorite}, updated_at = now()
     WHERE id = ${Number(id)}
     RETURNING *,
-      (SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = dishes.id) AS last_cooked_at
+      (SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = dishes.id) AS last_cooked_at,
+      (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = dishes.id AND rating IS NOT NULL) AS avg_rating,
+      (SELECT COUNT(*) FROM cook_log WHERE dish_id = dishes.id AND rating IS NOT NULL) AS rating_count
   `;
   if (rows.length === 0) {
     return Response.json({ error: "Not found" }, { status: 404 });
