@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#D3753F"/>
+      <stop offset="100%" stop-color="#B45A2E"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <!-- plate ring -->
+  <circle cx="256" cy="256" r="160" fill="none" stroke="#FBF7EE" stroke-width="10" stroke-dasharray="14 18" opacity="0.55"/>
+  <!-- fork: 3 prongs + handle + stem -->
+  <g fill="#FBF7EE">
+    <!-- prongs -->
+    <rect x="180" y="120" width="22" height="90" rx="10"/>
+    <rect x="216" y="120" width="22" height="90" rx="10"/>
+    <rect x="252" y="120" width="22" height="90" rx="10"/>
+    <!-- fork shoulder -->
+    <rect x="174" y="200" width="106" height="36" rx="14"/>
+    <!-- fork stem -->
+    <rect x="210" y="228" width="34" height="184" rx="14"/>
+  </g>
+  <!-- spoon (curved bowl + handle), offset right -->
+  <g fill="#FBF7EE">
+    <ellipse cx="336" cy="176" rx="44" ry="62"/>
+    <rect x="318" y="220" width="36" height="192" rx="14"/>
+  </g>
+</svg>
