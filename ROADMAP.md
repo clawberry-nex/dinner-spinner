@@ -157,19 +157,19 @@ gets a 2px emerald ring; source row fades to 60%. Keyboard-accessible
 `reorderIngredient` helper so mouse and keyboard paths are
 behaviourally identical.
 
-### Per-dish notes field
+### ~~Per-dish notes field~~ ✅
 
-**Problem.** The recipe markdown holds the cooking steps. But there's
-no good spot for persistent meta-notes like "Finn won't eat this if
-there are mushrooms" or "Usually 1.5× the chili" that should stay
-out of the recipe body.
-
-**Sketch.** New `notes text` column on `dishes` (nullable). Admin
-form has a small "Notes" textarea, separate from the recipe textarea.
-Dish detail renders it as a yellow sticky-note style box above the
-ingredient section, hidden when empty. Unlike ratings/cook-notes,
-this is a single persistent note per dish — a "scratch pad" rather
-than a log.
+Shipped in v0.11.0. New `notes text` column on `dishes` (nullable),
+backed by `db/migrations/0002_notes.sql`. `DishInputSchema` allows
+up to 5000 chars; admin form has a 3-row "Notes" textarea between
+the recipe markdown and the submit row, with empty strings
+normalized to `null` on save. Dish detail renders a yellow
+sticky-note box (amber-50 / dark amber-950/40, with a small
+uppercase "Notes" eyebrow) between the servings/action card and
+the ingredient list, hidden entirely when `dish.notes` is empty.
+Backup envelope makes `notes` nullable+optional so pre-v0.11
+backup files still parse, with import + export round-tripping the
+field via `ON CONFLICT DO UPDATE SET notes = EXCLUDED.notes`.
 
 ### Temporary skip ("don't spin this")
 
