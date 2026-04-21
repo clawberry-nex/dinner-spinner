@@ -122,6 +122,7 @@ export default function DishView({
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader back />
       <div className="flex-1 overflow-auto pb-20">
+       <div className="mx-auto w-full max-w-3xl">
         <div className="px-4"><DishArt dish={dish} size="100%" corner="var(--radius-lg)" className="md:max-h-[320px] md:object-cover" /></div>
 
         <div className="px-5 pt-5 pb-3">
@@ -270,6 +271,7 @@ export default function DishView({
             </div>
           </div>
         )}
+       </div>
       </div>
       {toast.el}
       {cookFormOpen && (

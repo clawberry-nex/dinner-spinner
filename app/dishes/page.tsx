@@ -178,63 +178,109 @@ export default function DishesPage() {
       </div>
 
       <div className="flex-1 overflow-auto pb-20">
+       <div className="mx-auto w-full max-w-6xl">
         {entries.length > 0 && (
           <div className="mx-4 mt-4 text-[12px] text-ink-3">
             {entries.length} in plan · <Link href="/plan" className="underline">view plan</Link>
           </div>
         )}
-        <ul className="mx-4 my-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {filtered.map((d) => (
-            <li key={d.id} className="overflow-hidden rounded-lg border border-rule bg-paper">
-              <Link href={`/dishes/${d.id}`} className="block">
-                <DishArt dish={d} size="100%" corner="0" className="!rounded-none" />
-                <div className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1">
-                      <h3 className="m-0 text-[22px] font-medium leading-tight tracking-[-0.01em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
-                        {d.title}
-                      </h3>
-                      {d.subtitle && <div className="mt-[2px] text-[13px] italic text-ink-3">{d.subtitle}</div>}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => togglePlan(d, e)}
-                        className={[
-                          "inline-flex items-center justify-center gap-2 rounded-pill font-medium transition-opacity",
-                          "px-3 py-2 text-[12px] bg-transparent border border-rule hover:border-ink-3",
-                          entries.some((en) => en.id === d.id) ? "text-good" : "text-accent",
-                        ].join(" ")}
-                        style={{ letterSpacing: 0.2 }}
-                      >
-                        {entries.some((en) => en.id === d.id) ? "✓ in plan" : "+ add to plan"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(d.id, !d.favorite); }}
-                        aria-label={d.favorite ? "Remove favourite" : "Mark as favourite"}
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-pill border border-rule bg-bg text-ink-2 hover:border-ink-3"
-                      >
-                        <Icon name={d.favorite ? "star-fill" : "star"} size={16} />
-                      </button>
+        <ul className="mx-4 my-4 grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
+          {filtered.map((d) => {
+            const inPlan = entries.some((en) => en.id === d.id);
+            return (
+              <li key={d.id} className="overflow-hidden rounded-lg border border-rule bg-paper">
+                {/* Compact list layout on small screens */}
+                <Link href={`/dishes/${d.id}`} className="flex gap-3 p-3 md:hidden">
+                  <DishArt dish={d} size={72} corner="var(--radius-sm)" />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <h3 className="m-0 truncate text-[17px] font-medium leading-tight tracking-[-0.01em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
+                      {d.title}
+                    </h3>
+                    {d.subtitle && <div className="mt-[1px] truncate text-[12px] italic text-ink-3">{d.subtitle}</div>}
+                    <div className="mt-auto flex flex-wrap items-center gap-x-[8px] gap-y-[2px] pt-2 text-[10px] uppercase tracking-[0.1em] text-ink-3">
+                      {d.tags.slice(0, 3).map((t) => <span key={t}>· {t}</span>)}
+                      {d.tags.length > 3 && <span>· +{d.tags.length - 3}</span>}
+                      <span className="flex-1" />
+                      <span className="normal-case" style={{ fontFamily: "var(--font-mono)" }}>
+                        {relTime(d.lastCookedAt)}
+                      </span>
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-x-[10px] gap-y-[4px] text-[11px] uppercase tracking-[0.1em] text-ink-3">
-                    {d.tags.map((t) => <span key={t}>· {t}</span>)}
-                    <span className="flex-1" />
-                    <span className="text-[11px] normal-case text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
-                      last cooked {relTime(d.lastCookedAt)}
-                    </span>
+                  <div className="flex shrink-0 flex-col items-center gap-[6px]">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(d.id, !d.favorite); }}
+                      aria-label={d.favorite ? "Remove favourite" : "Mark as favourite"}
+                      className="grid h-8 w-8 place-items-center rounded-pill border border-rule bg-bg text-ink-2 hover:border-ink-3"
+                    >
+                      <Icon name={d.favorite ? "star-fill" : "star"} size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => togglePlan(d, e)}
+                      aria-label={inPlan ? "In plan" : "Add to plan"}
+                      className={[
+                        "grid h-8 w-8 place-items-center rounded-pill border border-rule bg-bg hover:border-ink-3",
+                        inPlan ? "text-good" : "text-accent",
+                      ].join(" ")}
+                    >
+                      <Icon name={inPlan ? "check" : "plus"} size={14} />
+                    </button>
                   </div>
-                </div>
-              </Link>
-            </li>
-          ))}
+                </Link>
+
+                {/* Grid card on desktop / tablet */}
+                <Link href={`/dishes/${d.id}`} className="hidden md:block">
+                  <DishArt dish={d} size="100%" corner="0" className="!rounded-none" />
+                  <div className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="m-0 truncate text-[22px] font-medium leading-tight tracking-[-0.01em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
+                          {d.title}
+                        </h3>
+                        {d.subtitle && <div className="mt-[2px] truncate text-[13px] italic text-ink-3">{d.subtitle}</div>}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => togglePlan(d, e)}
+                          className={[
+                            "inline-flex items-center justify-center gap-2 rounded-pill font-medium transition-opacity",
+                            "px-3 py-2 text-[12px] bg-transparent border border-rule hover:border-ink-3",
+                            inPlan ? "text-good" : "text-accent",
+                          ].join(" ")}
+                          style={{ letterSpacing: 0.2 }}
+                        >
+                          {inPlan ? "✓ in plan" : "+ add to plan"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(d.id, !d.favorite); }}
+                          aria-label={d.favorite ? "Remove favourite" : "Mark as favourite"}
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-pill border border-rule bg-bg text-ink-2 hover:border-ink-3"
+                        >
+                          <Icon name={d.favorite ? "star-fill" : "star"} size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-x-[10px] gap-y-[4px] text-[11px] uppercase tracking-[0.1em] text-ink-3">
+                      {d.tags.map((t) => <span key={t}>· {t}</span>)}
+                      <span className="flex-1" />
+                      <span className="text-[11px] normal-case text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
+                        last cooked {relTime(d.lastCookedAt)}
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
 
         {loading && <div className="mx-4 rounded-lg border border-dashed border-rule p-6 text-center text-ink-3">Loading dishes…</div>}
         {!loading && !dishes.length && <div className="mx-4 rounded-lg border border-dashed border-rule p-6 text-center text-ink-3">No dishes yet.</div>}
         {!loading && dishes.length > 0 && !filtered.length && <div className="mx-4 rounded-lg border border-dashed border-rule p-6 text-center text-ink-3">No dishes match the current filter.</div>}
+       </div>
       </div>
 
       {sheetOpen && (
