@@ -6,7 +6,7 @@ export type IconName =
   | "star" | "star-fill" | "check" | "plus" | "minus" | "x"
   | "chev-left" | "chev-right" | "search" | "timer" | "flame"
   | "list" | "cart" | "dice" | "gear" | "ingredient" | "chef"
-  | "sun" | "moon" | "filter";
+  | "sun" | "moon" | "theme-auto" | "filter";
 
 type Props = { name: IconName; size?: number; style?: CSSProperties; className?: string };
 
@@ -52,6 +52,8 @@ export function Icon({ name, size = 18, style, className }: Props) {
       return <svg viewBox="0 0 24 24" style={s} className={className} fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>;
     case "moon":
       return <svg viewBox="0 0 24 24" style={s} className={className} fill="none" stroke={c} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg>;
+    case "theme-auto":
+      return <svg viewBox="0 0 24 24" style={s} className={className} fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 4v16" stroke={c}/><path d="M12 4a8 8 0 010 16z" fill={c} stroke="none"/></svg>;
     case "filter":
       return <svg viewBox="0 0 24 24" style={s} className={className} fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>;
   }

@@ -11,7 +11,15 @@ type Props = { back?: boolean | string; title?: string; subtitle?: string; right
 
 export function AppHeader({ back, title, subtitle, right, flat }: Props) {
   const router = useRouter();
-  const { dark, toggleDark } = useTheme();
+  const { setting, cycle } = useTheme();
+
+  const themeIcon = setting === "system" ? "theme-auto" : setting === "dark" ? "moon" : "sun";
+  const themeLabel =
+    setting === "system"
+      ? "Theme: following system — tap for light"
+      : setting === "light"
+        ? "Theme: light — tap for dark"
+        : "Theme: dark — tap to follow system";
 
   const onBack = () => {
     if (typeof back === "string") router.push(back);
@@ -51,12 +59,12 @@ export function AppHeader({ back, title, subtitle, right, flat }: Props) {
         {!back && (
           <button
             type="button"
-            onClick={toggleDark}
-            aria-label="Toggle dark mode"
+            onClick={cycle}
+            aria-label={themeLabel}
             className="grid h-9 w-9 place-items-center rounded-pill border border-rule bg-paper text-ink-2"
-            title={dark ? "Light mode" : "Dark mode"}
+            title={themeLabel}
           >
-            <Icon name={dark ? "sun" : "moon"} size={18} />
+            <Icon name={themeIcon} size={18} />
           </button>
         )}
       </div>
