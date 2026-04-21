@@ -24,34 +24,36 @@ export function TabBar({ planCount = 0 }: { planCount?: number }) {
 
   return (
     <nav
-      className="sticky bottom-0 z-10 flex flex-shrink-0 border-t border-rule bg-paper px-1 pt-[6px]"
+      className="sticky bottom-0 z-10 flex w-full flex-shrink-0 justify-center border-t border-rule bg-paper pt-[6px]"
       style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}
     >
-      {tabs.map((t) => {
-        const on = activeId === t.id;
-        return (
-          <Link
-            key={t.id}
-            href={t.href}
-            className={[
-              "relative flex flex-1 flex-col items-center gap-[2px] px-1 py-[6px]",
-              on ? "text-ink" : "text-ink-3",
-            ].join(" ")}
-          >
-            <span className="relative">
-              <Icon name={t.icon} size={22} />
-              {t.badge ? (
-                <span className="absolute -top-1 -right-2 grid h-4 min-w-4 place-items-center rounded-pill bg-accent px-1 text-[10px] font-semibold text-accent-ink">
-                  {t.badge}
-                </span>
-              ) : null}
-            </span>
-            <span className={["text-[10px] tracking-[0.1em]", on ? "font-semibold" : "font-medium"].join(" ")}>
-              {t.label.toUpperCase()}
-            </span>
-          </Link>
-        );
-      })}
+      <div className="mx-auto flex w-full max-w-2xl px-1">
+        {tabs.map((t) => {
+          const on = activeId === t.id;
+          return (
+            <Link
+              key={t.id}
+              href={t.href}
+              className={[
+                "relative flex flex-1 flex-col items-center gap-[2px] px-1 py-[6px]",
+                on ? "text-ink" : "text-ink-3",
+              ].join(" ")}
+            >
+              <span className="relative">
+                <Icon name={t.icon} size={22} />
+                {t.badge ? (
+                  <span className="absolute -top-1 -right-2 grid h-4 min-w-4 place-items-center rounded-pill bg-accent px-1 text-[10px] font-semibold text-accent-ink">
+                    {t.badge}
+                  </span>
+                ) : null}
+              </span>
+              <span className={["text-[10px] tracking-[0.1em]", on ? "font-semibold" : "font-medium"].join(" ")}>
+                {t.label.toUpperCase()}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }
