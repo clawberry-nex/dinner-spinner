@@ -431,8 +431,8 @@ export default function AdminPage() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader title="Admin" right={<LogoutButton />} />
-      <div className="flex-1 overflow-auto px-4 pb-20">
-      <div className="flex flex-col gap-8 py-6">
+      <div className="flex-1 overflow-auto pb-20">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-6">
 
       <section>
         <h2 className="mb-3 text-xl font-semibold">
