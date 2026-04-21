@@ -20,7 +20,8 @@ function relTime(iso: string | null): string {
   return `${Math.floor(d / 30)}mo ago`;
 }
 function formatQty(q: number): string {
-  return String(Math.round(q * 100) / 100).replace(/\.?0+$/, "");
+  const rounded = Math.round(q * 100) / 100;
+  return rounded.toFixed(2).replace(/\.?0+$/, "");
 }
 function fmtAvg(avg: number | null): string {
   if (avg == null) return "—";
