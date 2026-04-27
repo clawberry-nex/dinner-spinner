@@ -16,7 +16,32 @@ function installLocalStorageShim() {
   return store;
 }
 
+function installDocumentShim() {
+  let cookieJar = "";
+  (globalThis as unknown as { document: Document }).document = {
+    get cookie() {
+      return cookieJar;
+    },
+    set cookie(value: string) {
+      // Mimic just enough: split first ;, store name=value; ignore expiry/etc.
+      const [pair] = value.split(";");
+      const [name, val] = pair.split("=");
+      const trimmedName = name.trim();
+      const parts = cookieJar ? cookieJar.split("; ").filter(Boolean) : [];
+      const filtered = parts.filter((p) => !p.startsWith(`${trimmedName}=`));
+      filtered.push(`${trimmedName}=${val}`);
+      cookieJar = filtered.join("; ");
+    },
+  } as unknown as Document;
+  return {
+    clear: () => {
+      cookieJar = "";
+    },
+  };
+}
+
 const store = installLocalStorageShim();
+const cookies = installDocumentShim();
 
 const { isIOS, isStandalone, readDismissed, writeDismissed, shouldShowPrompt } =
   await import("./install-prompt.ts");
@@ -57,40 +82,46 @@ test("isStandalone returns true for standalone display-mode matches", () => {
   assert.equal(isStandalone(null, undefined), false);
 });
 
-test("readDismissed returns null when nothing is stored", () => {
+test("readDismissed returns false when nothing is stored", () => {
   store.clear();
-  assert.equal(readDismissed(), null);
+  cookies.clear();
+  assert.equal(readDismissed(), false);
 });
 
-test("writeDismissed round-trips a timestamp", () => {
+test("writeDismissed sets the flag in localStorage and a cookie backup", () => {
   store.clear();
-  const now = 1_700_000_000_000;
-  writeDismissed(now);
-  assert.equal(readDismissed(), now);
-});
-
-test("readDismissed tolerates corrupt values", () => {
-  store.clear();
-  store.set("installPromptDismissedAt", "not a number");
-  assert.equal(readDismissed(), null);
-  store.set("installPromptDismissedAt", JSON.stringify({ oops: true }));
-  assert.equal(readDismissed(), null);
+  cookies.clear();
+  writeDismissed();
+  assert.equal(readDismissed(), true);
+  assert.match(document.cookie, /installPromptDismissed=1/);
 });
 
 test("shouldShowPrompt hides when already installed", () => {
   store.clear();
-  assert.equal(shouldShowPrompt({ installed: true, now: 0 }), false);
+  cookies.clear();
+  assert.equal(shouldShowPrompt({ installed: true }), false);
 });
 
 test("shouldShowPrompt shows when not installed and never dismissed", () => {
   store.clear();
-  assert.equal(shouldShowPrompt({ installed: false, now: 100 }), true);
+  cookies.clear();
+  assert.equal(shouldShowPrompt({ installed: false }), true);
 });
 
-test("shouldShowPrompt hides within 30 days of dismissal, re-shows after", () => {
+test("shouldShowPrompt stays hidden once dismissed", () => {
   store.clear();
-  const day = 24 * 60 * 60 * 1000;
-  writeDismissed(0);
-  assert.equal(shouldShowPrompt({ installed: false, now: 29 * day }), false);
-  assert.equal(shouldShowPrompt({ installed: false, now: 31 * day }), true);
+  cookies.clear();
+  writeDismissed();
+  assert.equal(shouldShowPrompt({ installed: false }), false);
+});
+
+test("shouldShowPrompt falls back to the cookie when localStorage is wiped", () => {
+  store.clear();
+  cookies.clear();
+  writeDismissed();
+  // Simulate localStorage being cleared (Safari ITP, "clear on close", etc.)
+  // — cookie should still suppress the prompt.
+  store.clear();
+  assert.equal(readDismissed(), false);
+  assert.equal(shouldShowPrompt({ installed: false }), false);
 });

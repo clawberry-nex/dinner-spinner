@@ -2,8 +2,7 @@
 // component so it's unit-testable without a DOM — UA sniffing, dismissal
 // persistence, and the "show this now?" decision live here.
 
-const DISMISSED_KEY = "installPromptDismissedAt";
-const DISMISS_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const DISMISSED_KEY = "installPromptDismissed";
 
 export function isIOS(userAgent: string, maxTouchPoints = 0): boolean {
   if (/iPhone|iPad|iPod/.test(userAgent)) return true;
@@ -23,32 +22,43 @@ export function isStandalone(
   return false;
 }
 
-export function readDismissed(): number | null {
+export function readDismissed(): boolean {
   try {
-    const raw = localStorage.getItem(DISMISSED_KEY);
-    if (!raw) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
+    return localStorage.getItem(DISMISSED_KEY) === "1";
   } catch {
-    return null;
+    return false;
   }
 }
 
-export function writeDismissed(at: number): void {
+export function writeDismissed(): void {
   try {
-    localStorage.setItem(DISMISSED_KEY, String(at));
+    localStorage.setItem(DISMISSED_KEY, "1");
+  } catch {}
+  // Also drop a long-lived cookie as a backup — some browsers/profiles
+  // wipe localStorage between sessions but keep cookies, and we'd rather
+  // err on the side of not nagging.
+  try {
+    if (typeof document !== "undefined") {
+      const oneYear = 60 * 60 * 24 * 365;
+      document.cookie = `${DISMISSED_KEY}=1; max-age=${oneYear}; path=/; samesite=lax`;
+    }
   } catch {}
 }
 
-export function shouldShowPrompt({
-  installed,
-  now,
-}: {
-  installed: boolean;
-  now: number;
-}): boolean {
+function readDismissedCookie(): boolean {
+  try {
+    if (typeof document === "undefined") return false;
+    return document.cookie
+      .split("; ")
+      .some((c) => c.startsWith(`${DISMISSED_KEY}=1`));
+  } catch {
+    return false;
+  }
+}
+
+export function shouldShowPrompt({ installed }: { installed: boolean }): boolean {
   if (installed) return false;
-  const dismissedAt = readDismissed();
-  if (dismissedAt === null) return true;
-  return now - dismissedAt > DISMISS_COOLDOWN_MS;
+  if (readDismissed()) return false;
+  if (readDismissedCookie()) return false;
+  return true;
 }

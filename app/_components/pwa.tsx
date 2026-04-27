@@ -39,7 +39,7 @@ export function Pwa() {
       (window.navigator as Navigator & { standalone?: boolean }).standalone;
     const installed = isStandalone(standaloneMatch, iosStandalone);
 
-    if (!shouldShowPrompt({ installed, now: Date.now() })) return;
+    if (!shouldShowPrompt({ installed })) return;
 
     const ios = isIOS(window.navigator.userAgent, window.navigator.maxTouchPoints);
     if (ios) {
@@ -67,7 +67,7 @@ export function Pwa() {
   if (variant === "none") return null;
 
   const dismiss = () => {
-    writeDismissed(Date.now());
+    writeDismissed();
     setVariant("none");
     setDeferred(null);
   };
