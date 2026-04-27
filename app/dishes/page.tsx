@@ -184,7 +184,7 @@ export default function DishesPage() {
             {entries.length} in plan · <Link href="/plan" className="underline">view plan</Link>
           </div>
         )}
-        <ul className="mx-4 my-4 grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
+        <ul className="mx-4 my-4 grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
           {filtered.map((d) => {
             const inPlan = entries.some((en) => en.id === d.id);
             return (
@@ -235,10 +235,10 @@ export default function DishesPage() {
                   <div className="p-4">
                     <div className="flex items-start gap-3">
                       <div className="min-w-0 flex-1">
-                        <h3 className="m-0 truncate text-[22px] font-medium leading-tight tracking-[-0.01em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
+                        <h3 className="m-0 line-clamp-2 text-[22px] font-medium leading-tight tracking-[-0.01em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
                           {d.title}
                         </h3>
-                        {d.subtitle && <div className="mt-[2px] truncate text-[13px] italic text-ink-3">{d.subtitle}</div>}
+                        {d.subtitle && <div className="mt-[2px] line-clamp-1 text-[13px] italic text-ink-3">{d.subtitle}</div>}
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <button
