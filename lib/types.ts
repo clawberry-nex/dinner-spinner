@@ -41,6 +41,13 @@ export const DishInputSchema = z.object({
 
 export type DishInput = z.infer<typeof DishInputSchema>;
 
+// Partial body accepted by `PATCH /api/dishes/[id]`. Every field is
+// optional; the route fetches the existing row and merges the
+// provided fields on top of it. An explicit `null` is preserved (and
+// clears nullable columns); a missing key leaves the column alone.
+export const DishPatchSchema = DishInputSchema.partial();
+export type DishPatchInput = z.infer<typeof DishPatchSchema>;
+
 export type Dish = {
   id: number;
   title: string;
