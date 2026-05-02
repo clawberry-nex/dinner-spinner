@@ -45,7 +45,24 @@ export type DishInput = z.infer<typeof DishInputSchema>;
 // optional; the route fetches the existing row and merges the
 // provided fields on top of it. An explicit `null` is preserved (and
 // clears nullable columns); a missing key leaves the column alone.
-export const DishPatchSchema = DishInputSchema.partial();
+//
+// Defined explicitly rather than via `DishInputSchema.partial()` because
+// `.partial()` still substitutes the `.default([])` / `.default(4)` from
+// the source schema for omitted `tags` / `ingredients` / `baseServings`,
+// which would clobber the existing values on a partial patch.
+export const DishPatchSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  subtitle: z.string().trim().max(300).nullable().optional(),
+  recipe: z.string().max(20_000).nullable().optional(),
+  tags: z.array(z.string().trim().min(1).max(40)).optional(),
+  ingredients: z.array(IngredientSchema).optional(),
+  baseServings: z.number().int().positive().max(100).optional(),
+  favorite: z.boolean().optional(),
+  imageUrl: z.string().url().nullable().optional(),
+  emoji: z.string().trim().max(16).nullable().optional(),
+  accent: z.string().trim().max(60).nullable().optional(),
+  notes: z.string().max(5_000).nullable().optional(),
+});
 export type DishPatchInput = z.infer<typeof DishPatchSchema>;
 
 export type Dish = {
