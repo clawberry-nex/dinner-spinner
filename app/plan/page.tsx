@@ -8,8 +8,11 @@ import { Icon } from "../_components/icon";
 import {
   aggregateIngredients,
   aggregatePantryItems,
-  groupByName,
   formatShoppingGroup,
+  groupByName,
+  groupKey,
+  splicePantryToShopping,
+  type ShoppingGroup,
 } from "@/lib/ingredients";
 import {
   DAY_LABELS,
@@ -27,6 +30,10 @@ export default function PlanPage() {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [includeOptional, setIncludeOptional] = useState(false);
+  // Ephemeral: groups the user has flagged as "I'm actually out of this
+  // pantry staple" — moves them from the pantry section onto the shopping
+  // list (and into the Todoist push) for THIS planning session only.
+  const [outOfStock, setOutOfStock] = useState<ReadonlySet<string>>(new Set());
   const [authed, setAuthed] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pushMsg, setPushMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -74,8 +81,21 @@ export default function PlanPage() {
     }));
     const agg = aggregateIngredients(groups, { includeOptional });
     const pan = aggregatePantryItems(groups);
-    return { shopping: groupByName(agg), pantry: groupByName(pan) };
-  }, [dishList, includeOptional]);
+    return splicePantryToShopping(groupByName(agg), groupByName(pan), outOfStock);
+  }, [dishList, includeOptional, outOfStock]);
+
+  const markOutOfStock = (group: ShoppingGroup) =>
+    setOutOfStock((prev) => {
+      const next = new Set(prev);
+      next.add(groupKey(group));
+      return next;
+    });
+  const restoreToPantry = (group: ShoppingGroup) =>
+    setOutOfStock((prev) => {
+      const next = new Set(prev);
+      next.delete(groupKey(group));
+      return next;
+    });
 
   const pushTodoist = async () => {
     setPushing(true); setPushMsg(null);
@@ -182,7 +202,30 @@ export default function PlanPage() {
               </div>
               {shopping.length ? (
                 <ul className="mt-2 list-disc pl-5 text-[14px]">
-                  {shopping.map((g, i) => <li key={i} className="my-[2px]">{formatShoppingGroup(g)}</li>)}
+                  {shopping.map((g) => {
+                    const fromPantry = outOfStock.has(groupKey(g));
+                    return (
+                      <li key={groupKey(g)} className="my-[2px]">
+                        {formatShoppingGroup(g)}
+                        {fromPantry && (
+                          <>
+                            {" "}
+                            <span className="text-[11px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
+                              (from pantry)
+                            </span>{" "}
+                            <button
+                              type="button"
+                              onClick={() => restoreToPantry(g)}
+                              aria-label={`Move ${g.name} back to pantry`}
+                              className="text-[11px] text-ink-3 hover:underline"
+                            >
+                              undo
+                            </button>
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <div className="mt-2 text-[13px] text-ink-3">No ingredients across these dishes.</div>
@@ -208,11 +251,20 @@ export default function PlanPage() {
                   Skipped from the shopping list because you already have them. Glance over to make sure you&rsquo;re not running low.
                 </p>
                 <ul className="mt-2 list-disc pl-5 text-[14px] italic text-ink-3">
-                  {pantry.map((g, i) => (
-                    <li key={i} className="my-[2px]">
+                  {pantry.map((g) => (
+                    <li key={groupKey(g)} className="my-[2px] flex items-center gap-2">
                       <span className="not-italic text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
                         {formatShoppingGroup(g)}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => markOutOfStock(g)}
+                        aria-label={`Add ${g.name} to shopping list`}
+                        title="I'm actually out of this — add to shopping list"
+                        className="rounded-pill border border-rule px-[8px] py-[1px] text-[10px] not-italic uppercase tracking-[0.08em] text-ink-3 hover:border-ink-3 hover:text-ink-2"
+                      >
+                        + to list
+                      </button>
                     </li>
                   ))}
                 </ul>

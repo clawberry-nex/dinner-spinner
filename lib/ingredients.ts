@@ -4,7 +4,7 @@ import {
   getCategory,
   toCanonical,
   type UnitCategory,
-} from "./units";
+} from "./units.ts";
 
 // applyPantryDefaults lives in lib/pantry.ts (server-only, DB-backed).
 // This file stays pure so client components can import from it.
@@ -183,7 +183,7 @@ export function groupByName(list: Ingredient[]): ShoppingGroup[] {
   for (const ing of list) {
     const name = ing.name.trim();
     const descriptor = ing.descriptor?.trim() || null;
-    const key = `${name.toLowerCase()}\u0000${(descriptor ?? "").toLowerCase()}`;
+    const key = groupKey({ name, descriptor });
     const existing = groups.get(key);
     if (existing) {
       existing.items.push(ing);
@@ -192,6 +192,38 @@ export function groupByName(list: Ingredient[]): ShoppingGroup[] {
     }
   }
   return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Stable identifier for a ShoppingGroup. Used by /plan's "I'm actually
+// out of this pantry item" toggle so it can mark a group independently of
+// the ingredient list. Mirrors groupByName's internal key so they stay
+// in lockstep.
+export function groupKey(group: Pick<ShoppingGroup, "name" | "descriptor">): string {
+  const name = group.name.trim().toLowerCase();
+  const descriptor = (group.descriptor ?? "").trim().toLowerCase();
+  return `${name}\u0000${descriptor}`;
+}
+
+// Move pantry groups whose key is in `outOfStock` into the shopping list.
+// Used by /plan when the user spots they're actually out of a pantry
+// staple while reviewing the plan. Pure / ephemeral — no persistence.
+export function splicePantryToShopping(
+  shopping: ShoppingGroup[],
+  pantry: ShoppingGroup[],
+  outOfStock: ReadonlySet<string>,
+): { shopping: ShoppingGroup[]; pantry: ShoppingGroup[] } {
+  if (outOfStock.size === 0) return { shopping, pantry };
+  const moved: ShoppingGroup[] = [];
+  const remaining: ShoppingGroup[] = [];
+  for (const g of pantry) {
+    if (outOfStock.has(groupKey(g))) moved.push(g);
+    else remaining.push(g);
+  }
+  if (moved.length === 0) return { shopping, pantry };
+  const nextShopping = [...shopping, ...moved].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  return { shopping: nextShopping, pantry: remaining };
 }
 
 // Shopping-list format for a group: "2 can + 400 ml coconut milk" when
