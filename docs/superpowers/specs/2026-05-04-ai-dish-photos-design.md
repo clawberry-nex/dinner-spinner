@@ -83,7 +83,7 @@ read dish row
 → 200 { imageUrl }
 ```
 
-Errors: provider failure → 502 with the provider's message, storage failure → 500, auth fail → 401, missing dish → 404.
+Errors: any failure in the prompt → provider → storage chain → 502 with the underlying error message verbatim (so the admin UI toast surfaces a clear cause). Auth fail → 401, missing dish → 404, non-numeric id → 400.
 
 ### `app/api/dishes/images/backfill/route.ts`
 
