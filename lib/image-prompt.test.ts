@@ -2,15 +2,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildImagePrompt, IMAGE_STYLE_PREAMBLE } from "./image-prompt.ts";
 
-test("buildImagePrompt always starts with the house-style preamble", () => {
+test("buildImagePrompt ends with the house-style preamble", () => {
+  // Image models weight the front of the prompt more heavily, so the
+  // food leads and the styling preamble trails.
   const prompt = buildImagePrompt({
     title: "Bobotie",
     subtitle: null,
     imageDescription: null,
   });
   assert.ok(
-    prompt.startsWith(IMAGE_STYLE_PREAMBLE),
-    "preamble must lead the prompt",
+    prompt.endsWith(IMAGE_STYLE_PREAMBLE),
+    "preamble must trail the prompt",
   );
 });
 

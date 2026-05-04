@@ -19,11 +19,13 @@ function stripMimeParams(value: string): string {
 const NOT_CONFIGURED =
   "image generation not configured: connect Replicate via Vercel (sets REPLICATE_API_TOKEN), or set IMAGE_GEN_URL and IMAGE_GEN_TOKEN";
 
-// Replicate's flux-schnell — fast (~2s), cheap ($0.003/image), good
-// editorial output. To swap models, change this constant only — the
-// API surface and response shape are the same across Replicate's
-// hosted model endpoints.
-const REPLICATE_MODEL = "black-forest-labs/flux-schnell";
+// Replicate's flux-1.1-pro — slower (~5–10s) and pricier ($0.04/image)
+// than flux-schnell, but materially better at recognising specific
+// regional dishes and following long descriptive prompts. To swap
+// models, change this constant only — Replicate's hosted-model API
+// surface is uniform across Flux variants. flux-schnell is a solid
+// cheap fallback if generation cost ever becomes a concern.
+const REPLICATE_MODEL = "black-forest-labs/flux-1.1-pro";
 
 export class StubProvider implements ImageProvider {
   async generate(_prompt: string): Promise<{ bytes: Uint8Array; mime: string }> {
