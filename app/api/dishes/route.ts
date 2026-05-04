@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { after } from "next/server";
 import { sql } from "@/lib/db";
 import { DishInputSchema, rowToDish } from "@/lib/types";
 import {
@@ -7,6 +8,9 @@ import {
   verifySessionCookieValue,
 } from "@/lib/auth";
 import { applyPantryDefaults } from "@/lib/pantry";
+import { buildImagePrompt } from "@/lib/image-prompt";
+import { getProvider } from "@/lib/image-provider";
+import { uploadDishImage } from "@/lib/image-storage";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -92,5 +96,35 @@ export async function POST(request: Request) {
     )
     RETURNING *
   `;
-  return Response.json(rowToDish(rows[0]), { status: 201 });
+  const dish = rowToDish(rows[0]);
+
+  // Auto-generate a hero photo for new dishes that didn't ship with one.
+  // Runs AFTER the response is sent so the create call returns immediately
+  // — Next's after() keeps the serverless function alive past the response
+  // until the promise resolves. Failures are logged but don't propagate;
+  // the admin can always click Generate manually.
+  if (dish.imageUrl == null) {
+    after(async () => {
+      try {
+        const prompt = buildImagePrompt({
+          title: dish.title,
+          subtitle: dish.subtitle,
+          imageDescription: dish.imageDescription,
+        });
+        const { bytes, mime } = await getProvider().generate(prompt);
+        const url = await uploadDishImage(dish.id, bytes, mime);
+        await sql`
+          UPDATE dishes
+             SET image_url = ${url},
+                 updated_at = now()
+           WHERE id = ${dish.id}
+        `;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`auto image-gen failed for dish ${dish.id}:`, err);
+      }
+    });
+  }
+
+  return Response.json(dish, { status: 201 });
 }
