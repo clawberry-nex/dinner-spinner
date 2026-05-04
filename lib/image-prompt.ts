@@ -10,7 +10,7 @@ import type { Dish } from "./types.ts";
 export const IMAGE_STYLE_PREAMBLE = [
   "Photorealistic editorial food photography.",
   "Square 1:1 crop, top-down overhead angle.",
-  "A single serving plated on a matte off-white ceramic plate, centered.",
+  "A single serving plated on a classic Wedgwood Edme creamware plate — cream-coloured matte porcelain with a wide flat rim of vertical fluted ribbing — centered.",
   "The plate rests on a textured dark linen tablecloth in muted earth tones.",
   "Soft, diffused northern daylight from the upper-left,",
   "gentle natural shadows, no harsh highlights, no studio glare.",
