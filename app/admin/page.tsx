@@ -43,6 +43,7 @@ type Draft = {
   tagsInput: string;
   baseServings: string;
   imageUrl: string;
+  imageDescription: string;
   emoji: string;
   accent: string;
   favorite: boolean;
@@ -58,6 +59,7 @@ const EMPTY_DRAFT: Draft = {
   tagsInput: "",
   baseServings: "4",
   imageUrl: "",
+  imageDescription: "",
   emoji: "",
   accent: "",
   favorite: false,
@@ -74,6 +76,7 @@ function dishToDraft(d: Dish): Draft {
     tagsInput: d.tags.join(", "),
     baseServings: String(d.baseServings),
     imageUrl: d.imageUrl ?? "",
+    imageDescription: d.imageDescription ?? "",
     emoji: d.emoji ?? "",
     accent: d.accent ?? "",
     favorite: d.favorite,
@@ -128,6 +131,7 @@ function draftToPayload(d: Draft) {
     ingredients,
     baseServings: Number(d.baseServings) || 4,
     imageUrl: d.imageUrl.trim() || null,
+    imageDescription: d.imageDescription.trim() || null,
     emoji: d.emoji.trim() || null,
     accent: d.accent.trim() || null,
     favorite: d.favorite,
@@ -597,6 +601,23 @@ export default function AdminPage() {
                 className="mt-2 h-32 w-auto rounded border border-zinc-200 object-cover dark:border-zinc-800"
               />
             )}
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium">
+              Image description{" "}
+              <span className="text-xs font-normal text-zinc-500">
+                (used as the image-gen prompt; not shown publicly)
+              </span>
+            </span>
+            <textarea
+              value={draft.imageDescription}
+              onChange={(e) =>
+                setDraft({ ...draft, imageDescription: e.target.value })
+              }
+              rows={3}
+              placeholder="e.g. a square of golden-brown spiced mince topped with a glossy yellow egg custard, two bay leaves on top"
+              className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
+            />
           </label>
           <label className="flex flex-col gap-1 text-sm font-medium">
             Emoji

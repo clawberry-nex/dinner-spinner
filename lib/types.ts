@@ -37,6 +37,10 @@ export const DishInputSchema = z.object({
   // if there are mushrooms"). Distinct from cook_log.note, which is
   // a timestamped per-cook entry.
   notes: z.string().max(5_000).nullable().optional(),
+  // AI-generated description of how the plated dish actually looks.
+  // When non-null, used as the image-gen prompt input instead of the
+  // user-facing subtitle. Hidden from the public dish view.
+  imageDescription: z.string().max(2_000).nullable().optional(),
 });
 
 export type DishInput = z.infer<typeof DishInputSchema>;
@@ -62,6 +66,7 @@ export const DishPatchSchema = z.object({
   emoji: z.string().trim().max(16).nullable().optional(),
   accent: z.string().trim().max(60).nullable().optional(),
   notes: z.string().max(5_000).nullable().optional(),
+  imageDescription: z.string().max(2_000).nullable().optional(),
 });
 export type DishPatchInput = z.infer<typeof DishPatchSchema>;
 
@@ -78,6 +83,7 @@ export type Dish = {
   emoji: string | null;
   accent: string | null;
   notes: string | null;
+  imageDescription: string | null;
   lastCookedAt: string | null;
   averageRating: number | null;
   ratingCount: number;
@@ -101,6 +107,7 @@ export function rowToDish(row: Record<string, unknown>): Dish {
     emoji: (row.emoji as string | null) ?? null,
     accent: (row.accent as string | null) ?? null,
     notes: (row.notes as string | null) ?? null,
+    imageDescription: (row.image_description as string | null) ?? null,
     lastCookedAt: row.last_cooked_at ? String(row.last_cooked_at) : null,
     averageRating: avg == null ? null : Number(avg),
     ratingCount: count == null ? 0 : Number(count),

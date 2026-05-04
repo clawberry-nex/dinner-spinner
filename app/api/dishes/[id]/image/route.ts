@@ -40,6 +40,7 @@ export async function POST(
     const prompt = buildImagePrompt({
       title: dish.title,
       subtitle: dish.subtitle,
+      imageDescription: dish.imageDescription,
     });
     const { bytes, mime } = await getProvider().generate(prompt);
     imageUrl = await uploadDishImage(dishId, bytes, mime);

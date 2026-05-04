@@ -74,7 +74,7 @@ export async function POST(request: Request) {
   const rows = await sql`
     INSERT INTO dishes (
       title, subtitle, recipe, tags, ingredients, base_servings,
-      favorite, image_url, emoji, accent, notes
+      favorite, image_url, emoji, accent, notes, image_description
     )
     VALUES (
       ${d.title},
@@ -87,7 +87,8 @@ export async function POST(request: Request) {
       ${d.imageUrl ?? null},
       ${d.emoji ?? null},
       ${d.accent ?? null},
-      ${d.notes ?? null}
+      ${d.notes ?? null},
+      ${d.imageDescription ?? null}
     )
     RETURNING *
   `;

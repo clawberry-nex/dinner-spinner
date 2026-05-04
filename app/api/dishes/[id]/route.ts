@@ -91,6 +91,10 @@ export async function PATCH(
     emoji: u.emoji === undefined ? existing.emoji : u.emoji,
     accent: u.accent === undefined ? existing.accent : u.accent,
     notes: u.notes === undefined ? existing.notes : u.notes,
+    imageDescription:
+      u.imageDescription === undefined
+        ? existing.imageDescription
+        : u.imageDescription,
   };
 
   const rows = await sql`
@@ -106,6 +110,7 @@ export async function PATCH(
       emoji = ${merged.emoji ?? null},
       accent = ${merged.accent ?? null},
       notes = ${merged.notes ?? null},
+      image_description = ${merged.imageDescription ?? null},
       updated_at = now()
     WHERE id = ${Number(id)}
     RETURNING *

@@ -14,9 +14,10 @@ const BackupDishSchema = z.object({
   imageUrl: z.string().nullable(),
   emoji: z.string().nullable(),
   accent: z.string().nullable(),
-  // Nullable+optional so envelopes exported before this field existed
+  // Nullable+optional so envelopes exported before these fields existed
   // still parse (back-compat).
   notes: z.string().nullable().optional(),
+  imageDescription: z.string().nullable().optional(),
   lastCookedAt: z.string().nullable(),
   averageRating: z.number().nullable(),
   ratingCount: z.number().int().nonnegative(),

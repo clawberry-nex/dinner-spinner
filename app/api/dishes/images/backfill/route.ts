@@ -25,7 +25,11 @@ async function generateForDishId(dishId: number): Promise<void> {
   const rows = await sql`SELECT * FROM dishes WHERE id = ${dishId}`;
   if (rows.length === 0) throw new Error("dish not found");
   const dish = rowToDish(rows[0]);
-  const prompt = buildImagePrompt({ title: dish.title, subtitle: dish.subtitle });
+  const prompt = buildImagePrompt({
+    title: dish.title,
+    subtitle: dish.subtitle,
+    imageDescription: dish.imageDescription,
+  });
   const { bytes, mime } = await getProvider().generate(prompt);
   const imageUrl = await uploadDishImage(dishId, bytes, mime);
   await sql`

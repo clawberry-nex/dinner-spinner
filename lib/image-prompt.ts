@@ -22,9 +22,16 @@ export const IMAGE_STYLE_PREAMBLE = [
 ].join(" ");
 
 export function buildImagePrompt(
-  dish: Pick<Dish, "title" | "subtitle">,
+  dish: Pick<Dish, "title" | "subtitle" | "imageDescription">,
 ): string {
   const title = dish.title.trim();
+  const imageDescription = dish.imageDescription?.trim();
+  // Prefer the AI-generated "what's on the plate" description when
+  // present — it's much more concrete than the user-facing subtitle.
+  // Falls back to title + subtitle, then title alone.
+  if (imageDescription) {
+    return `${IMAGE_STYLE_PREAMBLE} The dish: ${title} — ${imageDescription}.`;
+  }
   const subtitle = dish.subtitle?.trim();
   const description = subtitle ? `${title} — ${subtitle}` : title;
   return `${IMAGE_STYLE_PREAMBLE} The dish: ${description}.`;
