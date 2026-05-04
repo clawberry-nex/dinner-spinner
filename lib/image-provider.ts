@@ -10,6 +10,12 @@ export interface ImageProvider {
   generate(prompt: string): Promise<{ bytes: Uint8Array; mime: string }>;
 }
 
+// Strip charset / quality / etc. parameters from a Content-Type header
+// so we can pass a bare MIME (e.g. "image/jpeg") to Vercel Blob's put().
+function stripMimeParams(value: string): string {
+  return value.split(";")[0].trim();
+}
+
 const NOT_CONFIGURED =
   "image generation not configured: set IMAGE_GEN_URL and IMAGE_GEN_TOKEN in env";
 
@@ -47,7 +53,7 @@ export class HttpProvider implements ImageProvider {
     // Shape A: server streams the image directly.
     if (contentType.startsWith("image/")) {
       const buf = new Uint8Array(await res.arrayBuffer());
-      return { bytes: buf, mime: contentType };
+      return { bytes: buf, mime: stripMimeParams(contentType) };
     }
     // Shape B: server returns JSON with a { url } pointing to the image.
     if (contentType.includes("json")) {
@@ -55,6 +61,8 @@ export class HttpProvider implements ImageProvider {
       if (!json.url) {
         throw new Error("image provider JSON missing { url } field");
       }
+      // Pre-signed URLs (Replicate, fal.ai) are self-authenticating — no auth header needed.
+      // If your provider requires auth on the follow-up URL, pass this.token here.
       const imgRes = await fetch(json.url);
       if (!imgRes.ok) {
         throw new Error(
@@ -62,8 +70,9 @@ export class HttpProvider implements ImageProvider {
         );
       }
       const buf = new Uint8Array(await imgRes.arrayBuffer());
-      const followMime =
-        imgRes.headers.get("content-type") ?? "image/jpeg";
+      const followMime = stripMimeParams(
+        imgRes.headers.get("content-type") ?? "image/jpeg",
+      );
       return { bytes: buf, mime: followMime };
     }
     throw new Error(
