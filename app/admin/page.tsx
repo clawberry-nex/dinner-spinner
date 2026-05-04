@@ -160,6 +160,8 @@ export default function AdminPage() {
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [imageMsg, setImageMsg] = useState<string | null>(null);
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
@@ -202,6 +204,38 @@ export default function AdminPage() {
       setImageMsg(err instanceof Error ? err.message : "Generation failed");
     } finally {
       setGeneratingImage(false);
+    }
+  }
+
+  async function bulkGenerate() {
+    if (!confirm("Generate AI photos for every dish missing one? This will use credits.")) return;
+    setBulkRunning(true);
+    setBulkMsg("Generating…");
+    try {
+      const res = await fetch("/api/dishes/images/backfill", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ overwrite: false }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: number;
+        failed?: Array<{ dishId: number; error: string }>;
+        total?: number;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      const failedCount = data.failed?.length ?? 0;
+      setBulkMsg(`Generated ${data.ok ?? 0} / ${data.total ?? 0}. ${failedCount} failed.`);
+      if (data.failed && data.failed.length > 0) {
+        // eslint-disable-next-line no-console
+        console.warn("Bulk image-gen failures:", data.failed);
+      }
+      // Refresh the dishes list so the new image_urls show up.
+      await reload();
+    } catch (err) {
+      setBulkMsg(err instanceof Error ? err.message : "Bulk generation failed");
+    } finally {
+      setBulkRunning(false);
     }
   }
 
@@ -901,7 +935,19 @@ export default function AdminPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-xl font-semibold">All dishes ({dishes.length})</h2>
+        <div className="mb-3 flex items-center gap-3">
+          <h2 className="text-xl font-semibold">All dishes ({dishes.length})</h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            type="button"
+            onClick={bulkGenerate}
+            disabled={bulkRunning}
+          >
+            {bulkRunning ? "Generating…" : "Generate missing images"}
+          </Button>
+          {bulkMsg && <span className="text-sm text-ink-3">{bulkMsg}</span>}
+        </div>
         {dishes.length === 0 ? (
           <p className="text-zinc-500">No dishes yet.</p>
         ) : (
