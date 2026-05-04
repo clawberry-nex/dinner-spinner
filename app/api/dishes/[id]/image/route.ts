@@ -48,11 +48,15 @@ export async function POST(
     return Response.json({ error: message }, { status: 502 });
   }
 
-  await sql`
+  const updated = await sql`
     UPDATE dishes
        SET image_url = ${imageUrl},
            updated_at = now()
      WHERE id = ${dishId}
+    RETURNING id
   `;
+  if (updated.length === 0) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
   return Response.json({ imageUrl });
 }
