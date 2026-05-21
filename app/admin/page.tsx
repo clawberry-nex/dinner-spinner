@@ -97,6 +97,37 @@ function dishToDraft(d: Dish): Draft {
   };
 }
 
+function dishInputToDraft(d: import("@/lib/types").DishInput): Draft {
+  return {
+    id: null,
+    title: d.title,
+    subtitle: d.subtitle ?? "",
+    recipe: d.recipe ?? "",
+    notes: d.notes ?? "",
+    tagsInput: (d.tags ?? []).join(", "),
+    baseServings: String(d.baseServings ?? 4),
+    imageUrl: d.imageUrl ?? "",
+    imageDescription: d.imageDescription ?? "",
+    emoji: d.emoji ?? "",
+    accent: d.accent ?? "",
+    favorite: d.favorite ?? false,
+    ingredients:
+      (d.ingredients ?? []).length > 0
+        ? d.ingredients!.map((i) => ({
+            quantity: String(i.quantity),
+            unit: i.unit ?? "",
+            descriptor: i.descriptor ?? "",
+            name: i.name,
+            preparation: i.preparation ?? "",
+            pantry: !!i.pantry,
+            fixed: i.scalable === false,
+            optional: !!i.optional,
+            alternativesInput: (i.alternatives ?? []).join(", "),
+          }))
+        : [{ ...EMPTY_INGREDIENT }],
+  };
+}
+
 function draftToPayload(d: Draft) {
   const ingredients: Ingredient[] = d.ingredients
     .filter((i) => i.name.trim().length > 0)
@@ -406,6 +437,23 @@ export default function AdminPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     reload().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("fromIngest") !== "1") return;
+    const raw = window.sessionStorage.getItem("dinner-spinner:ingest-draft");
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as import("@/lib/types").DishInput;
+      setDraft(dishInputToDraft(parsed));
+    } catch {
+      // Bad JSON in sessionStorage is non-fatal — just leave the draft empty.
+    }
+    window.sessionStorage.removeItem("dinner-spinner:ingest-draft");
+    url.searchParams.delete("fromIngest");
+    window.history.replaceState({}, "", url.toString());
   }, []);
 
   async function save(e: React.FormEvent) {
@@ -958,6 +1006,12 @@ export default function AdminPage() {
       <section>
         <div className="mb-3 flex items-center gap-3">
           <h2 className="text-xl font-semibold">All dishes ({dishes.length})</h2>
+          <a
+            href="/admin/ingest"
+            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+          >
+            Ingest →
+          </a>
           <Button
             variant="ghost"
             size="sm"
