@@ -1,17 +1,6 @@
-import { cookies } from "next/headers";
 import { z } from "zod";
 import { sql } from "@/lib/db";
-import {
-  ADMIN_COOKIE_NAME,
-  checkApiToken,
-  verifySessionCookieValue,
-} from "@/lib/auth";
-
-async function isAuthorized(request: Request): Promise<boolean> {
-  if (checkApiToken(request.headers.get("authorization"))) return true;
-  const jar = await cookies();
-  return verifySessionCookieValue(jar.get(ADMIN_COOKIE_NAME)?.value);
-}
+import { resolveUserId } from "@/lib/auth-helpers";
 
 const PlanEntrySchema = z.object({
   id: z.number().int().positive(),
@@ -24,11 +13,12 @@ const BodySchema = z.object({
   entries: z.array(PlanEntrySchema),
 });
 
-export async function GET(request: Request) {
-  if (!(await isAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const rows = await sql`SELECT entries, updated_at FROM meal_plan WHERE id = 1`;
+export async function GET(req: Request) {
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const rows = await sql`
+    SELECT entries, updated_at FROM meal_plan WHERE user_id = ${userId}
+  `;
   if (rows.length === 0) {
     return Response.json({ entries: [], updatedAt: null });
   }
@@ -38,14 +28,13 @@ export async function GET(request: Request) {
   });
 }
 
-export async function PUT(request: Request) {
-  if (!(await isAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function PUT(req: Request) {
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   let body: unknown;
   try {
-    body = await request.json();
+    body = await req.json();
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -58,11 +47,16 @@ export async function PUT(request: Request) {
     );
   }
 
+  // Requires the (user_id) PK from db/lockdown.sql. Pre-lockdown, the
+  // legacy single-row meal_plan still has id=1 with no user_id; the
+  // backfill assigns it to the seed owner, then lockdown drops `id` and
+  // sets user_id as the PK. After that, this upsert works for every user.
   const rows = await sql`
-    UPDATE meal_plan SET
-      entries = ${JSON.stringify(parsed.data.entries)}::jsonb,
-      updated_at = now()
-    WHERE id = 1
+    INSERT INTO meal_plan (user_id, entries)
+    VALUES (${userId}, ${JSON.stringify(parsed.data.entries)}::jsonb)
+    ON CONFLICT (user_id) DO UPDATE
+      SET entries = EXCLUDED.entries,
+          updated_at = now()
     RETURNING entries, updated_at
   `;
   return Response.json({
