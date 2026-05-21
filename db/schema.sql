@@ -73,3 +73,30 @@ DO $$ BEGIN
       CHECK (rating IS NULL OR rating BETWEEN 1 AND 5);
   END IF;
 END $$;
+
+-- Multi-user auth. uuid PK via pgcrypto's gen_random_uuid().
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS users (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email           text NOT NULL UNIQUE,
+  name            text,
+  image           text,
+  -- bcrypt hash. Null for OAuth-only users.
+  password_hash   text,
+  -- Per-user Todoist creds. Env vars are fallback for the seed owner only.
+  todoist_token   text,
+  todoist_project text,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+-- Add nullable user_id to every domain table. Backfill populates them;
+-- a later migration (db/lockdown.sql) flips them to NOT NULL.
+ALTER TABLE dishes        ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE pantry_names  ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE meal_plan     ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE cook_log      ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES users(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS dishes_user_id_idx       ON dishes (user_id);
+CREATE INDEX IF NOT EXISTS pantry_names_user_id_idx ON pantry_names (user_id);
+CREATE INDEX IF NOT EXISTS cook_log_user_id_idx     ON cook_log (user_id);
