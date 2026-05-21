@@ -34,13 +34,11 @@ export default function PlanPage() {
   // pantry staple" — moves them from the pantry section onto the shopping
   // list (and into the Todoist push) for THIS planning session only.
   const [outOfStock, setOutOfStock] = useState<ReadonlySet<string>>(new Set());
-  const [authed, setAuthed] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pushMsg, setPushMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     fetch("/api/dishes").then((r) => r.json()).then(setDishes).catch(() => {});
-    fetch("/api/auth/check").then((r) => r.json()).then((j) => setAuthed(!!j?.authenticated)).catch(() => {});
     try {
       const raw = localStorage.getItem("mealPlan");
       if (raw) setEntries(JSON.parse(raw));
@@ -230,7 +228,7 @@ export default function PlanPage() {
               ) : (
                 <div className="mt-2 text-[13px] text-ink-3">No ingredients across these dishes.</div>
               )}
-              {shopping.length > 0 && authed ? (
+              {shopping.length > 0 ? (
                 <div className="mt-3">
                   <Button variant="primary" size="md" onClick={pushTodoist} disabled={pushing}>
                     {pushing ? "Sending…" : "Send to Todoist"}

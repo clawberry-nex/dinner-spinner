@@ -127,6 +127,9 @@ export async function POST(req: Request) {
     )
   `;
 
+  // Both ON CONFLICT clauses below require the post-lockdown PK shape
+  // (pantry_names PK = (user_id, name); meal_plan PK = (user_id)).
+  // db/lockdown.sql ships these. Pre-lockdown they'll error.
   for (const name of envelope.pantryNames) {
     const normalized = name.trim().toLowerCase();
     if (!normalized) continue;

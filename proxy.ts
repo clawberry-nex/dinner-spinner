@@ -19,6 +19,14 @@ export default auth((req) => {
   if (req.auth) return;
 
   const isApi = pathname.startsWith("/api/");
+
+  // Bearer-token bypass for API routes. The route handler does the actual
+  // constant-time validation via resolveUserId (lib/auth-helpers.ts);
+  // the proxy just needs to let the request through.
+  if (isApi && req.headers.get("authorization")?.startsWith("Bearer ")) {
+    return;
+  }
+
   if (isApi) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { rowToCookLogEntry, rowToDish } from "@/lib/types";
 import DishView from "./dish-view";
@@ -6,20 +7,26 @@ import DishView from "./dish-view";
 export default async function DishPage(props: PageProps<"/dishes/[id]">) {
   const { id } = await props.params;
   const dishId = Number(id);
+  if (!Number.isFinite(dishId)) notFound();
+
+  const session = await auth();
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+  if (!userId) notFound();
+
   const rows = await sql`
     SELECT d.*,
       (SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id) AS last_cooked_at,
       (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
       (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
     FROM dishes d
-    WHERE d.id = ${dishId}
+    WHERE d.id = ${dishId} AND d.user_id = ${userId}
   `;
   if (rows.length === 0) notFound();
   const dish = rowToDish(rows[0]);
   const logRows = await sql`
     SELECT id, cooked_at, rating, note
     FROM cook_log
-    WHERE dish_id = ${dishId}
+    WHERE dish_id = ${dishId} AND user_id = ${userId}
     ORDER BY cooked_at DESC
     LIMIT 100
   `;

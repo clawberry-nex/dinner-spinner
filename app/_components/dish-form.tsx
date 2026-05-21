@@ -178,7 +178,7 @@ function draftToPayload(d: Draft) {
 export type DishFormProps = {
   /** undefined = create mode; defined = edit mode (dish already exists) */
   initial?: Dish;
-  /** Pre-fill from /admin/ingest via sessionStorage */
+  /** Pre-fill draft (used by /add when the ingest flow returns a parsed dish) */
   prefillDraft?: DishInput;
   /** Called with the saved dish after a successful POST or PATCH */
   onSaved?: (dish: Dish) => void;
@@ -256,26 +256,6 @@ export default function DishForm({
       })
       .catch(() => {});
   }, []);
-
-  // Pick up an ingest-prefill draft from sessionStorage when arriving from
-  // /admin/ingest with ?fromIngest=1 (only runs when initial is undefined).
-  useEffect(() => {
-    if (initial) return;
-    if (typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("fromIngest") !== "1") return;
-    const raw = window.sessionStorage.getItem("dinner-spinner:ingest-draft");
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as DishInput;
-      setDraft(dishInputToDraft(parsed));
-    } catch {
-      // Bad JSON in sessionStorage is non-fatal — just leave the draft empty.
-    }
-    window.sessionStorage.removeItem("dinner-spinner:ingest-draft");
-    url.searchParams.delete("fromIngest");
-    window.history.replaceState({}, "", url.toString());
-  }, [initial]);
 
   // ------------------------------------------------------------------
   // Handlers

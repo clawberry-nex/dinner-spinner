@@ -47,29 +47,20 @@ async function main() {
 
   console.log(`Seed owner user_id = ${userId}`);
 
-  console.log("Updating dishes...");
-  const d = await sql`
-    UPDATE dishes SET user_id = ${userId} WHERE user_id IS NULL RETURNING id
-  `;
-  console.log(`  ${d.length} dishes updated`);
-
-  console.log("Updating pantry_names...");
-  const p = await sql`
-    UPDATE pantry_names SET user_id = ${userId} WHERE user_id IS NULL RETURNING name
-  `;
-  console.log(`  ${p.length} pantry names updated`);
-
-  console.log("Updating cook_log...");
-  const c = await sql`
-    UPDATE cook_log SET user_id = ${userId} WHERE user_id IS NULL RETURNING id
-  `;
-  console.log(`  ${c.length} cook-log rows updated`);
-
-  console.log("Updating legacy meal_plan row...");
-  const m = await sql`
-    UPDATE meal_plan SET user_id = ${userId} WHERE user_id IS NULL RETURNING entries
-  `;
-  console.log(`  ${m.length} meal_plan row(s) updated`);
+  // Run all four UPDATEs in a single transaction so a mid-script failure
+  // rolls back cleanly, leaving every row with user_id IS NULL so a retry
+  // is safe.
+  const results = await sql.transaction([
+    sql`UPDATE dishes       SET user_id = ${userId} WHERE user_id IS NULL RETURNING id`,
+    sql`UPDATE pantry_names SET user_id = ${userId} WHERE user_id IS NULL RETURNING name`,
+    sql`UPDATE cook_log     SET user_id = ${userId} WHERE user_id IS NULL RETURNING id`,
+    sql`UPDATE meal_plan    SET user_id = ${userId} WHERE user_id IS NULL RETURNING entries`,
+  ]);
+  const [dishesRows, pantryRows, cookLogRows, mealPlanRows] = results;
+  console.log(`  ${dishesRows.length} dishes updated`);
+  console.log(`  ${pantryRows.length} pantry names updated`);
+  console.log(`  ${cookLogRows.length} cook-log rows updated`);
+  console.log(`  ${mealPlanRows.length} meal_plan row(s) updated`);
 
   console.log("Done. Next step: apply db/lockdown.sql to flip user_id columns NOT NULL.");
 }
