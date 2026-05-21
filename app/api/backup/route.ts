@@ -1,10 +1,5 @@
-import { cookies } from "next/headers";
 import { sql } from "@/lib/db";
-import {
-  ADMIN_COOKIE_NAME,
-  checkApiToken,
-  verifySessionCookieValue,
-} from "@/lib/auth";
+import { resolveUserId } from "@/lib/auth-helpers";
 import { rowToDish } from "@/lib/types";
 import {
   buildBackup,
@@ -13,16 +8,9 @@ import {
 } from "@/lib/backup";
 import pkg from "../../../package.json" with { type: "json" };
 
-async function isAuthorized(request: Request): Promise<boolean> {
-  if (checkApiToken(request.headers.get("authorization"))) return true;
-  const jar = await cookies();
-  return verifySessionCookieValue(jar.get(ADMIN_COOKIE_NAME)?.value);
-}
-
-export async function GET(request: Request) {
-  if (!(await isAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function GET(req: Request) {
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const dishRows = await sql`
     SELECT d.*,
@@ -30,10 +18,15 @@ export async function GET(request: Request) {
       (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
       (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
     FROM dishes d
+    WHERE d.user_id = ${userId}
     ORDER BY id ASC
   `;
-  const pantryRows = await sql`SELECT name FROM pantry_names ORDER BY name`;
-  const mealRows = await sql`SELECT entries FROM meal_plan WHERE id = 1`;
+  const pantryRows = await sql`
+    SELECT name FROM pantry_names WHERE user_id = ${userId} ORDER BY name
+  `;
+  const mealRows = await sql`
+    SELECT entries FROM meal_plan WHERE user_id = ${userId}
+  `;
 
   const envelope = buildBackup({
     dishes: dishRows.map(rowToDish),
@@ -54,14 +47,13 @@ export async function GET(request: Request) {
   });
 }
 
-export async function POST(request: Request) {
-  if (!(await isAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function POST(req: Request) {
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   let body: unknown;
   try {
-    body = await request.json();
+    body = await req.json();
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -77,15 +69,20 @@ export async function POST(request: Request) {
     );
   }
 
+  // Dish import: insert with the importing user's user_id. If the backup
+  // envelope's id collides with an existing row (possibly belonging to
+  // ANOTHER user), the ON CONFLICT UPDATE is gated by user_id — the
+  // update is skipped silently rather than allowing cross-user clobber.
   for (const d of envelope.dishes) {
     await sql`
       INSERT INTO dishes (
-        id, title, subtitle, recipe, tags, ingredients, base_servings,
+        id, user_id, title, subtitle, recipe, tags, ingredients, base_servings,
         favorite, image_url, emoji, accent, notes, image_description,
         created_at, updated_at
       )
       VALUES (
         ${d.id},
+        ${userId},
         ${d.title},
         ${d.subtitle},
         ${d.recipe},
@@ -115,12 +112,11 @@ export async function POST(request: Request) {
         notes = EXCLUDED.notes,
         image_description = EXCLUDED.image_description,
         updated_at = EXCLUDED.updated_at
+      WHERE dishes.user_id = ${userId}
     `;
   }
 
-  // Advance the dishes id sequence to the higher of current MAX(id) and
-  // the sequence's own last_value, so future INSERTs don't collide with
-  // any restored id.
+  // Advance the dishes id sequence past any restored ids.
   await sql`
     SELECT setval(
       pg_get_serial_sequence('dishes', 'id'),
@@ -135,16 +131,17 @@ export async function POST(request: Request) {
     const normalized = name.trim().toLowerCase();
     if (!normalized) continue;
     await sql`
-      INSERT INTO pantry_names (name) VALUES (${normalized})
-      ON CONFLICT (name) DO NOTHING
+      INSERT INTO pantry_names (user_id, name) VALUES (${userId}, ${normalized})
+      ON CONFLICT (user_id, name) DO NOTHING
     `;
   }
 
   await sql`
-    UPDATE meal_plan
-    SET entries = ${JSON.stringify(envelope.mealPlan.entries)}::jsonb,
-        updated_at = now()
-    WHERE id = 1
+    INSERT INTO meal_plan (user_id, entries)
+    VALUES (${userId}, ${JSON.stringify(envelope.mealPlan.entries)}::jsonb)
+    ON CONFLICT (user_id) DO UPDATE
+      SET entries = EXCLUDED.entries,
+          updated_at = now()
   `;
 
   return Response.json({
