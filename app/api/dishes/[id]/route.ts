@@ -1,24 +1,16 @@
 import type { NextRequest } from "next/server";
-import { cookies } from "next/headers";
 import { sql } from "@/lib/db";
 import { DishPatchSchema, rowToDish } from "@/lib/types";
-import {
-  ADMIN_COOKIE_NAME,
-  checkApiToken,
-  verifySessionCookieValue,
-} from "@/lib/auth";
+import { resolveUserId } from "@/lib/auth-helpers";
 import { applyPantryDefaults } from "@/lib/pantry";
 
-async function isAuthorized(request: Request): Promise<boolean> {
-  if (checkApiToken(request.headers.get("authorization"))) return true;
-  const jar = await cookies();
-  return verifySessionCookieValue(jar.get(ADMIN_COOKIE_NAME)?.value);
-}
-
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: RouteContext<"/api/dishes/[id]">,
 ) {
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
+
   const { id } = await ctx.params;
   const rows = await sql`
     SELECT d.*,
@@ -26,7 +18,7 @@ export async function GET(
       (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
       (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
     FROM dishes d
-    WHERE id = ${Number(id)}
+    WHERE d.id = ${Number(id)} AND d.user_id = ${userId}
   `;
   if (rows.length === 0) {
     return Response.json({ error: "Not found" }, { status: 404 });
@@ -35,17 +27,16 @@ export async function GET(
 }
 
 export async function PATCH(
-  request: NextRequest,
+  req: NextRequest,
   ctx: RouteContext<"/api/dishes/[id]">,
 ) {
-  if (!(await isAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await ctx.params;
   let body: unknown;
   try {
-    body = await request.json();
+    body = await req.json();
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -68,7 +59,7 @@ export async function PATCH(
       (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
       (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
     FROM dishes d
-    WHERE d.id = ${Number(id)}
+    WHERE d.id = ${Number(id)} AND d.user_id = ${userId}
   `;
   if (existingRows.length === 0) {
     return Response.json({ error: "Not found" }, { status: 404 });
@@ -77,7 +68,7 @@ export async function PATCH(
 
   const ingredients =
     u.ingredients !== undefined
-      ? await applyPantryDefaults(u.ingredients)
+      ? await applyPantryDefaults(u.ingredients, userId)
       : existing.ingredients;
 
   const merged = {
@@ -112,21 +103,27 @@ export async function PATCH(
       notes = ${merged.notes ?? null},
       image_description = ${merged.imageDescription ?? null},
       updated_at = now()
-    WHERE id = ${Number(id)}
+    WHERE id = ${Number(id)} AND user_id = ${userId}
     RETURNING *
   `;
+  if (rows.length === 0) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
   return Response.json(rowToDish(rows[0]));
 }
 
 export async function DELETE(
-  request: NextRequest,
+  req: NextRequest,
   ctx: RouteContext<"/api/dishes/[id]">,
 ) {
-  if (!(await isAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
-  const rows = await sql`DELETE FROM dishes WHERE id = ${Number(id)} RETURNING id`;
+  const rows = await sql`
+    DELETE FROM dishes
+    WHERE id = ${Number(id)} AND user_id = ${userId}
+    RETURNING id
+  `;
   if (rows.length === 0) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
