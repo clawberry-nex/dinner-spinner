@@ -1,35 +1,26 @@
 import type { NextRequest } from "next/server";
-import { cookies } from "next/headers";
 import { sql } from "@/lib/db";
 import { rowToDish } from "@/lib/types";
-import {
-  ADMIN_COOKIE_NAME,
-  checkApiToken,
-  verifySessionCookieValue,
-} from "@/lib/auth";
+import { resolveUserId } from "@/lib/auth-helpers";
 import { buildImagePrompt } from "@/lib/image-prompt";
 import { getProvider } from "@/lib/image-provider";
 import { uploadDishImage } from "@/lib/image-storage";
 
-async function isAuthorized(request: Request): Promise<boolean> {
-  if (checkApiToken(request.headers.get("authorization"))) return true;
-  const jar = await cookies();
-  return verifySessionCookieValue(jar.get(ADMIN_COOKIE_NAME)?.value);
-}
-
 export async function POST(
-  request: NextRequest,
+  req: NextRequest,
   ctx: RouteContext<"/api/dishes/[id]/image">,
 ) {
-  if (!(await isAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
+
   const { id } = await ctx.params;
   const dishId = Number(id);
   if (!Number.isFinite(dishId)) {
     return Response.json({ error: "Bad id" }, { status: 400 });
   }
-  const rows = await sql`SELECT * FROM dishes WHERE id = ${dishId}`;
+  const rows = await sql`
+    SELECT * FROM dishes WHERE id = ${dishId} AND user_id = ${userId}
+  `;
   if (rows.length === 0) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -53,7 +44,7 @@ export async function POST(
     UPDATE dishes
        SET image_url = ${imageUrl},
            updated_at = now()
-     WHERE id = ${dishId}
+     WHERE id = ${dishId} AND user_id = ${userId}
     RETURNING id
   `;
   if (updated.length === 0) {

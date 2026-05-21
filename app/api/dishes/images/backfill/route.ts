@@ -1,28 +1,19 @@
 import type { NextRequest } from "next/server";
-import { cookies } from "next/headers";
 import { sql } from "@/lib/db";
 import { rowToDish } from "@/lib/types";
-import {
-  ADMIN_COOKIE_NAME,
-  checkApiToken,
-  verifySessionCookieValue,
-} from "@/lib/auth";
+import { resolveUserId } from "@/lib/auth-helpers";
 import { buildImagePrompt } from "@/lib/image-prompt";
 import { getProvider } from "@/lib/image-provider";
 import { uploadDishImage } from "@/lib/image-storage";
 
 const CONCURRENCY = 4;
 
-async function isAuthorized(request: Request): Promise<boolean> {
-  if (checkApiToken(request.headers.get("authorization"))) return true;
-  const jar = await cookies();
-  return verifySessionCookieValue(jar.get(ADMIN_COOKIE_NAME)?.value);
-}
-
 type BulkBody = { overwrite?: boolean };
 
-async function generateForDishId(dishId: number): Promise<void> {
-  const rows = await sql`SELECT * FROM dishes WHERE id = ${dishId}`;
+async function generateForDishId(dishId: number, userId: string): Promise<void> {
+  const rows = await sql`
+    SELECT * FROM dishes WHERE id = ${dishId} AND user_id = ${userId}
+  `;
   if (rows.length === 0) throw new Error("dish not found");
   const dish = rowToDish(rows[0]);
   const prompt = buildImagePrompt({
@@ -36,7 +27,7 @@ async function generateForDishId(dishId: number): Promise<void> {
     UPDATE dishes
        SET image_url = ${imageUrl},
            updated_at = now()
-     WHERE id = ${dishId}
+     WHERE id = ${dishId} AND user_id = ${userId}
   `;
 }
 
@@ -63,24 +54,26 @@ async function runWithConcurrency<T, R>(
   return results;
 }
 
-export async function POST(request: NextRequest) {
-  if (!(await isAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function POST(req: NextRequest) {
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
+
   let body: BulkBody = {};
   try {
-    body = (await request.json()) as BulkBody;
+    body = (await req.json()) as BulkBody;
   } catch {
     // empty body is fine — defaults apply
   }
   const overwrite = body.overwrite === true;
 
   const idRows = overwrite
-    ? await sql`SELECT id FROM dishes ORDER BY id`
-    : await sql`SELECT id FROM dishes WHERE image_url IS NULL ORDER BY id`;
+    ? await sql`SELECT id FROM dishes WHERE user_id = ${userId} ORDER BY id`
+    : await sql`SELECT id FROM dishes WHERE user_id = ${userId} AND image_url IS NULL ORDER BY id`;
   const ids = idRows.map((r) => Number(r.id));
 
-  const settled = await runWithConcurrency(ids, CONCURRENCY, generateForDishId);
+  const settled = await runWithConcurrency(ids, CONCURRENCY, (dishId) =>
+    generateForDishId(dishId, userId),
+  );
   const failed: Array<{ dishId: number; error: string }> = [];
   let ok = 0;
   settled.forEach((s, i) => {
