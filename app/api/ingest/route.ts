@@ -1,10 +1,5 @@
-import { cookies } from "next/headers";
 import { z } from "zod";
-import {
-  ADMIN_COOKIE_NAME,
-  checkApiToken,
-  verifySessionCookieValue,
-} from "@/lib/auth";
+import { resolveUserId } from "@/lib/auth-helpers";
 import { DishInputSchema } from "@/lib/types";
 import { getPantryDefaults } from "@/lib/pantry";
 import { buildIngestPrompt } from "@/lib/ingest/prompt";
@@ -36,12 +31,6 @@ const IngestRequestSchema = z
     message: "Provide `input`, `image`, or both",
   });
 
-async function isAuthorized(request: Request): Promise<boolean> {
-  if (checkApiToken(request.headers.get("authorization"))) return true;
-  const jar = await cookies();
-  return verifySessionCookieValue(jar.get(ADMIN_COOKIE_NAME)?.value);
-}
-
 function errorEnvelope(
   code: string,
   message: string,
@@ -52,7 +41,8 @@ function errorEnvelope(
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!(await isAuthorized(request))) {
+  const userId = await resolveUserId(request);
+  if (!userId) {
     return errorEnvelope("unauthorized", "Unauthorized", 401);
   }
 
@@ -77,7 +67,7 @@ export async function POST(request: Request): Promise<Response> {
   }
   const { input, image } = parsed.data;
 
-  const pantrySet = await getPantryDefaults();
+  const pantrySet = await getPantryDefaults(userId);
   const pantryList = Array.from(pantrySet).sort();
   const prompt = buildIngestPrompt({
     userInput: input ?? null,
