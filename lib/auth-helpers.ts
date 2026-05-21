@@ -3,6 +3,8 @@ if (typeof window !== "undefined") {
 }
 
 import bcrypt from "bcryptjs";
+import { timingSafeEqual } from "node:crypto";
+import { sql } from "@/lib/db";
 
 export type Allowlist =
   | { mode: "deny-all"; emails: Set<string> }
@@ -34,4 +36,39 @@ export async function hashPassword(plain: string): Promise<string> {
 }
 export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return bcrypt.compare(plain, hash);
+}
+
+// Resolves the acting user_id for an incoming request. Returns null when
+// the request is unauthenticated. Two paths:
+//   1. Authorization: Bearer $API_TOKEN  -> seed owner's user_id.
+//   2. NextAuth JWT session              -> session.user.id.
+// The bearer path exists for the curl/script use case. There is no
+// per-user token minting yet.
+export async function resolveUserId(req: Request): Promise<string | null> {
+  const bearer = bearerToken(req);
+  if (bearer && process.env.API_TOKEN && constantTimeEqual(bearer, process.env.API_TOKEN)) {
+    const seedEmail = (process.env.SEED_OWNER_EMAIL ?? "").trim().toLowerCase();
+    if (!seedEmail) return null;
+    const rows = await sql`SELECT id FROM users WHERE email = ${seedEmail} LIMIT 1`;
+    return (rows[0]?.id as string | undefined) ?? null;
+  }
+  // Lazy import to avoid a top-level cycle: lib/auth -> lib/auth-helpers -> lib/auth.
+  const { auth } = await import("@/lib/auth");
+  const session = await auth();
+  return (session?.user?.id as string | undefined) ?? null;
+}
+
+function bearerToken(req: Request): string | null {
+  const h = req.headers.get("authorization");
+  if (!h) return null;
+  const prefix = "Bearer ";
+  if (!h.startsWith(prefix)) return null;
+  return h.slice(prefix.length);
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
 }
