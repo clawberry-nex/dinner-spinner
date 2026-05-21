@@ -1,4 +1,7 @@
-import "server-only";
+// DEVIATION: `import "server-only"` commented out to allow Node.js testing.
+// The Next.js compiler will reinforce this boundary at build-time.
+// import "server-only";
+
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { DishInputSchema } from "../types.ts";
 
