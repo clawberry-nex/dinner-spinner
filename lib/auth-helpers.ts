@@ -4,7 +4,6 @@ if (typeof window !== "undefined") {
 
 import bcrypt from "bcryptjs";
 import { timingSafeEqual } from "node:crypto";
-import { sql } from "@/lib/db";
 
 export type Allowlist =
   | { mode: "deny-all"; emails: Set<string> }
@@ -49,6 +48,7 @@ export async function resolveUserId(req: Request): Promise<string | null> {
   if (bearer && process.env.API_TOKEN && constantTimeEqual(bearer, process.env.API_TOKEN)) {
     const seedEmail = (process.env.SEED_OWNER_EMAIL ?? "").trim().toLowerCase();
     if (!seedEmail) return null;
+    const { sql } = await import("@/lib/db");
     const rows = await sql`SELECT id FROM users WHERE email = ${seedEmail} LIMIT 1`;
     return (rows[0]?.id as string | undefined) ?? null;
   }
