@@ -5,9 +5,7 @@ import { formatIngredient } from "./ingredients";
 // Projects response is {results, next_cursor}, so pagination is handled below.
 const API = "https://api.todoist.com/api/v1";
 
-async function todoistFetch(path: string, init: RequestInit = {}) {
-  const token = process.env.TODOIST_API_TOKEN;
-  if (!token) throw new Error("TODOIST_API_TOKEN is not set");
+async function todoistFetch(token: string, path: string, init: RequestInit = {}) {
   const res = await fetch(`${API}${path}`, {
     ...init,
     headers: {
@@ -29,14 +27,14 @@ type TodoistProjectsResponse = {
   next_cursor: string | null;
 };
 
-async function resolveProjectId(name: string): Promise<string> {
+async function resolveProjectId(token: string, name: string): Promise<string> {
   const projects: TodoistProject[] = [];
   let cursor: string | null = null;
   do {
     const path: string = cursor
       ? `/projects?cursor=${encodeURIComponent(cursor)}`
       : "/projects";
-    const res = await todoistFetch(path);
+    const res = await todoistFetch(token, path);
     const data = (await res.json()) as TodoistProjectsResponse;
     projects.push(...data.results);
     cursor = data.next_cursor;
@@ -53,21 +51,32 @@ async function resolveProjectId(name: string): Promise<string> {
   return match.id;
 }
 
-export async function createShoppingTasks(ingredients: Ingredient[]): Promise<number> {
-  return createTaskContents(ingredients.map(formatIngredient));
+export type TodoistConfig = {
+  token: string;
+  projectName: string;
+};
+
+export async function createShoppingTasks(
+  config: TodoistConfig & { ingredients: Ingredient[] },
+): Promise<number> {
+  return createTaskContents({
+    token: config.token,
+    projectName: config.projectName,
+    contents: config.ingredients.map(formatIngredient),
+  });
 }
 
 // Lower-level variant: takes already-formatted task content strings. Lets
 // callers do grouping/formatting client-side (e.g. "2 can + 400 ml coconut
 // milk" as one task).
-export async function createTaskContents(contents: string[]): Promise<number> {
-  const projectName = process.env.TODOIST_PROJECT_NAME;
-  if (!projectName) throw new Error("TODOIST_PROJECT_NAME is not set");
-  const projectId = await resolveProjectId(projectName);
+export async function createTaskContents(
+  config: TodoistConfig & { contents: string[] },
+): Promise<number> {
+  const projectId = await resolveProjectId(config.token, config.projectName);
 
   let created = 0;
-  for (const content of contents) {
-    await todoistFetch("/tasks", {
+  for (const content of config.contents) {
+    await todoistFetch(config.token, "/tasks", {
       method: "POST",
       body: JSON.stringify({ content, project_id: projectId }),
     });
