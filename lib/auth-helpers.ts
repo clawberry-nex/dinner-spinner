@@ -1,3 +1,5 @@
+import "server-only";
+
 if (typeof window !== "undefined") {
   throw new Error("auth-helpers.ts should only be imported from server-side code");
 }
