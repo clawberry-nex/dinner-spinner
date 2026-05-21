@@ -1,63 +1,84 @@
-import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
+import "server-only";
+import NextAuth from "next-auth";
+import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
+import { sql } from "@/lib/db";
+import {
+  parseAllowlist,
+  isEmailAllowed,
+  verifyPassword,
+} from "@/lib/auth-helpers";
 
-const COOKIE_NAME = "admin_session";
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const allowlist = () => parseAllowlist(process.env.ALLOWED_EMAILS);
 
-function secret(): string {
-  const s = process.env.SESSION_SECRET;
-  if (!s || s.length < 16) {
-    throw new Error("SESSION_SECRET must be set (>=16 chars)");
-  }
-  return s;
-}
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  session: { strategy: "jwt" },
+  pages: { signIn: "/auth/signin" },
+  providers: [
+    Google({
+      clientId: process.env.AUTH_GOOGLE_ID ?? "",
+      clientSecret: process.env.AUTH_GOOGLE_SECRET ?? "",
+    }),
+    Credentials({
+      name: "Email + password",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(creds) {
+        const email = String(creds?.email ?? "").trim().toLowerCase();
+        const password = String(creds?.password ?? "");
+        if (!email || !password) return null;
+        const rows = await sql`
+          SELECT id, email, name, password_hash
+          FROM users
+          WHERE email = ${email}
+          LIMIT 1
+        `;
+        const row = rows[0];
+        if (!row || !row.password_hash) return null;
+        if (!(await verifyPassword(password, row.password_hash as string))) return null;
+        return {
+          id: row.id as string,
+          email: row.email as string,
+          name: (row.name as string | null) ?? undefined,
+        };
+      },
+    }),
+  ],
+  callbacks: {
+    async signIn({ user, account }) {
+      const email = (user?.email ?? "").trim().toLowerCase();
+      if (!email) return false;
+      if (!isEmailAllowed(email, allowlist())) return false;
 
-function sign(payload: string): string {
-  return createHmac("sha256", secret()).update(payload).digest("base64url");
-}
-
-export function createSessionCookieValue(): string {
-  const issuedAt = Date.now();
-  const nonce = randomBytes(8).toString("base64url");
-  const payload = `${issuedAt}.${nonce}`;
-  return `${payload}.${sign(payload)}`;
-}
-
-export function verifySessionCookieValue(value: string | undefined): boolean {
-  if (!value) return false;
-  const parts = value.split(".");
-  if (parts.length !== 3) return false;
-  const [issuedAt, nonce, mac] = parts;
-  const expected = sign(`${issuedAt}.${nonce}`);
-  const a = Buffer.from(mac);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  if (!timingSafeEqual(a, b)) return false;
-  const issued = Number(issuedAt);
-  if (!Number.isFinite(issued)) return false;
-  if (Date.now() - issued > MAX_AGE_SECONDS * 1000) return false;
-  return true;
-}
-
-export function checkAdminPassword(submitted: string): boolean {
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) return false;
-  const a = Buffer.from(submitted);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
-export function checkApiToken(authHeader: string | null): boolean {
-  const expected = process.env.API_TOKEN;
-  if (!expected || !authHeader) return false;
-  const prefix = "Bearer ";
-  if (!authHeader.startsWith(prefix)) return false;
-  const token = authHeader.slice(prefix.length);
-  const a = Buffer.from(token);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
-export const ADMIN_COOKIE_NAME = COOKIE_NAME;
-export const ADMIN_COOKIE_MAX_AGE = MAX_AGE_SECONDS;
+      // Google: upsert the user row and stamp our DB uuid back onto the
+      // user object so jwt() picks up the right id. Credentials provider
+      // already produced our user_id in authorize() above.
+      if (account?.provider === "google") {
+        const rows = await sql`
+          INSERT INTO users (email, name, image)
+          VALUES (${email}, ${user.name ?? null}, ${user.image ?? null})
+          ON CONFLICT (email) DO UPDATE
+            SET name  = COALESCE(EXCLUDED.name,  users.name),
+                image = COALESCE(EXCLUDED.image, users.image)
+          RETURNING id
+        `;
+        user.id = rows[0].id as string;
+      }
+      return true;
+    },
+    async jwt({ token, user }) {
+      if (user?.id) token.sub = user.id;
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user && token.sub) {
+        // NextAuth's default User type already has id?: string thanks to
+        // the next-auth.d.ts shipped by the package.
+        (session.user as { id: string }).id = token.sub;
+      }
+      return session;
+    },
+  },
+});
