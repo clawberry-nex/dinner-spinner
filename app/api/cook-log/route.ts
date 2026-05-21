@@ -1,18 +1,7 @@
-import { cookies } from "next/headers";
 import { z } from "zod";
 import { sql } from "@/lib/db";
-import {
-  ADMIN_COOKIE_NAME,
-  checkApiToken,
-  verifySessionCookieValue,
-} from "@/lib/auth";
+import { resolveUserId } from "@/lib/auth-helpers";
 import { rowToCookLogEntry } from "@/lib/types";
-
-async function isAuthorized(request: Request): Promise<boolean> {
-  if (checkApiToken(request.headers.get("authorization"))) return true;
-  const jar = await cookies();
-  return verifySessionCookieValue(jar.get(ADMIN_COOKIE_NAME)?.value);
-}
 
 const BodySchema = z.object({
   dishId: z.number().int().positive(),
@@ -20,11 +9,10 @@ const BodySchema = z.object({
   note: z.string().trim().max(2000).nullable().optional(),
 });
 
-export async function GET(request: Request) {
-  if (!(await isAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const url = new URL(request.url);
+export async function GET(req: Request) {
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const url = new URL(req.url);
   const dishIdParam = url.searchParams.get("dishId");
   const dishId = dishIdParam ? Number(dishIdParam) : NaN;
   if (!Number.isFinite(dishId) || dishId <= 0) {
@@ -33,21 +21,20 @@ export async function GET(request: Request) {
   const rows = await sql`
     SELECT id, cooked_at, rating, note
     FROM cook_log
-    WHERE dish_id = ${dishId}
+    WHERE dish_id = ${dishId} AND user_id = ${userId}
     ORDER BY cooked_at DESC
     LIMIT 100
   `;
   return Response.json(rows.map(rowToCookLogEntry));
 }
 
-export async function POST(request: Request) {
-  if (!(await isAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function POST(req: Request) {
+  const userId = await resolveUserId(req);
+  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   let body: unknown;
   try {
-    body = await request.json();
+    body = await req.json();
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -61,10 +48,19 @@ export async function POST(request: Request) {
   }
 
   const { dishId, rating, note } = parsed.data;
+
+  // Enforce dish ownership before logging.
+  const owned = await sql`
+    SELECT 1 FROM dishes WHERE id = ${dishId} AND user_id = ${userId} LIMIT 1
+  `;
+  if (owned.length === 0) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
   const trimmedNote = note?.trim() || null;
   const rows = await sql`
-    INSERT INTO cook_log (dish_id, rating, note)
-    VALUES (${dishId}, ${rating ?? null}, ${trimmedNote})
+    INSERT INTO cook_log (dish_id, user_id, rating, note)
+    VALUES (${dishId}, ${userId}, ${rating ?? null}, ${trimmedNote})
     RETURNING id, cooked_at, rating, note
   `;
   const entry = rowToCookLogEntry(rows[0]);
