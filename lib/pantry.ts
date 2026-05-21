@@ -8,7 +8,7 @@ import { PANTRY_DEFAULTS as HARDCODED_DEFAULTS } from "./vocabulary";
  * hardcoded seed set in lib/vocabulary.ts if the query fails (useful for
  * local dev before the schema has been applied).
  */
-async function getPantryDefaults(): Promise<Set<string>> {
+export async function getPantryDefaults(): Promise<Set<string>> {
   try {
     const rows = await sql`SELECT name FROM pantry_names`;
     return new Set(rows.map((r) => (r.name as string).toLowerCase()));
