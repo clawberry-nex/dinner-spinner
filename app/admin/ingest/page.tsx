@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { compressImage, type CompressedImage } from "@/lib/image-compress";
 import { AppHeader } from "../../_components/app-header";
@@ -19,6 +19,7 @@ export default function IngestPage() {
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
+    if (compressedPreviewUrl) URL.revokeObjectURL(compressedPreviewUrl);
     setFile(f);
     setCompressedPreviewUrl(f ? URL.createObjectURL(f) : null);
     setError(null);
@@ -29,6 +30,12 @@ export default function IngestPage() {
     if (compressedPreviewUrl) URL.revokeObjectURL(compressedPreviewUrl);
     setCompressedPreviewUrl(null);
   }
+
+  useEffect(() => {
+    return () => {
+      if (compressedPreviewUrl) URL.revokeObjectURL(compressedPreviewUrl);
+    };
+  }, [compressedPreviewUrl]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
