@@ -1,20 +1,37 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 
-export async function proxy(request: NextRequest) {
-  if (request.nextUrl.pathname.startsWith("/admin/login")) {
-    return NextResponse.next();
+export default auth((req) => {
+  const { pathname } = req.nextUrl;
+
+  // Public paths.
+  if (
+    pathname === "/" ||
+    pathname.startsWith("/auth/") ||
+    pathname.startsWith("/api/auth/") ||
+    pathname === "/manifest.webmanifest" ||
+    pathname.startsWith("/icons/") ||
+    pathname === "/favicon.ico" ||
+    pathname.startsWith("/offline")
+  ) {
+    return;
   }
-  const session = await auth();
-  if (session?.user) {
-    return NextResponse.next();
+
+  if (req.auth) return;
+
+  const isApi = pathname.startsWith("/api/");
+  if (isApi) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
   }
-  const url = request.nextUrl.clone();
-  url.pathname = "/admin/login";
-  return NextResponse.redirect(url);
-}
+  const signInUrl = new URL("/auth/signin", req.url);
+  signInUrl.searchParams.set("callbackUrl", pathname + req.nextUrl.search);
+  return Response.redirect(signInUrl);
+});
 
 export const config = {
-  matcher: ["/admin", "/admin/:path*"],
+  // Skip Next internals & static assets so the JWT cookie doesn't have
+  // to be parsed for every chunk request.
+  matcher: ["/((?!_next/|api/auth/|.*\\.(?:png|jpg|jpeg|svg|webp|ico|webmanifest)$).*)"],
 };
