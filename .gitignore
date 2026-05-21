@@ -41,3 +41,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .playwright-mcp/
+
+# Claude Code per-project scratchpad (settings, plan drafts) — not shared.
+/.claude/
+
+# Core dumps from local process crashes.
+core.*
