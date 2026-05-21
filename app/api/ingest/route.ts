@@ -23,7 +23,11 @@ const IngestRequestSchema = z
     input: z.string().trim().min(1).max(50_000).optional(),
     image: z
       .object({
-        data: z.string().min(1).max(15_000_000), // base64 cap ~15MB
+        // ~4.4MB base64 cap. Vercel Hobby's serverless function body limit is
+        // 4.5MB and fires first in practice; this Zod check is the
+        // belt-and-suspenders for off-Vercel callers (curl, scripts).
+        // Client compresses to <1MB so neither cap normally fires.
+        data: z.string().min(1).max(4_500_000),
         mediaType: z.enum(["image/jpeg", "image/png", "image/webp"]),
       })
       .optional(),
@@ -98,9 +102,11 @@ export async function POST(request: Request): Promise<Response> {
           ? 429
           : err.code === "timeout"
             ? 504
-            : err.code === "unauthorized" || err.code === "scope_missing"
-              ? 502 // misconfig from our side — surface as upstream issue
-              : 502;
+            : err.code === "network_error" || err.code === "disabled"
+              ? 503 // claude-agent unreachable or kill-switched — try again later
+              : err.code === "unauthorized" || err.code === "scope_missing"
+                ? 502 // misconfig from our side — surface as upstream issue
+                : 502;
       console.error("[ingest] claude-agent failure", {
         code: err.code,
         status: err.status,

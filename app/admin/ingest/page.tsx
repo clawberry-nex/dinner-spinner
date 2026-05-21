@@ -37,8 +37,7 @@ export default function IngestPage() {
     };
   }, [compressedPreviewUrl]);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function ingest() {
     if (!input.trim() && !file) return;
     setLoading(true);
     setError(null);
@@ -72,6 +71,11 @@ export default function IngestPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    await ingest();
   }
 
   const canSubmit = (input.trim().length > 0 || file !== null) && !loading;
@@ -154,11 +158,20 @@ export default function IngestPage() {
                 </pre>
               </details>
             )}
-            <p className="text-xs">
-              <a href="/admin" className="underline">
+            <div className="flex items-center gap-3 pt-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={ingest}
+                disabled={loading}
+              >
+                Retry
+              </Button>
+              <a href="/admin" className="text-xs underline">
                 Back to manual entry
               </a>
-            </p>
+            </div>
           </div>
         )}
       </form>
