@@ -7,7 +7,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # Dinner Spinner — project notes
 
 Personal app: spin a button to pick a random dish, scale servings, build a
-multi-dish shopping list, push it to Todoist. Single admin user.
+multi-dish shopping list, push it to Todoist. Multi-user (NextAuth v5 with
+Google + email/password). Sign-up is gated by an `ALLOWED_EMAILS` allowlist.
 
 ## Deploy topology
 
@@ -15,7 +16,7 @@ multi-dish shopping list, push it to Todoist. Single admin user.
 - **GitHub**: [clawberry-nex/dinner-spinner](https://github.com/clawberry-nex/dinner-spinner)
 - **Predecessor** (archived, do not push to): [clawberry-nex/dinner-spinner-old](https://github.com/clawberry-nex/dinner-spinner-old) — an earlier MongoDB-based attempt
 - **Vercel project**: `clawberry-nexs-projects/dinner-spinner`, linked to the GitHub repo
-- **Database**: Neon Postgres (`eu-central-1`, project `ep-summer-forest-alqq4w27`). Single `dishes` table — see `db/schema.sql`.
+- **Database**: Neon Postgres (`eu-central-1`, project `ep-summer-forest-alqq4w27`). Schema in `db/schema.sql`. Post-rollout lock-down in `db/lockdown.sql` (one-shot, runs after backfill).
 
 ## Stack
 
@@ -25,28 +26,63 @@ Next.js 16 (App Router) + TypeScript + Tailwind v4 + `@neondatabase/serverless` 
 
 - `app/page.tsx` — spinner (client component, tag filter via `GET /api/tags`)
 - `app/dishes/[id]/page.tsx` + `dish-view.tsx` — server fetch + client serving stepper
+- `app/dishes/[id]/edit/page.tsx` — dedicated edit page, wraps `<DishForm>`
+- `app/add/page.tsx` — Add Recipe: AI ingest by default, manual form fallback
 - `app/plan/page.tsx` — meal plan, aggregates via `lib/ingredients.ts::aggregateIngredients`
-- `app/admin/` — password login + dish CRUD UI
-- `app/api/` — route handlers; mutation routes accept bearer `API_TOKEN` **or** signed admin cookie
+- `app/settings/page.tsx` — Profile / Password / Todoist / Pantry / Backup / dish list (with edit links). Replaces `/admin` (`/admin` and `/admin/ingest` are 307 redirects for back-compat).
+- `app/auth/signin/page.tsx`, `app/auth/signup/page.tsx` — NextAuth sign-in/up UI
+- `app/_components/dish-form.tsx` — shared `<DishForm>` used by `/add` and `/dishes/[id]/edit`
+- `app/_components/tab-bar.tsx` — 4 flat tabs + raised center "+" Add action
+- `app/api/auth/[...nextauth]/route.ts` — NextAuth handlers
+- `app/api/auth/signup/route.ts` — email/password sign-up (subject to allowlist)
+- `app/api/me/todoist/route.ts`, `app/api/me/password/route.ts` — per-user self-management
+- `app/api/` — all domain routes are user-scoped. Mutations accept session cookie OR bearer `API_TOKEN` (the latter resolves to the seed owner). See `lib/auth-helpers.ts::resolveUserId`.
 - `lib/db.ts` — Neon client (throws if `DATABASE_URL` missing)
-- `lib/auth.ts` — HMAC-signed session cookie + `checkAdminPassword` / `checkApiToken` (all constant-time comparisons)
+- `lib/auth.ts` — NextAuth v5 config (Google + Credentials, JWT sessions, allowlist gate, Google upsert). Exports `{ handlers, auth, signIn, signOut }`.
+- `lib/auth-helpers.ts` — `parseAllowlist`, `isEmailAllowed`, `hashPassword`, `verifyPassword`, `resolveUserId(req)` (bridges JWT session and env `API_TOKEN` → seed owner)
 - `lib/ingredients.ts` — `scaleIngredient`, `aggregateIngredients` (groups by lowercased `(name, unit)`), `formatQty`
-- `lib/todoist.ts` — Todoist client. **Pinned to `/api/v1/`** — the old `/rest/v2/` returns 410 (deprecated). Response shape is `{results, next_cursor}`; handle pagination.
+- `lib/todoist.ts` — Todoist client. Takes per-user `{ token, projectName }` as args (no longer reads env). **Pinned to `/api/v1/`** — the old `/rest/v2/` returns 410. Response shape is `{results, next_cursor}`; handle pagination.
+- `lib/pantry.ts` — `applyPantryDefaults(ingredients, userId)`, `getPantryDefaults(userId)` — both user-scoped.
 - `lib/types.ts` — Zod schemas + `Dish`/`Ingredient` types + `rowToDish` adapter
-- `proxy.ts` — admin gate (Next 16 renamed Middleware → Proxy; the file sits at project root and exports `proxy`, not `middleware`). Matcher covers `/admin` and `/admin/:path*`, but the function short-circuits `/admin/login`.
+- `proxy.ts` — NextAuth middleware (Next 16 renamed Middleware → Proxy; the file sits at project root and exports `default auth((req) => ...)`). Public-path exemptions: `/`, `/auth/*`, `/api/auth/*`, manifest/icons/favicon/offline. Everything else requires a session; API routes return 401 JSON, pages redirect to `/auth/signin`.
+- `scripts/backfill-seed-owner.ts` — one-shot: assigns existing rows to seed owner. Run after seed owner's first Google sign-in.
+- `db/lockdown.sql` — second-stage migration (NOT NULL + meal_plan/pantry_names PK changes). Run after backfill.
+
+## Auth model
+
+NextAuth v5 with JWT sessions, no DB adapter. `users` table stores email,
+name, image, optional `password_hash` (bcrypt), and per-user
+`todoist_token` / `todoist_project`. Sign-up is gated by `ALLOWED_EMAILS`
+(comma-separated, lowercased; `*` = open). Sign-in providers: Google and
+email/password.
+
+Every domain row has a `user_id` FK to `users(id)`. API routes call
+`resolveUserId(req)` from `lib/auth-helpers.ts`, which returns either the
+JWT session's `user.id` or, if `Authorization: Bearer $API_TOKEN` matches,
+the seed owner's `user_id` (read from `SEED_OWNER_EMAIL`). The bearer path
+is the only way for curl-from-scripts to mutate data; per-user token
+minting is not yet implemented.
+
+Cross-user requests return **404** (not 403) so existence isn't leaked.
 
 ## Env vars (all required in Vercel production env)
 
 | Name | Purpose |
 |---|---|
 | `DATABASE_URL` | Neon pooled connection string |
-| `ADMIN_PASSWORD` | Cleartext password for `/admin` (compared constant-time) |
-| `SESSION_SECRET` | HMAC key for admin session cookie, ≥16 chars |
-| `API_TOKEN` | Bearer for `POST /api/dishes` from curl/scripts |
-| `TODOIST_API_TOKEN` | Todoist API token |
-| `TODOIST_PROJECT_NAME` | Name of the Todoist project that shopping tasks land in (`Shopping` in prod) |
+| `AUTH_SECRET` | JWT signing key (≥32 chars, e.g. `openssl rand -base64 32`) |
+| `AUTH_GOOGLE_ID` | Google OAuth client ID |
+| `AUTH_GOOGLE_SECRET` | Google OAuth client secret |
+| `AUTH_URL` | Canonical app URL (e.g. `https://dinner-spinner-lake.vercel.app`) |
+| `ALLOWED_EMAILS` | Comma-separated lowercased allowlist. Set to `*` to disable. |
+| `SEED_OWNER_EMAIL` | Email that owned pre-multi-user data; bearer-token requests resolve to this user. |
+| `API_TOKEN` | Bearer for `POST /api/dishes` from curl/scripts (resolves to seed owner). |
+| `TODOIST_API_TOKEN` | Optional seed-owner Todoist fallback. Other users set theirs via `/settings`. |
+| `TODOIST_PROJECT_NAME` | Optional seed-owner Todoist project fallback. |
 
 `.env.example` ships the placeholder template; `.env*` is gitignored except for `.env.example`.
+
+**Removed** since the single-admin era: `ADMIN_PASSWORD`, `SESSION_SECRET`.
 
 ## Parsing recipes into ingredient rows
 
@@ -84,7 +120,7 @@ Rules:
 - **Colour that changes the product is part of `name`**, not descriptor. `green chili` and `red chili` are different items; `yellow pepper` and `red pepper` are different items.
 - **Normalize to singular in `name`**: `tomatoes` → `tomato`, `small onions` → `onion`. This lets aggregation across dishes actually merge.
 - **Use the standard vocabularies in `lib/vocabulary.ts`** for both `unit` and `name` whenever possible. Diverge only when nothing fits — then type a sensible custom value. The admin form uses these as `<datalist>` autocomplete hints.
-- **Mark `pantry: true`** on items the user always has in stock. The authoritative list is **user-curated in the DB** (`pantry_names` table) and exposed at `GET /api/pantry-defaults` (no auth). Agents must fetch the list at runtime before ingesting a recipe — the hardcoded `lib/vocabulary.ts::PANTRY_DEFAULTS` set is only used to seed the table on a fresh install and as a fallback if the query fails in `lib/pantry.ts::applyPantryDefaults`. The server re-applies exact-match defaults on every POST/PATCH, but agents should still set `pantry` explicitly using **semantic judgment** for near-matches the exact check would miss: `"cumin"` and `"1 tsp cumin powder"` are both pantry even though neither matches the set exactly; `"smoked paprika"` is not pantry even though plain `"paprika"` might be. When in doubt, don't flag it.
+- **Mark `pantry: true`** on items the user always has in stock. The authoritative list is **user-curated in the DB** (`pantry_names` table, scoped by `user_id`) and exposed at `GET /api/pantry-defaults` (auth required; bearer `API_TOKEN` returns the seed owner's list). Agents must fetch the list at runtime before ingesting a recipe — the hardcoded `lib/vocabulary.ts::PANTRY_DEFAULTS` set is only a fallback in `lib/pantry.ts::getPantryDefaults` if the query fails. The server re-applies exact-match defaults on every POST/PATCH, but agents should still set `pantry` explicitly using **semantic judgment** for near-matches the exact check would miss: `"cumin"` and `"1 tsp cumin powder"` are both pantry even though neither matches the set exactly; `"smoked paprika"` is not pantry even though plain `"paprika"` might be. When in doubt, don't flag it.
 - If an item is truly free-text ("salt and black pepper to taste"), just put it with `unit: "to taste"`, `quantity: 1`, and leave descriptor/preparation empty. Mark `pantry: true` for salt/pepper.
 
 ### Standard units (use these when possible)
@@ -137,37 +173,65 @@ The full list lives in `lib/vocabulary.ts::STANDARD_INGREDIENTS` (~150 items acr
 - **Servings scaling** multiplies `quantity * servings / baseServings`, unless `scalable: false` (then it's a no-op). `baseServings` is the source of truth — stored per dish.
 - **Optional ingredients** (`optional: true`) are excluded from the shopping list by default. `/plan` has an "include optional" toggle that flips it. Pantry and optional flags compose — a pantry+optional item is excluded by both conditions.
 - **Tag filter is AND, not OR**: a dish must contain every selected tag. Implemented with Postgres `tags @> $1::text[]`.
-- **Auth for mutations**: `POST /api/dishes`, `PATCH|DELETE /api/dishes/[id]`, and `POST /api/todoist` all accept either a valid admin cookie **or** a bearer `API_TOKEN`. The bearer path exists so Mirko can curl-post dishes from scripts without touching the UI.
+- **Auth for everything**: every API route (except `/api/auth/*`) requires a session OR bearer `API_TOKEN`. Use `resolveUserId(req)` from `lib/auth-helpers.ts`. The bearer-token path resolves to the **seed owner**'s `user_id` (the user whose email matches `SEED_OWNER_EMAIL`). Per-user token minting doesn't exist yet — other users have to use the UI.
+- **Cross-user isolation**: cross-user requests return 404 (not 403). The `/api/dishes/[id]` GET, PATCH, DELETE all add `AND user_id = $userId` to their queries.
+- **Backup imports** are scoped to the importing user. Dish-id collisions with another user's row are silently no-op'd (the conflict UPDATE is gated by `dishes.user_id = ${userId}`) to prevent cross-user clobber.
 
 ## Verification
 
-After any deploy, curl these against the production URL to confirm the full chain:
+After any deploy, curl these against the production URL to confirm the full chain. EVERY domain endpoint requires auth now — the bearer-token path resolves to the seed owner.
 
 ```bash
 BASE=https://dinner-spinner-lake.vercel.app
 TOKEN="<API_TOKEN>"
 
-# List (should be 200)
-curl -sS $BASE/api/dishes
+# Unauthenticated should be 401
+curl -sS -w '\n%{http_code}\n' $BASE/api/dishes
+# {"error":"unauthorized"}
+# 401
 
-# Tag index
-curl -sS $BASE/api/tags
+# Authenticated list (seed owner's dishes)
+curl -sS -H "Authorization: Bearer $TOKEN" $BASE/api/dishes | jq 'length'
+
+# Tag index (auth required)
+curl -sS -H "Authorization: Bearer $TOKEN" $BASE/api/tags
 
 # Filtered spin source (AND semantics)
-curl -sS "$BASE/api/dishes?tags=vegetarian"
+curl -sS -H "Authorization: Bearer $TOKEN" "$BASE/api/dishes?tags=vegetarian"
 
-# Auth gate (should be 401 without bearer)
-curl -sS -w '\n%{http_code}\n' -X POST $BASE/api/dishes -d '{"title":"x"}'
+# Sign-up gate
+curl -sS -X POST $BASE/api/auth/signup \
+  -H 'content-type: application/json' \
+  -d '{"email":"random@example.com","password":"hunter2hunter2"}'
+# {"error":"email_not_allowed"} if not on ALLOWED_EMAILS
 
-# Create via API
+# Create via API (as seed owner)
 curl -sS -X POST $BASE/api/dishes \
   -H "Authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"title":"Test","baseServings":4,"ingredients":[{"quantity":2,"unit":"pcs","name":"carrot"}]}'
+  -d '{"title":"Test","baseServings":4,"ingredients":[{"quantity":2,"unit":"piece","name":"carrot"}]}'
 
-# Todoist push (creates a real task!)
+# Todoist push (creates a real task! seed owner has env fallback for token+project)
 curl -sS -X POST $BASE/api/todoist \
   -H "Authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
   -d '{"ingredients":[{"quantity":1,"name":"test item"}]}'
+```
+
+## Rollout (one-time, when deploying multi-user)
+
+```bash
+# 1. Pre-deploy: Google OAuth client created, env vars set in Vercel.
+# 2. Schema migration (additive, safe to run against prod):
+psql "$DATABASE_URL" -f db/schema.sql
+
+# 3. Deploy. Seed owner signs in with Google (creates their users row).
+
+# 4. Backfill existing rows to seed owner:
+SEED_OWNER_EMAIL=you@example.com npx tsx scripts/backfill-seed-owner.ts
+
+# 5. Lock-down (NOT NULL + meal_plan/pantry_names PK changes):
+psql "$DATABASE_URL" -f db/lockdown.sql
+
+# 6. Smoke test via the curl section above.
 ```
