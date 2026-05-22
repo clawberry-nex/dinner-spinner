@@ -99,13 +99,29 @@ export function IngestInput({ onParsed }: IngestInputProps) {
 
       <div className="space-y-2">
         <label className="block text-sm font-medium">Attach photo (optional)</label>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={onFile}
-          disabled={loading}
-          className="block w-full text-sm"
-        />
+        <div className="flex flex-wrap gap-2">
+          <label className="cursor-pointer rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+            📷 Take photo
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={onFile}
+              disabled={loading}
+              className="hidden"
+            />
+          </label>
+          <label className="cursor-pointer rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+            🖼️ Choose from library
+            <input
+              type="file"
+              accept="image/*"
+              onChange={onFile}
+              disabled={loading}
+              className="hidden"
+            />
+          </label>
+        </div>
         {compressedPreviewUrl && (
           <div className="flex items-start gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
