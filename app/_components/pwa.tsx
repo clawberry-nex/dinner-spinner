@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   isIOS,
   isStandalone,
+  readDismissed,
   shouldShowPrompt,
   writeDismissed,
 } from "@/lib/install-prompt";
@@ -17,6 +18,10 @@ interface BeforeInstallPromptEvent extends Event {
 export function Pwa() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [variant, setVariant] = useState<"none" | "android" | "ios">("none");
+  // Tracks dismissal for THIS session so the beforeinstallprompt handler can
+  // ignore re-fires from Chrome across client-side navigations (the
+  // localStorage/cookie writes don't propagate to the already-bound handler).
+  const dismissedRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -49,6 +54,7 @@ export function Pwa() {
 
     const onBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
+      if (dismissedRef.current || readDismissed()) return;
       setDeferred(e as BeforeInstallPromptEvent);
       setVariant("android");
     };
@@ -67,6 +73,7 @@ export function Pwa() {
   if (variant === "none") return null;
 
   const dismiss = () => {
+    dismissedRef.current = true;
     writeDismissed();
     setVariant("none");
     setDeferred(null);
