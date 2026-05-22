@@ -32,6 +32,10 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: light)", color: "#F5EFE3" },
     { media: "(prefers-color-scheme: dark)", color: "#14110C" },
   ],
+  // viewport-fit=cover lets the app extend under the iOS home indicator
+  // and the Android gesture nav; env(safe-area-inset-bottom) on the
+  // TabBar keeps the tappable content above them.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -40,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-screen bg-bg text-ink">
+      <body className="h-[100dvh] overflow-hidden bg-bg text-ink">
         <ThemeProvider>
           <RootShell>{children}</RootShell>
           <Pwa />
