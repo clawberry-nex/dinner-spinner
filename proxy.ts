@@ -3,9 +3,11 @@ import { auth } from "@/lib/auth";
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
-  // Public paths.
+  // Public paths. NOT `/` — the spinner fetches /api/dishes which is
+  // user-scoped now, and an anonymous visit would crash with "p.slice is
+  // not a function" when the 401 body lands where an array was expected.
+  // The page also has nothing useful to show without a session, so redirect.
   if (
-    pathname === "/" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/auth/") ||
     pathname === "/manifest.webmanifest" ||
