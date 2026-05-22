@@ -25,7 +25,7 @@ export default async function SettingsPage() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader title="Settings" />
-      <div className="flex-1 overflow-auto pb-20">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-6">
           <SettingsClient
             user={{

@@ -177,7 +177,7 @@ export default function DishesPage() {
         )}
       </div>
 
-      <div className="flex-1 overflow-auto pb-20">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
        <div className="mx-auto w-full max-w-6xl">
         {entries.length > 0 && (
           <div className="mx-4 mt-4 text-[12px] text-ink-3">

@@ -99,7 +99,7 @@ export default function SpinnerPage() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader />
-      <div className="flex-1 overflow-auto pb-20">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
        <div className="mx-auto w-full max-w-3xl">
         <div className="px-5 pt-2 pb-5">
           <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">

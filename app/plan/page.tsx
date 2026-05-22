@@ -127,7 +127,7 @@ export default function PlanPage() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader title="Plan" />
-      <div className="flex-1 overflow-auto pb-20">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
        <div className="mx-auto w-full max-w-6xl">
         {!hasEntries ? (
           <div className="mx-4 mt-6 rounded-lg border border-dashed border-rule p-6 text-center text-[14px] text-ink-3">

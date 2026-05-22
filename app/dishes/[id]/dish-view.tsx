@@ -122,7 +122,7 @@ export default function DishView({
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader back />
-      <div className="flex-1 overflow-auto pb-20">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
        <div className="mx-auto w-full max-w-3xl">
         <div className="px-4"><DishArt dish={dish} size="100%" corner="var(--radius-lg)" className="md:max-h-[320px] md:object-cover" /></div>
 
