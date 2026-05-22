@@ -54,11 +54,11 @@ export default function SpinnerPage() {
     setSelected((ts) => (ts.includes(t) ? ts.filter((x) => x !== t) : [...ts, t]));
   };
 
-  const spin = async () => {
+  const spin = () => {
     if (spinning) return;
-    const pool = await load();
-    if (!pool.length) return;
-    const result = pickWithRationale(pool, { tags: selected });
+    if (!dishes.length) return;
+    const result = pickWithRationale(dishes, { tags: selected });
+    const pool = dishes;
     setSpinning(true);
     setLanded(null);
     setRationale(null);
