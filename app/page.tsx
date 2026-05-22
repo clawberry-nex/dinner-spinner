@@ -115,9 +115,11 @@ export default function SpinnerPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-[6px] px-4 pb-2">
+        <div className="-mx-2 flex gap-[6px] overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {allTags.slice(0, 12).map((t) => (
-            <Chip key={t} active={selected.includes(t)} onClick={() => toggleTag(t)}>{t}</Chip>
+            <div key={t} className="shrink-0">
+              <Chip active={selected.includes(t)} onClick={() => toggleTag(t)}>{t}</Chip>
+            </div>
           ))}
         </div>
 
