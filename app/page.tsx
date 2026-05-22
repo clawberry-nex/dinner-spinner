@@ -63,18 +63,30 @@ export default function SpinnerPage() {
     setLanded(null);
     setRationale(null);
     setRotation((r) => r + 360 * 5 + Math.random() * 360);
-    const frames = Math.max(18, pool.length * 3);
+    // Wheel rotation animates over 2.2s (CSS transition below). Sync the
+    // text randomization to the same wall-clock duration, with easing so
+    // it slows down toward the end. Stopping by elapsed time (not by a
+    // fixed frame count) keeps the two in lockstep regardless of pool size.
+    const SPIN_MS = 2200;
+    const startedAt =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
     let i = 0;
     const tick = () => {
       setCycleIdx(i % pool.length);
       i++;
-      if (i < frames) {
-        timerRef.current = window.setTimeout(tick, 60 + Math.pow(i / frames, 3) * 180);
-      } else {
+      const now =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
+      const elapsed = now - startedAt;
+      if (elapsed >= SPIN_MS) {
         setSpinning(false);
         setLanded(result.dish);
         setRationale(result.rationale);
+        return;
       }
+      const progress = elapsed / SPIN_MS;
+      // Fast at start (~35ms), slowing to ~235ms by the end.
+      const delay = 35 + Math.pow(progress, 3) * 200;
+      timerRef.current = window.setTimeout(tick, delay);
     };
     tick();
   };
@@ -144,6 +156,23 @@ export default function SpinnerPage() {
   );
 }
 
+function wedgePath(i: number, n: number): string {
+  // SVG wedge from center (50,50) on a circle of radius 50, starting from
+  // the top and proceeding clockwise. Index 0 is the wedge anchored at 12 o'clock.
+  if (n === 1) {
+    // One slice = full circle, drawn as two half-arcs.
+    return "M 50 0 A 50 50 0 1 1 50 100 A 50 50 0 1 1 50 0 Z";
+  }
+  const startRad = ((-90 + (i / n) * 360) * Math.PI) / 180;
+  const endRad = ((-90 + ((i + 1) / n) * 360) * Math.PI) / 180;
+  const sx = 50 + 50 * Math.cos(startRad);
+  const sy = 50 + 50 * Math.sin(startRad);
+  const ex = 50 + 50 * Math.cos(endRad);
+  const ey = 50 + 50 * Math.sin(endRad);
+  const largeArc = 1 / n > 0.5 ? 1 : 0;
+  return `M 50 50 L ${sx} ${sy} A 50 50 0 ${largeArc} 1 ${ex} ${ey} Z`;
+}
+
 function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
   pool: Dish[]; displayed?: Dish; spinning: boolean; landed: Dish | null; rotation: number; onSpin: () => void;
 }) {
@@ -151,6 +180,10 @@ function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
   const n = Math.max(slices.length, 1);
   const sliceDeg = 360 / n;
   const size = "min(340px, calc(100vw - 80px))";
+  const wheelTransform = `rotate(${rotation}deg)`;
+  const wheelTransition = spinning
+    ? "transform 2.2s cubic-bezier(0.15, 0.85, 0.2, 1)"
+    : "transform 0.4s";
   return (
     <div
       className={[
@@ -160,20 +193,47 @@ function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
     >
       <div className="relative" style={{ width: size, height: size }}>
         <div
-          className="absolute inset-0 rounded-full border-4 border-paper shadow-[0_16px_40px_rgba(0,0,0,0.12)]"
-          style={{
-            transform: `rotate(${rotation}deg)`,
-            transition: spinning ? "transform 2.2s cubic-bezier(0.15, 0.85, 0.2, 1)" : "transform 0.4s",
-            background: slices.length ? `conic-gradient(${slices.map((d, i) => {
-              const accent = d.accent || `oklch(${60 + (i % 3) * 8}% 0.12 ${(i * 37) % 360})`;
-              const a = (i / n) * 360;
-              const b = ((i + 1) / n) * 360;
-              return `${accent} ${a}deg ${b}deg`;
-            }).join(", ")})` : "var(--bg-alt)",
-          }}
-        />
-        <div className="absolute inset-0" style={{ transform: `rotate(${rotation}deg)`, transition: spinning ? "transform 2.2s cubic-bezier(0.15, 0.85, 0.2, 1)" : "transform 0.4s" }}>
+          className="absolute inset-0 rounded-full overflow-hidden border-4 border-paper shadow-[0_16px_40px_rgba(0,0,0,0.12)]"
+          style={{ transform: wheelTransform, transition: wheelTransition }}
+        >
+          {slices.length ? (
+            <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" className="h-full w-full">
+              <defs>
+                {slices.map((d, i) => (
+                  <clipPath key={d.id} id={`wedge-clip-${d.id}`}>
+                    <path d={wedgePath(i, n)} />
+                  </clipPath>
+                ))}
+              </defs>
+              {slices.map((d, i) => {
+                const accent = d.accent || `oklch(${60 + (i % 3) * 8}% 0.12 ${(i * 37) % 360})`;
+                return (
+                  <g key={d.id} clipPath={`url(#wedge-clip-${d.id})`}>
+                    <path d={wedgePath(i, n)} fill={accent} />
+                    {d.imageUrl && (
+                      <image
+                        href={d.imageUrl}
+                        x={0}
+                        y={0}
+                        width={100}
+                        height={100}
+                        preserveAspectRatio="xMidYMid slice"
+                      />
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          ) : (
+            <div className="absolute inset-0" style={{ background: "var(--bg-alt)" }} />
+          )}
+        </div>
+        <div className="absolute inset-0" style={{ transform: wheelTransform, transition: wheelTransition }}>
           {slices.map((d, i) => {
+            // Only show the emoji/letter label for dishes WITHOUT a photo —
+            // the photo communicates the dish on its own and a label over a
+            // photo gets visually noisy.
+            if (d.imageUrl) return null;
             const midDeg = (i + 0.5) * sliceDeg - 90;
             const rad = (midDeg * Math.PI) / 180;
             const cx = 50 + Math.cos(rad) * 32;
