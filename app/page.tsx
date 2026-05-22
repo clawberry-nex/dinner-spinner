@@ -199,27 +199,44 @@ function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
           {slices.length ? (
             <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" className="h-full w-full">
               <defs>
-                {slices.map((d, i) => (
-                  <clipPath key={d.id} id={`wedge-clip-${d.id}`}>
-                    <path d={wedgePath(i, n)} />
+                {slices.map((d) => (
+                  <clipPath key={d.id} id={`thumb-clip-${d.id}`}>
+                    <circle cx={0} cy={0} r={9} />
                   </clipPath>
                 ))}
               </defs>
+              {/* Colored wedge backgrounds with thin separator strokes. */}
               {slices.map((d, i) => {
                 const accent = d.accent || `oklch(${60 + (i % 3) * 8}% 0.12 ${(i * 37) % 360})`;
                 return (
-                  <g key={d.id} clipPath={`url(#wedge-clip-${d.id})`}>
-                    <path d={wedgePath(i, n)} fill={accent} />
-                    {d.imageUrl && (
-                      <image
-                        href={d.imageUrl}
-                        x={0}
-                        y={0}
-                        width={100}
-                        height={100}
-                        preserveAspectRatio="xMidYMid slice"
-                      />
-                    )}
+                  <path
+                    key={d.id}
+                    d={wedgePath(i, n)}
+                    fill={accent}
+                    stroke="var(--paper)"
+                    strokeWidth={0.6}
+                  />
+                );
+              })}
+              {/* Per-wedge dish thumbnails at the wedge centroid. */}
+              {slices.map((d, i) => {
+                if (!d.imageUrl) return null;
+                const midDeg = (i + 0.5) * sliceDeg - 90;
+                const rad = (midDeg * Math.PI) / 180;
+                const cx = 50 + Math.cos(rad) * 32;
+                const cy = 50 + Math.sin(rad) * 32;
+                return (
+                  <g key={d.id} transform={`translate(${cx} ${cy})`}>
+                    <circle cx={0} cy={0} r={9.4} fill="var(--paper)" />
+                    <image
+                      href={d.imageUrl}
+                      x={-9}
+                      y={-9}
+                      width={18}
+                      height={18}
+                      preserveAspectRatio="xMidYMid slice"
+                      clipPath={`url(#thumb-clip-${d.id})`}
+                    />
                   </g>
                 );
               })}
@@ -230,9 +247,8 @@ function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
         </div>
         <div className="absolute inset-0" style={{ transform: wheelTransform, transition: wheelTransition }}>
           {slices.map((d, i) => {
-            // Only show the emoji/letter label for dishes WITHOUT a photo —
-            // the photo communicates the dish on its own and a label over a
-            // photo gets visually noisy.
+            // Emoji/letter label as fallback for dishes WITHOUT a photo;
+            // the photo + accent wedge speaks for itself.
             if (d.imageUrl) return null;
             const midDeg = (i + 0.5) * sliceDeg - 90;
             const rad = (midDeg * Math.PI) / 180;
