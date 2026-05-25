@@ -47,7 +47,8 @@ export function IngestInput({ onParsed }: IngestInputProps) {
       let image: CompressedImage | undefined;
       if (file) image = await compressImage(file);
 
-      const res = await fetch("/api/ingest", {
+      // Step 1: start the job
+      const start = await fetch("/api/ingest", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -55,16 +56,52 @@ export function IngestInput({ onParsed }: IngestInputProps) {
           image,
         }),
       });
-      const body = (await res.json().catch(() => ({}))) as {
-        dish?: DishInput;
-        error?: { code?: string; message?: string; rawResponse?: string | null };
+      const startBody = (await start.json().catch(() => ({}))) as {
+        jobId?: string;
+        error?: { code?: string; message?: string };
       };
-      if (!res.ok || !body.dish) {
-        setError(body.error?.message ?? `Ingest failed (${res.status})`);
-        setRawResponse(body.error?.rawResponse ?? null);
+      if (!start.ok || !startBody.jobId) {
+        setError(startBody.error?.message ?? `Ingest failed (${start.status})`);
         return;
       }
-      onParsed(body.dish);
+
+      // Step 2: poll until done|failed. Up to ~3 min total — generous so
+      // even slow vision calls complete. The browser is just waiting, not
+      // holding a connection open, so cost is negligible.
+      const POLL_INTERVAL_MS = 2000;
+      const POLL_TIMEOUT_MS = 180_000;
+      const startedAt = Date.now();
+      const jobId = startBody.jobId;
+
+      // small helper so the loop reads cleanly
+      const sleep = (ms: number) =>
+        new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+      while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
+        await sleep(POLL_INTERVAL_MS);
+        const poll = await fetch(`/api/ingest/jobs/${jobId}`);
+        const pollBody = (await poll.json().catch(() => ({}))) as {
+          status?: string;
+          dish?: DishInput;
+          error?: { code?: string; message?: string; rawResponse?: string | null };
+        };
+        if (!poll.ok) {
+          setError(pollBody.error?.message ?? `Poll failed (${poll.status})`);
+          setRawResponse(pollBody.error?.rawResponse ?? null);
+          return;
+        }
+        if (pollBody.status === "done" && pollBody.dish) {
+          onParsed(pollBody.dish);
+          return;
+        }
+        if (pollBody.status === "failed") {
+          setError(pollBody.error?.message ?? "Ingest failed");
+          setRawResponse(pollBody.error?.rawResponse ?? null);
+          return;
+        }
+        // status === "pending" or "running" — continue polling
+      }
+      setError("Ingest is taking unusually long. Try again, or check claude-agent.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected failure");
     } finally {

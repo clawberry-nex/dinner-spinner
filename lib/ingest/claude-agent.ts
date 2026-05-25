@@ -130,3 +130,170 @@ export async function callClaudeAgent(
     rawResponse: body.response ?? "",
   };
 }
+
+// =========================================================================
+// Async (job-based) flow — POST /chat-async returns a job_id immediately;
+// poll GET /jobs/:id until status flips to done|failed. Lets Vercel functions
+// stay short (~1s) regardless of how long the agent takes to process.
+// =========================================================================
+
+export interface StartJobArgs {
+  prompt: string;
+  responseSchema: object;
+  image?: { data: string; mediaType: string };
+  token: string;
+  baseUrl: string;
+  model?: "opus" | "sonnet" | "haiku";
+  /** ms; default 15000. Just the POST to claude-agent, not the job itself. */
+  timeoutMs?: number;
+}
+
+export interface JobHandle {
+  jobId: string;
+  pollUrl: string;
+}
+
+export async function startClaudeAgentJob(
+  args: StartJobArgs,
+  opts: { fetcher?: typeof fetch } = {},
+): Promise<JobHandle> {
+  const fetcher = opts.fetcher ?? fetch;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), args.timeoutMs ?? 15_000);
+
+  let res: Response;
+  try {
+    res = await fetcher(`${args.baseUrl}/chat-async`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${args.token}`,
+      },
+      body: JSON.stringify({
+        prompt: args.prompt,
+        response_schema: args.responseSchema,
+        ...(args.model ? { model: args.model } : {}),
+        ...(args.image
+          ? { images: [{ data: args.image.data, media_type: args.image.mediaType }] }
+          : {}),
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new ClaudeAgentError({
+        code: "timeout",
+        message: `claude-agent did not respond within ${args.timeoutMs ?? 15_000}ms`,
+      });
+    }
+    throw new ClaudeAgentError({
+      code: "network_error",
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+  clearTimeout(timeout);
+
+  const body = (await res.json().catch(() => null)) as
+    | { job_id?: string; poll_url?: string; error?: { code?: string; message?: string } }
+    | null;
+
+  if (!res.ok || !body?.job_id) {
+    const code = (body?.error?.code as ClaudeAgentErrorCode) ?? "agent_error";
+    throw new ClaudeAgentError({
+      code,
+      message: body?.error?.message ?? `claude-agent ${res.status}`,
+      status: res.status,
+    });
+  }
+
+  return { jobId: body.job_id, pollUrl: body.poll_url ?? `/api/v1/jobs/${body.job_id}` };
+}
+
+export type PollResult =
+  | { status: "pending" | "running" }
+  | {
+      status: "done";
+      structured: unknown;
+      response: string;
+      costUsd: number | null;
+      sessionId: string | null;
+    }
+  | { status: "failed"; errorCode: string; errorMessage: string };
+
+export async function pollClaudeAgentJob(
+  jobId: string,
+  args: { token: string; baseUrl: string; timeoutMs?: number },
+  opts: { fetcher?: typeof fetch } = {},
+): Promise<PollResult> {
+  const fetcher = opts.fetcher ?? fetch;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), args.timeoutMs ?? 10_000);
+
+  let res: Response;
+  try {
+    res = await fetcher(`${args.baseUrl}/jobs/${encodeURIComponent(jobId)}`, {
+      headers: { authorization: `Bearer ${args.token}` },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new ClaudeAgentError({
+        code: "timeout",
+        message: `claude-agent poll did not respond within ${args.timeoutMs ?? 10_000}ms`,
+      });
+    }
+    throw new ClaudeAgentError({
+      code: "network_error",
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+  clearTimeout(timeout);
+
+  const body = (await res.json().catch(() => null)) as
+    | {
+        status?: string;
+        structured?: unknown;
+        response?: string;
+        cost_usd?: number | null;
+        session_id?: string | null;
+        error?: { code?: string; message?: string };
+      }
+    | null;
+
+  if (!res.ok) {
+    const code = (body?.error?.code as ClaudeAgentErrorCode) ?? "agent_error";
+    throw new ClaudeAgentError({
+      code,
+      message: body?.error?.message ?? `claude-agent ${res.status}`,
+      status: res.status,
+    });
+  }
+
+  if (body?.status === "pending" || body?.status === "running") {
+    return { status: body.status };
+  }
+  if (body?.status === "done") {
+    return {
+      status: "done",
+      structured: body.structured,
+      response: body.response ?? "",
+      costUsd: body.cost_usd ?? null,
+      sessionId: body.session_id ?? null,
+    };
+  }
+  if (body?.status === "failed") {
+    return {
+      status: "failed",
+      errorCode: body.error?.code ?? "agent_error",
+      errorMessage: body.error?.message ?? "job failed",
+    };
+  }
+  throw new ClaudeAgentError({
+    code: "agent_error",
+    message: `unexpected job status: ${body?.status ?? "?"}`,
+    rawResponse: JSON.stringify(body),
+  });
+}
+

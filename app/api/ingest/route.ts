@@ -1,14 +1,17 @@
 import { z } from "zod";
 import { resolveUserId } from "@/lib/auth-helpers";
-import { DishInputSchema } from "@/lib/types";
 import { getPantryDefaults } from "@/lib/pantry";
 import { buildIngestPrompt } from "@/lib/ingest/prompt";
 import { DISH_INPUT_JSON_SCHEMA } from "@/lib/ingest/schema";
-import { callClaudeAgent, ClaudeAgentError } from "@/lib/ingest/claude-agent";
+import {
+  startClaudeAgentJob,
+  ClaudeAgentError,
+} from "@/lib/ingest/claude-agent";
 
-// claude-agent's first call is ~12s; allow comfortable headroom on top of
-// Vercel Hobby's 10s default.
-export const maxDuration = 60;
+// Async pattern: this route only KICKS OFF the ingest job and returns a
+// job_id in <1s. The browser polls /api/ingest/jobs/[id] for the result.
+// Vercel function duration is no longer a bottleneck.
+export const maxDuration = 30;
 
 const CLAUDE_AGENT_BASE_URL =
   process.env.CLAUDE_AGENT_URL ?? "https://nex.tail7f6b96.ts.net:10000";
@@ -18,10 +21,9 @@ const IngestRequestSchema = z
     input: z.string().trim().min(1).max(50_000).optional(),
     image: z
       .object({
-        // ~4.4MB base64 cap. Vercel Hobby's serverless function body limit is
-        // 4.5MB and fires first in practice; this Zod check is the
-        // belt-and-suspenders for off-Vercel callers (curl, scripts).
-        // Client compresses to <1MB so neither cap normally fires.
+        // ~4.4MB base64 cap. Vercel Hobby's serverless function body limit
+        // is 4.5MB; the client compresses to <1MB so neither cap normally
+        // fires.
         data: z.string().min(1).max(4_500_000),
         mediaType: z.enum(["image/jpeg", "image/png", "image/webp"]),
       })
@@ -74,74 +76,39 @@ export async function POST(request: Request): Promise<Response> {
     pantryList,
   });
 
-  const t0 = Date.now();
-  let result;
   try {
-    result = await callClaudeAgent({
+    const job = await startClaudeAgentJob({
       prompt,
       responseSchema: DISH_INPUT_JSON_SCHEMA,
       image,
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
-      // Sonnet — Haiku trips on the long rules+vocabulary prompt and
-      // misses recipes embedded in the input. Sonnet runs in ~25-30s
-      // direct (well within the 55s budget) and reliably follows the
-      // structured-output instruction. Opus is too slow (60-80s+).
+      // Sonnet — fast enough on the long structured prompt and reliable
+      // (Haiku misses recipes; Opus is too slow). With the async pattern
+      // the Vercel function duration no longer bounds this, but Sonnet
+      // still keeps the poll loop short for users.
       model: "sonnet",
-      // Abort our call to claude-agent at 55s so we return a clean error
-      // envelope to the browser instead of getting hard-killed mid-flight.
-      timeoutMs: 55_000,
     });
+    return Response.json({ jobId: job.jobId }, { status: 202 });
   } catch (err) {
     if (err instanceof ClaudeAgentError) {
-      // Map claude-agent codes to upstream-facing statuses.
       const status =
         err.code === "rate_limited" || err.code === "queue_full"
           ? 429
           : err.code === "timeout"
             ? 504
             : err.code === "network_error" || err.code === "disabled"
-              ? 503 // claude-agent unreachable or kill-switched — try again later
+              ? 503
               : err.code === "unauthorized" || err.code === "scope_missing"
-                ? 502 // misconfig from our side — surface as upstream issue
+                ? 502
                 : 502;
-      console.error("[ingest] claude-agent failure", {
+      console.error("[ingest] start-job failure", {
         code: err.code,
         status: err.status,
-        rawResponse: err.rawResponse,
       });
-      return errorEnvelope(err.code, err.message, status, {
-        rawResponse: err.rawResponse,
-        retryAfter: err.retryAfter,
-      });
+      return errorEnvelope(err.code, err.message, status);
     }
-    console.error("[ingest] unexpected failure", err);
+    console.error("[ingest] unexpected start failure", err);
     return errorEnvelope("agent_error", "Unexpected ingest failure", 500);
   }
-
-  // Defense in depth: re-validate the structured payload against the
-  // canonical Zod schema before handing it to the client. claude-agent
-  // enforces JSON Schema structurally but not semantically (e.g. string
-  // length, enum-like constraints).
-  const validated = DishInputSchema.safeParse(result.structured);
-  if (!validated.success) {
-    console.error("[ingest] Zod re-validate failed", {
-      issues: validated.error.issues,
-      structured: result.structured,
-    });
-    return errorEnvelope(
-      "bad_response",
-      "Parsed dish failed validation",
-      502,
-      { issues: validated.error.issues, structured: result.structured },
-    );
-  }
-
-  console.log("[ingest] ok", {
-    latencyMs: Date.now() - t0,
-    costUsd: result.costUsd,
-    title: validated.data.title,
-  });
-
-  return Response.json({ dish: validated.data });
 }
