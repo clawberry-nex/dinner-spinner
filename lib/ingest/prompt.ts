@@ -1,5 +1,3 @@
-import { STANDARD_INGREDIENTS } from "../vocabulary.ts";
-
 export interface IngestPromptInput {
   /** Free-text from the textarea: prompt, recipe prose, or URL. May be null when only an image is attached. */
   userInput: string | null;
@@ -13,56 +11,37 @@ export function buildIngestPrompt(input: IngestPromptInput): string {
       ? input.userInput.trim()
       : "(see attached image)";
 
-  return `You parse cooking recipes into structured JSON for the Dinner Spinner app.
+  const pantryLine = input.pantryList.length
+    ? `Pantry items (mark \`pantry: true\` for exact or close semantic match like "cumin powder" → "cumin"): ${input.pantryList.join(", ")}.`
+    : "";
 
-INPUT (recipe text, URL, free-text prompt, or an attached image — possibly several):
+  return `Parse this recipe and call submit_result. Do not respond with prose.
+
+INPUT:
 ${inputBody}
 
-If the input contains a URL, fetch it and read the recipe from the page.
-If an image is attached, read the recipe text or ingredient list from it.
+Each ingredient is split into structured fields — never cram everything into \`name\`:
+- name: bare purchasable thing, singular and canonical ("tomato" not "tomatoes", "chicken thigh" not "chicken legs", "green chili" not "green chilli"). Colour stays with name when it changes the product.
+- descriptor: size/quality that matters at the store ("small", "medium", "large", "ripe"). Never "fresh" — implied.
+- preparation: cut/cook prep ("thinly sliced", "peeled and diced", "trimmed").
+- unit: prefer g, kg, ml, l, tsp, tbsp, cup, piece, clove, slice, sprig, leaf, head, bulb, stalk, bunch, handful, can, jar, bottle, pack, pinch, dash, splash, drizzle, to taste. Singular.
+- Translate Dutch → English (stuks=piece, el=tbsp, tl=tsp, teentjes=clove, uien=onion, knoflook=garlic).
 
-OUTPUT
-Call the \`submit_result\` tool with a payload matching its schema.
-DO NOT respond with prose. Use the tool.
+Flags:
+- scalable: false for FIXED quantities (1 bay leaf, 1 cinnamon stick, 1 stock cube). Default unset.
+- optional: true if the recipe says "optional", "to taste" (non-pantry), "to serve", "to garnish".
+- alternatives: ["X"] for "butter or X" — primary in name, others in alternatives.
 
-RULES — ingredient parsing
-- Split every ingredient into structured fields. Never cram everything into \`name\`.
-- name = the bare purchasable thing, singular ("tomato", not "tomatoes"; "onion", not "onions").
-- descriptor = size/quality affecting purchase ("small", "medium", "large", "ripe"). Never "fresh" — that's implied.
-- preparation = cut/cook prep ("thinly sliced", "peeled and diced", "trimmed").
-- Colour that changes the product stays in \`name\`: "green chili" ≠ "red chili"; "red pepper" ≠ "yellow pepper".
-- Translate Dutch → English: "stuks" → "piece", "el" → "tbsp", "tl" → "tsp", "teentjes" → "clove", "uien" → "onion", "knoflook" → "garlic".
+${pantryLine}
+For "salt and black pepper to taste" emit two pantry:true rows with unit="to taste", quantity=1.
 
-RULES — units (prefer one of these)
-Weight: g, kg, oz, lb
-Volume: ml, l, tsp, tbsp, cup, fl oz
-Count: piece, clove, wedge, slice, sprig, leaf, head, bulb, stalk, bunch, handful, can, jar, bottle, pack
-Imprecise: pinch, dash, splash, drizzle, to taste
-Always singular ("clove", not "cloves").
-
-RULES — standard ingredient names
-Prefer these canonical names where applicable:
-${STANDARD_INGREDIENTS.join(", ")}
-If the recipe genuinely needs something not in this list (gochujang, tahini, sumac, nduja), use the literal name — don't force a bad mapping.
-
-RULES — pantry flag
-Set \`pantry: true\` for ingredients in this list (exact match or close semantic match like "cumin powder" → "cumin"):
-${input.pantryList.join(", ")}
-Use judgment for near-matches. Don't aggressively flag "smoked paprika" just because "paprika" might be in the list.
-For "salt and black pepper to taste" → two ingredients, both \`pantry: true\`, \`unit: "to taste"\`, \`quantity: 1\`.
-
-RULES — flags
-- scalable: false for FIXED quantities regardless of servings (1 bay leaf, 1 cinnamon stick, 1 star anise, 1 stock cube). Default unset (= scalable).
-- optional: true if the recipe says "optional", "to taste" (non-pantry), "to serve", "to garnish". Default unset (= required).
-- alternatives: array of strings for "X or Y" — primary in \`name\`, alternatives listed. e.g. "butter or olive oil" → name: "butter", alternatives: ["olive oil"].
-
-RULES — top-level dish fields
+Top-level fields:
 - title: short dish name.
-- subtitle: 1-line description, only if the recipe context supports one. Skip if unclear.
-- recipe: long-form cooking instructions in markdown, only if the input contained instructions. Skip if input was just an ingredient list or brief prompt.
-- baseServings: number stated in the recipe. Default 4 if unstated.
-- tags: infer obvious dietary/protein tags only — "vegetarian", "vegan", "chicken", "beef", "fish", "pasta", "rice", "soup", "curry", "stir fry", "salad", "dessert", "breakfast". Do NOT invent personal tags like "Finn likes this" or "weeknight".
-- image_description: one short phrase describing the finished dish for image generation, e.g. "creamy mushroom pasta with parsley garnish on a creamware plate". Keep it visual and food-focused.
+- subtitle: optional 1-line description if obvious.
+- recipe: markdown instructions, only if input had them.
+- baseServings: from the recipe, default 4.
+- tags: only obvious dietary/protein tags (vegetarian, vegan, chicken, beef, fish, pasta, rice, soup, curry, stir fry, salad, dessert, breakfast). No personal tags.
+- image_description: one short visual phrase for image generation ("creamy mushroom pasta with parsley garnish").
 
-Now parse the input and call submit_result.`;
+Call submit_result now.`;
 }

@@ -67,8 +67,9 @@ export function IngestInput({ onParsed }: IngestInputProps) {
 
       // Step 2: poll until done|failed. Up to ~3 min total — generous so
       // even slow vision calls complete. The browser is just waiting, not
-      // holding a connection open, so cost is negligible.
-      const POLL_INTERVAL_MS = 2000;
+      // holding a connection open, so cost is negligible. 1.5s interval
+      // keeps the perceived "done" lag below ~1.5s.
+      const POLL_INTERVAL_MS = 1500;
       const POLL_TIMEOUT_MS = 180_000;
       const startedAt = Date.now();
       const jobId = startBody.jobId;
