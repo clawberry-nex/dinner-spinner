@@ -83,10 +83,11 @@ export async function POST(request: Request): Promise<Response> {
       image,
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
-      // Use Haiku — recipe parsing doesn't need Opus reasoning and Haiku
-      // is several times faster, which matters because Vercel Hobby kills
-      // the function at 60s.
-      model: "haiku",
+      // Sonnet — Haiku trips on the long rules+vocabulary prompt and
+      // misses recipes embedded in the input. Sonnet runs in ~25-30s
+      // direct (well within the 55s budget) and reliably follows the
+      // structured-output instruction. Opus is too slow (60-80s+).
+      model: "sonnet",
       // Abort our call to claude-agent at 55s so we return a clean error
       // envelope to the browser instead of getting hard-killed mid-flight.
       timeoutMs: 55_000,
