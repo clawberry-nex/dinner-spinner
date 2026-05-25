@@ -83,9 +83,12 @@ export async function POST(request: Request): Promise<Response> {
       image,
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
-      // Vercel Hobby kills the function at 60s. Abort our call to
-      // claude-agent at 55s so we return a clean error envelope to the
-      // browser instead of getting hard-killed mid-flight.
+      // Use Haiku — recipe parsing doesn't need Opus reasoning and Haiku
+      // is several times faster, which matters because Vercel Hobby kills
+      // the function at 60s.
+      model: "haiku",
+      // Abort our call to claude-agent at 55s so we return a clean error
+      // envelope to the browser instead of getting hard-killed mid-flight.
       timeoutMs: 55_000,
     });
   } catch (err) {

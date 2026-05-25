@@ -42,6 +42,8 @@ export interface CallArgs {
   baseUrl: string;
   /** ms; default 60000. */
   timeoutMs?: number;
+  /** claude-agent model alias: opus | sonnet | haiku. Omit to use claude-agent's default. */
+  model?: "opus" | "sonnet" | "haiku";
 }
 
 export interface CallResult {
@@ -74,6 +76,7 @@ export async function callClaudeAgent(
       body: JSON.stringify({
         prompt: args.prompt,
         response_schema: args.responseSchema,
+        ...(args.model ? { model: args.model } : {}),
         ...(args.image
           ? { images: [{ data: args.image.data, media_type: args.image.mediaType }] }
           : {}),
