@@ -1,6 +1,11 @@
 const MAX_RAW_BYTES = 20 * 1024 * 1024; // 20MB pre-compression sanity cap
-const MAX_DIMENSION = 2048;
-const JPEG_QUALITY = 0.85;
+// Claude vision works fine on 1280px and processes 3-4x faster than 2048px.
+// Smaller dimensions also cut upload time on mobile networks substantially.
+// Tuned for the 60s Vercel Hobby function budget against /api/v1/chat
+// (which takes ~30-47s for image ingest at 2048px per claude-agent's
+// audit log).
+const MAX_DIMENSION = 1280;
+const JPEG_QUALITY = 0.78;
 const SUPPORTED_INPUT_TYPES = new Set([
   "image/jpeg",
   "image/png",
