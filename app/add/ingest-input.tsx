@@ -1,22 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { compressImage, type CompressedImage } from "@/lib/image-compress";
-import type { DishInput } from "@/lib/types";
+import type { Dish, DishInput } from "@/lib/types";
 import { Button } from "../_components/ui";
 
-export type IngestInputProps = {
-  onParsed: (dish: DishInput) => void;
-};
-
-// Step identifiers come from claude-agent's runner — see
-// src/jobs/runner.ts::stepForTool in that repo. New tool names get bucketed
-// into `working` server-side; the fallback below catches them.
+// Step identifiers. The first four (starting/analyzing_photo/writing_result/
+// working) come from claude-agent's runner — see src/jobs/runner.ts::stepForTool
+// in that repo. The last two are client-side (we set them as we move through
+// the save → image phases). New agent tool names get bucketed into `working`
+// server-side; the fallback below catches them.
 const STEP_LABELS: Record<string, string> = {
   starting: "Starting up…",
   analyzing_photo: "Looking at the photo…",
   writing_result: "Writing the recipe…",
   working: "Working on it…",
+  saving: "Saving recipe…",
+  generating_image: "Generating dish image…",
 };
 
 function labelForStep(step: string | null | undefined): string {
@@ -24,7 +25,14 @@ function labelForStep(step: string | null | undefined): string {
   return STEP_LABELS[step] ?? "Working on it…";
 }
 
-export function IngestInput({ onParsed }: IngestInputProps) {
+const IMAGE_POLL_INTERVAL_MS = 1000;
+// Image gen is best-effort; we don't want to block the user forever. After
+// this, redirect to the dish page anyway — the background image gen will
+// land whenever it finishes.
+const IMAGE_POLL_TIMEOUT_MS = 60_000;
+
+export function IngestInput() {
+  const router = useRouter();
   const [input, setInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [compressedPreviewUrl, setCompressedPreviewUrl] = useState<string | null>(null);
@@ -73,6 +81,12 @@ export function IngestInput({ onParsed }: IngestInputProps) {
     setCurrentStep(null);
     setElapsedSec(0);
     setStartedAt(Date.now());
+
+    // Set inside the success branch so the `finally` clause knows to leave
+    // `loading` true — we want the overlay to stay up until router.push
+    // completes its navigation; otherwise the form flickers back into view
+    // for a frame between save and navigation.
+    let navigated = false;
 
     try {
       let image: CompressedImage | undefined;
@@ -124,7 +138,7 @@ export function IngestInput({ onParsed }: IngestInputProps) {
           return;
         }
         if (pollBody.status === "done" && pollBody.dish) {
-          onParsed(pollBody.dish);
+          navigated = await saveAndRedirect(pollBody.dish, sleep);
           return;
         }
         if (pollBody.status === "failed") {
@@ -133,8 +147,8 @@ export function IngestInput({ onParsed }: IngestInputProps) {
           return;
         }
         // status === "pending" or "running" — surface the agent's current
-        // step so the button label reflects real progress, then wait and
-        // poll again.
+        // step so the overlay reflects real progress, then wait and poll
+        // again.
         if (pollBody.currentStep !== undefined) {
           setCurrentStep(pollBody.currentStep ?? null);
         }
@@ -144,8 +158,55 @@ export function IngestInput({ onParsed }: IngestInputProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected failure");
     } finally {
-      setLoading(false);
+      // On success we navigated; the new page mounts and replaces this
+      // component. On error/timeout the user stays here, so drop the
+      // overlay so they can see the error.
+      if (!navigated) setLoading(false);
     }
+  }
+
+  /**
+   * After the parse comes back, save the dish and wait for the background
+   * image generation to land before navigating. We poll GET /api/dishes/:id
+   * because POST /api/dishes returns immediately (image gen runs via Next's
+   * `after()`); the dish exists right away with imageUrl=null.
+   *
+   * Returns true if we redirected, false if we set an error and stopped.
+   */
+  async function saveAndRedirect(
+    dish: DishInput,
+    sleep: (ms: number) => Promise<void>,
+  ): Promise<boolean> {
+    setCurrentStep("saving");
+    const saveRes = await fetch("/api/dishes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(dish),
+    });
+    if (!saveRes.ok) {
+      const body = (await saveRes.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      setError(body.error ?? `Save failed (${saveRes.status})`);
+      return false;
+    }
+    const saved = (await saveRes.json()) as Dish;
+
+    // Image gen runs server-side via `after()`. Poll until imageUrl shows up
+    // or we hit the timeout — either way, we redirect; the image will land
+    // on the dish page itself if it took longer than our budget.
+    setCurrentStep("generating_image");
+    const imageStart = Date.now();
+    while (Date.now() - imageStart < IMAGE_POLL_TIMEOUT_MS) {
+      await sleep(IMAGE_POLL_INTERVAL_MS);
+      const r = await fetch(`/api/dishes/${saved.id}`);
+      if (r.ok) {
+        const fresh = (await r.json()) as Dish;
+        if (fresh.imageUrl) break;
+      }
+    }
+    router.push(`/dishes/${saved.id}`);
+    return true;
   }
 
   async function submit(e: React.FormEvent) {
@@ -157,11 +218,14 @@ export function IngestInput({ onParsed }: IngestInputProps) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {loading && (
+        <IngestOverlay step={currentStep} elapsedSec={elapsedSec} />
+      )}
       <p className="text-sm text-zinc-500">
         Paste a recipe, a URL, or describe a dish in your own words. Optionally
         attach a photo (a cookbook page, a recipe screenshot, an ingredient
-        list). Claude will parse it; you&apos;ll review the result in the
-        normal dish form before saving.
+        list). Claude will parse it and save the dish; you&apos;ll land on the
+        dish page when it&apos;s ready.
       </p>
 
       <textarea
@@ -221,16 +285,8 @@ export function IngestInput({ onParsed }: IngestInputProps) {
 
       <div className="flex items-center gap-3 pt-2">
         <Button type="submit" disabled={!canSubmit}>
-          {loading ? labelForStep(currentStep) : "Ingest →"}
+          Add Recipe →
         </Button>
-        {loading && (
-          <span
-            className="text-xs tabular-nums text-zinc-500"
-            aria-live="polite"
-          >
-            {elapsedSec}s
-          </span>
-        )}
       </div>
 
       {error && (
@@ -260,5 +316,40 @@ export function IngestInput({ onParsed }: IngestInputProps) {
         </div>
       )}
     </form>
+  );
+}
+
+/**
+ * Full-screen darkened overlay shown while a recipe is being ingested,
+ * saved, and image-generated. Reads the current step + elapsed seconds and
+ * renders a centered card with the step label, a spinner, and a counter.
+ * Blocks pointer events on the form behind it via the backdrop.
+ */
+function IngestOverlay({
+  step,
+  elapsedSec,
+}: {
+  step: string | null;
+  elapsedSec: number;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+    >
+      <div className="mx-4 w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl dark:bg-zinc-900">
+        <div className="flex flex-col items-center gap-4">
+          <div
+            aria-hidden="true"
+            className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"
+          />
+          <p className="text-center text-lg font-medium text-zinc-900 dark:text-zinc-100">
+            {labelForStep(step)}
+          </p>
+          <p className="text-sm tabular-nums text-zinc-500">{elapsedSec}s</p>
+        </div>
+      </div>
+    </div>
   );
 }
