@@ -83,11 +83,12 @@ export async function POST(request: Request): Promise<Response> {
       image,
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
-      // Sonnet — fast enough on the long structured prompt and reliable
-      // (Haiku misses recipes; Opus is too slow). With the async pattern
-      // the Vercel function duration no longer bounds this, but Sonnet
-      // still keeps the poll loop short for users.
-      model: "sonnet",
+      // Haiku 4.5 — once we disabled extended thinking and pinned the
+      // submit_result MCP tool with alwaysLoad on the agent side, Haiku
+      // hits the ~16s mark with the same parse quality as Sonnet and at
+      // ~⅓ the cost. Previous Haiku failure ("missed the recipe") was
+      // the multi-turn thinking ambiguity, not capacity.
+      model: "haiku",
     });
     return Response.json({ jobId: job.jobId }, { status: 202 });
   } catch (err) {

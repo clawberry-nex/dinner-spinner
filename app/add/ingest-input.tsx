@@ -65,11 +65,12 @@ export function IngestInput({ onParsed }: IngestInputProps) {
         return;
       }
 
-      // Step 2: poll until done|failed. Up to ~3 min total — generous so
-      // even slow vision calls complete. The browser is just waiting, not
-      // holding a connection open, so cost is negligible. 1.5s interval
-      // keeps the perceived "done" lag below ~1.5s.
-      const POLL_INTERVAL_MS = 1500;
+      // Step 2: poll until done|failed. First poll fires immediately so
+      // validation errors surface fast; subsequent polls run every 500ms,
+      // giving ~250ms avg tail lag vs the previous 1500ms (~750ms avg).
+      // With Haiku ingest at ~18s median that's roughly 36 polls per
+      // ingest — well within Vercel Hobby invocation budgets.
+      const POLL_INTERVAL_MS = 500;
       const POLL_TIMEOUT_MS = 180_000;
       const startedAt = Date.now();
       const jobId = startBody.jobId;
@@ -79,7 +80,6 @@ export function IngestInput({ onParsed }: IngestInputProps) {
         new Promise<void>((resolve) => setTimeout(resolve, ms));
 
       while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
-        await sleep(POLL_INTERVAL_MS);
         const poll = await fetch(`/api/ingest/jobs/${jobId}`);
         const pollBody = (await poll.json().catch(() => ({}))) as {
           status?: string;
@@ -100,7 +100,8 @@ export function IngestInput({ onParsed }: IngestInputProps) {
           setRawResponse(pollBody.error?.rawResponse ?? null);
           return;
         }
-        // status === "pending" or "running" — continue polling
+        // status === "pending" or "running" — wait, then poll again
+        await sleep(POLL_INTERVAL_MS);
       }
       setError("Ingest is taking unusually long. Try again, or check claude-agent.");
     } catch (err) {
