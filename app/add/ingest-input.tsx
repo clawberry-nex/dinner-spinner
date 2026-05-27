@@ -25,11 +25,67 @@ function labelForStep(step: string | null | undefined): string {
   return STEP_LABELS[step] ?? "Working on it…";
 }
 
+const POLL_INTERVAL_MS = 500;
+const POLL_TIMEOUT_MS = 180_000;
+
 const IMAGE_POLL_INTERVAL_MS = 1000;
 // Image gen is best-effort; we don't want to block the user forever. After
 // this, redirect to the dish page anyway — the background image gen will
 // land whenever it finishes.
 const IMAGE_POLL_TIMEOUT_MS = 60_000;
+
+// localStorage stash so we can resume an in-flight ingest if the user closes
+// the tab. claude-agent jobs auto-delete after 24h; we cap our resume window
+// at 10 min so a stale stash doesn't ambush the user when they come back days
+// later.
+const PENDING_KEY = "dinner-spinner:pending-ingest";
+const PENDING_TTL_MS = 10 * 60 * 1000;
+
+type PendingState =
+  | { stage: "ingest"; jobId: string; startedAt: number }
+  | { stage: "image"; dishId: number; startedAt: number };
+
+function readStash(): PendingState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PendingState;
+    if (
+      !parsed ||
+      typeof parsed.startedAt !== "number" ||
+      Date.now() - parsed.startedAt > PENDING_TTL_MS
+    ) {
+      window.localStorage.removeItem(PENDING_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeStash(state: PendingState): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PENDING_KEY, JSON.stringify(state));
+  } catch {
+    // Quota / private-mode: best-effort. The flow still works in-tab; only
+    // the resume-after-close fallback degrades.
+  }
+}
+
+function clearStash(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // Same as writeStash — non-fatal.
+  }
+}
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 export function IngestInput() {
   const router = useRouter();
@@ -52,6 +108,49 @@ export function IngestInput() {
     }, 1000);
     return () => clearInterval(interval);
   }, [loading, startedAt]);
+
+  // Warn the user if they try to close the tab mid-flight. Modern browsers
+  // ignore custom messages, but setting `returnValue` triggers the native
+  // "Leave site?" prompt. Resume-on-mount (below) covers the case where they
+  // close anyway, but the prompt nudges most accidental closes.
+  useEffect(() => {
+    if (!loading) return;
+    const handler = (e: BeforeUnloadEvent): void => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [loading]);
+
+  // If the user closed the tab during an ingest, pick up where we left off
+  // on next mount. claude-agent keeps the job in `api_jobs` for 24h; we only
+  // resume within 10 min so a stale stash doesn't ambush them later.
+  useEffect(() => {
+    const pending = readStash();
+    if (!pending) return;
+    setLoading(true);
+    setStartedAt(pending.startedAt);
+    setElapsedSec(Math.floor((Date.now() - pending.startedAt) / 1000));
+    void resumeFromStash(pending);
+    // Run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function resumeFromStash(pending: PendingState): Promise<void> {
+    let navigated = false;
+    try {
+      if (pending.stage === "ingest") {
+        navigated = await runFlowFromIngest(pending.jobId, pending.startedAt);
+      } else {
+        navigated = await runFlowFromImage(pending.dishId);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected failure");
+    } finally {
+      if (!navigated) setLoading(false);
+    }
+  }
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -80,7 +179,8 @@ export function IngestInput() {
     setRawResponse(null);
     setCurrentStep(null);
     setElapsedSec(0);
-    setStartedAt(Date.now());
+    const startedAt = Date.now();
+    setStartedAt(startedAt);
 
     // Set inside the success branch so the `finally` clause knows to leave
     // `loading` true — we want the overlay to stay up until router.push
@@ -92,7 +192,6 @@ export function IngestInput() {
       let image: CompressedImage | undefined;
       if (file) image = await compressImage(file);
 
-      // Step 1: start the job
       const start = await fetch("/api/ingest", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -109,52 +208,10 @@ export function IngestInput() {
         setError(startBody.error?.message ?? `Ingest failed (${start.status})`);
         return;
       }
-
-      // Step 2: poll until done|failed. First poll fires immediately so
-      // validation errors surface fast; subsequent polls run every 500ms,
-      // giving ~250ms avg tail lag vs the previous 1500ms (~750ms avg).
-      // With Haiku ingest at ~18s median that's roughly 36 polls per
-      // ingest — well within Vercel Hobby invocation budgets.
-      const POLL_INTERVAL_MS = 500;
-      const POLL_TIMEOUT_MS = 180_000;
-      const startedAt = Date.now();
       const jobId = startBody.jobId;
+      writeStash({ stage: "ingest", jobId, startedAt });
 
-      // small helper so the loop reads cleanly
-      const sleep = (ms: number) =>
-        new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-      while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
-        const poll = await fetch(`/api/ingest/jobs/${jobId}`);
-        const pollBody = (await poll.json().catch(() => ({}))) as {
-          status?: string;
-          currentStep?: string | null;
-          dish?: DishInput;
-          error?: { code?: string; message?: string; rawResponse?: string | null };
-        };
-        if (!poll.ok) {
-          setError(pollBody.error?.message ?? `Poll failed (${poll.status})`);
-          setRawResponse(pollBody.error?.rawResponse ?? null);
-          return;
-        }
-        if (pollBody.status === "done" && pollBody.dish) {
-          navigated = await saveAndRedirect(pollBody.dish, sleep);
-          return;
-        }
-        if (pollBody.status === "failed") {
-          setError(pollBody.error?.message ?? "Ingest failed");
-          setRawResponse(pollBody.error?.rawResponse ?? null);
-          return;
-        }
-        // status === "pending" or "running" — surface the agent's current
-        // step so the overlay reflects real progress, then wait and poll
-        // again.
-        if (pollBody.currentStep !== undefined) {
-          setCurrentStep(pollBody.currentStep ?? null);
-        }
-        await sleep(POLL_INTERVAL_MS);
-      }
-      setError("Ingest is taking unusually long. Try again, or check claude-agent.");
+      navigated = await runFlowFromIngest(jobId, startedAt);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected failure");
     } finally {
@@ -166,16 +223,24 @@ export function IngestInput() {
   }
 
   /**
-   * After the parse comes back, save the dish and wait for the background
-   * image generation to land before navigating. We poll GET /api/dishes/:id
-   * because POST /api/dishes returns immediately (image gen runs via Next's
-   * `after()`); the dish exists right away with imageUrl=null.
-   *
-   * Returns true if we redirected, false if we set an error and stopped.
+   * Drive the flow from `ingest` stage onwards: poll the agent job, save the
+   * dish, wait for the image, redirect. Used both by a fresh ingest() and by
+   * the resume-on-mount path. Returns true if we navigated, false if we set
+   * an error and stopped. Updates `pending-ingest` localStorage as it
+   * progresses through the stages so each stage is independently resumable.
    */
-  async function saveAndRedirect(
+  async function runFlowFromIngest(
+    jobId: string,
+    startedAt: number,
+  ): Promise<boolean> {
+    const dish = await pollIngestUntilDone(jobId);
+    if (!dish) return false;
+    return runFlowFromSave(dish, startedAt);
+  }
+
+  async function runFlowFromSave(
     dish: DishInput,
-    sleep: (ms: number) => Promise<void>,
+    startedAt: number,
   ): Promise<boolean> {
     setCurrentStep("saving");
     const saveRes = await fetch("/api/dishes", {
@@ -188,25 +253,83 @@ export function IngestInput() {
         error?: string;
       };
       setError(body.error ?? `Save failed (${saveRes.status})`);
+      // Save failure leaves the agent's parse intact in claude-agent — leave
+      // the stash in place so refreshing the page retries from the parse,
+      // not from a fresh photo.
       return false;
     }
     const saved = (await saveRes.json()) as Dish;
+    writeStash({ stage: "image", dishId: saved.id, startedAt });
+    return runFlowFromImage(saved.id);
+  }
 
-    // Image gen runs server-side via `after()`. Poll until imageUrl shows up
-    // or we hit the timeout — either way, we redirect; the image will land
-    // on the dish page itself if it took longer than our budget.
+  async function runFlowFromImage(dishId: number): Promise<boolean> {
     setCurrentStep("generating_image");
     const imageStart = Date.now();
     while (Date.now() - imageStart < IMAGE_POLL_TIMEOUT_MS) {
       await sleep(IMAGE_POLL_INTERVAL_MS);
-      const r = await fetch(`/api/dishes/${saved.id}`);
+      const r = await fetch(`/api/dishes/${dishId}`);
+      if (r.status === 404) {
+        // Dish no longer exists (rare — user deleted from another tab?).
+        setError("Dish no longer exists.");
+        clearStash();
+        return false;
+      }
       if (r.ok) {
         const fresh = (await r.json()) as Dish;
         if (fresh.imageUrl) break;
       }
     }
-    router.push(`/dishes/${saved.id}`);
+    clearStash();
+    router.push(`/dishes/${dishId}`);
     return true;
+  }
+
+  /**
+   * Poll claude-agent's job until status flips to done|failed. Surfaces the
+   * agent's `currentStep` to the overlay along the way. Returns the parsed
+   * dish on success, or null after setting an error.
+   */
+  async function pollIngestUntilDone(
+    jobId: string,
+  ): Promise<DishInput | null> {
+    const pollStartedAt = Date.now();
+    while (Date.now() - pollStartedAt < POLL_TIMEOUT_MS) {
+      const poll = await fetch(`/api/ingest/jobs/${jobId}`);
+      if (poll.status === 404) {
+        // The agent job is gone — 24h auto-cleanup or claude-agent was
+        // wiped. Don't keep retrying.
+        setError("Previous recipe ingest has expired. Please try again.");
+        clearStash();
+        return null;
+      }
+      const pollBody = (await poll.json().catch(() => ({}))) as {
+        status?: string;
+        currentStep?: string | null;
+        dish?: DishInput;
+        error?: { code?: string; message?: string; rawResponse?: string | null };
+      };
+      if (!poll.ok) {
+        setError(pollBody.error?.message ?? `Poll failed (${poll.status})`);
+        setRawResponse(pollBody.error?.rawResponse ?? null);
+        return null;
+      }
+      if (pollBody.status === "done" && pollBody.dish) {
+        return pollBody.dish;
+      }
+      if (pollBody.status === "failed") {
+        setError(pollBody.error?.message ?? "Ingest failed");
+        setRawResponse(pollBody.error?.rawResponse ?? null);
+        clearStash();
+        return null;
+      }
+      if (pollBody.currentStep !== undefined) {
+        setCurrentStep(pollBody.currentStep ?? null);
+      }
+      await sleep(POLL_INTERVAL_MS);
+    }
+    setError("Ingest is taking unusually long. Try again, or check claude-agent.");
+    return null;
   }
 
   async function submit(e: React.FormEvent) {
