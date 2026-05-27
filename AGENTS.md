@@ -164,6 +164,20 @@ The full list lives in `lib/vocabulary.ts::STANDARD_INGREDIENTS` (~150 items acr
 → { quantity: 200, unit: "g", name: "French beans", preparation: "trimmed" }
 ```
 
+## AI ingest pipeline (`/add`)
+
+The ingest flow is **async** because Vercel Hobby caps function duration at 60s and Sonnet vision on a recipe photo can take 60–90s. Pipeline:
+
+1. **Browser** (`<IngestInput>`): compresses photo to ≤1280px JPEG, base64-encodes, POSTs to `/api/ingest` with `{input?, image?}`.
+2. **`POST /api/ingest`** (`app/api/ingest/route.ts`): auths the user, builds the prompt via `lib/ingest/prompt.ts::buildIngestPrompt`, calls claude-agent's `POST /api/v1/chat-async` (`lib/ingest/claude-agent.ts::startClaudeAgentJob`) with `model: "sonnet"` and the `DISH_INPUT_JSON_SCHEMA`. claude-agent returns `{job_id}` in <1s. Route returns `{jobId}` (HTTP 202) to the browser.
+3. **Browser polls** `GET /api/ingest/jobs/[id]` every 1.5s for up to 3 min.
+4. **`GET /api/ingest/jobs/[id]`** (`app/api/ingest/jobs/[id]/route.ts`): proxies claude-agent's `GET /api/v1/jobs/{id}` (`pollClaudeAgentJob`). When status flips to `done`, re-validates the `structured` payload against `DishInputSchema` (defense in depth — claude-agent enforces JSON Schema structurally but not all our semantic constraints) and returns `{status: "done", dish}`. On `failed`, returns the error envelope.
+5. **Browser** swaps the form to manual mode with the parsed dish prefilled. User reviews and saves.
+
+Why async — direct calls to `POST /api/v1/chat` from Vercel were hitting the 60s wall on real photos. `/chat-async` + polling makes the Vercel function ~1s regardless of how long the agent takes.
+
+Model choice: Sonnet. Haiku missed recipes embedded in the long structured prompt during testing; Opus took 60-80s+ even on simple cases.
+
 ## Non-obvious things
 
 - **Next 16 typegen**: `RouteContext<'/api/dishes/[id]'>` and `PageProps<'/dishes/[id]'>` are globally available types generated into `.next/dev/types/` by `next dev`, `next build`, or `next typegen`. If tsc complains about `Cannot find name 'RouteContext'`, run `npx next typegen` first.
