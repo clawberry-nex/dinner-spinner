@@ -80,8 +80,13 @@ export async function GET(
       });
     }
 
-    // pending | running — let the client keep polling
-    return Response.json({ status: result.status });
+    // pending | running — let the client keep polling. Forward the agent's
+    // narration of what step it's on so the UI can show real progress
+    // instead of a generic spinner.
+    return Response.json({
+      status: result.status,
+      currentStep: result.currentStep,
+    });
   } catch (err) {
     if (err instanceof ClaudeAgentError) {
       const status =

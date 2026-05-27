@@ -9,13 +9,41 @@ export type IngestInputProps = {
   onParsed: (dish: DishInput) => void;
 };
 
+// Step identifiers come from claude-agent's runner — see
+// src/jobs/runner.ts::stepForTool in that repo. New tool names get bucketed
+// into `working` server-side; the fallback below catches them.
+const STEP_LABELS: Record<string, string> = {
+  starting: "Starting up…",
+  analyzing_photo: "Looking at the photo…",
+  writing_result: "Writing the recipe…",
+  working: "Working on it…",
+};
+
+function labelForStep(step: string | null | undefined): string {
+  if (!step) return "Starting up…";
+  return STEP_LABELS[step] ?? "Working on it…";
+}
+
 export function IngestInput({ onParsed }: IngestInputProps) {
   const [input, setInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [compressedPreviewUrl, setCompressedPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [currentStep, setCurrentStep] = useState<string | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rawResponse, setRawResponse] = useState<string | null>(null);
+
+  // Tick once per second while a job is in flight so the user sees the
+  // elapsed-time counter advance even between status events.
+  useEffect(() => {
+    if (!loading || startedAt === null) return;
+    const interval = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [loading, startedAt]);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -42,6 +70,9 @@ export function IngestInput({ onParsed }: IngestInputProps) {
     setLoading(true);
     setError(null);
     setRawResponse(null);
+    setCurrentStep(null);
+    setElapsedSec(0);
+    setStartedAt(Date.now());
 
     try {
       let image: CompressedImage | undefined;
@@ -83,6 +114,7 @@ export function IngestInput({ onParsed }: IngestInputProps) {
         const poll = await fetch(`/api/ingest/jobs/${jobId}`);
         const pollBody = (await poll.json().catch(() => ({}))) as {
           status?: string;
+          currentStep?: string | null;
           dish?: DishInput;
           error?: { code?: string; message?: string; rawResponse?: string | null };
         };
@@ -100,7 +132,12 @@ export function IngestInput({ onParsed }: IngestInputProps) {
           setRawResponse(pollBody.error?.rawResponse ?? null);
           return;
         }
-        // status === "pending" or "running" — wait, then poll again
+        // status === "pending" or "running" — surface the agent's current
+        // step so the button label reflects real progress, then wait and
+        // poll again.
+        if (pollBody.currentStep !== undefined) {
+          setCurrentStep(pollBody.currentStep ?? null);
+        }
         await sleep(POLL_INTERVAL_MS);
       }
       setError("Ingest is taking unusually long. Try again, or check claude-agent.");
@@ -184,8 +221,16 @@ export function IngestInput({ onParsed }: IngestInputProps) {
 
       <div className="flex items-center gap-3 pt-2">
         <Button type="submit" disabled={!canSubmit}>
-          {loading ? "Reading your recipe…" : "Ingest →"}
+          {loading ? labelForStep(currentStep) : "Ingest →"}
         </Button>
+        {loading && (
+          <span
+            className="text-xs tabular-nums text-zinc-500"
+            aria-live="polite"
+          >
+            {elapsedSec}s
+          </span>
+        )}
       </div>
 
       {error && (

@@ -211,7 +211,7 @@ export async function startClaudeAgentJob(
 }
 
 export type PollResult =
-  | { status: "pending" | "running" }
+  | { status: "pending" | "running"; currentStep: string | null }
   | {
       status: "done";
       structured: unknown;
@@ -254,6 +254,7 @@ export async function pollClaudeAgentJob(
   const body = (await res.json().catch(() => null)) as
     | {
         status?: string;
+        current_step?: string | null;
         structured?: unknown;
         response?: string;
         cost_usd?: number | null;
@@ -272,7 +273,7 @@ export async function pollClaudeAgentJob(
   }
 
   if (body?.status === "pending" || body?.status === "running") {
-    return { status: body.status };
+    return { status: body.status, currentStep: body.current_step ?? null };
   }
   if (body?.status === "done") {
     return {
