@@ -43,7 +43,9 @@ export function Icon({ name, size = 18, style, className }: Props) {
     case "dice":
       return <svg viewBox="0 0 24 24" style={s} className={className} fill="none" stroke={c} strokeWidth="1.6" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.1" fill={c}/><circle cx="15" cy="15" r="1.1" fill={c}/><circle cx="15" cy="9" r="1.1" fill={c}/><circle cx="9" cy="15" r="1.1" fill={c}/></svg>;
     case "gear":
-      return <svg viewBox="0 0 24 24" style={s} className={className} fill="none" stroke={c} strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>;
+      // Cog with 8 teeth around a hub. Distinct from the sun icon (which
+      // uses radial spokes), so users can tell them apart at a glance.
+      return <svg viewBox="0 0 24 24" style={s} className={className} fill="none" stroke={c} strokeWidth="1.5" strokeLinejoin="round"><path d="M14.7 2.5l-.4 2.4a7.5 7.5 0 0 1 2 1.2l2.3-1 1.8 3-2 1.5a7.5 7.5 0 0 1 0 2.3l2 1.5-1.8 3-2.3-1a7.5 7.5 0 0 1-2 1.2l.4 2.4h-3.4l-.4-2.4a7.5 7.5 0 0 1-2-1.2l-2.3 1-1.8-3 2-1.5a7.5 7.5 0 0 1 0-2.3l-2-1.5 1.8-3 2.3 1a7.5 7.5 0 0 1 2-1.2l.4-2.4h3.4z"/><circle cx="12" cy="12" r="3"/></svg>;
     case "ingredient":
       return <svg viewBox="0 0 24 24" style={s} className={className} fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round"><path d="M6 4h12l-2 15a2 2 0 01-2 2h-4a2 2 0 01-2-2L6 4z"/><path d="M9 4a3 3 0 016 0"/></svg>;
     case "chef":
