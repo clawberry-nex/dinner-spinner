@@ -5,21 +5,11 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { BrandMark } from "./ui";
 import { Icon } from "./icon";
-import { useTheme } from "./theme-provider";
 
 type Props = { back?: boolean | string; title?: string; subtitle?: string; right?: ReactNode; flat?: boolean };
 
 export function AppHeader({ back, title, subtitle, right, flat }: Props) {
   const router = useRouter();
-  const { setting, cycle } = useTheme();
-
-  const themeIcon = setting === "system" ? "theme-auto" : setting === "dark" ? "moon" : "sun";
-  const themeLabel =
-    setting === "system"
-      ? "Theme: following system — tap for light"
-      : setting === "light"
-        ? "Theme: light — tap for dark"
-        : "Theme: dark — tap to follow system";
 
   const onBack = () => {
     if (typeof back === "string") router.push(back);
@@ -56,17 +46,6 @@ export function AppHeader({ back, title, subtitle, right, flat }: Props) {
           {subtitle && <div className="text-[12px] text-ink-3">{subtitle}</div>}
         </div>
         {right}
-        {!back && (
-          <button
-            type="button"
-            onClick={cycle}
-            aria-label={themeLabel}
-            className="grid h-9 w-9 place-items-center rounded-pill border border-rule bg-paper text-ink-2"
-            title={themeLabel}
-          >
-            <Icon name={themeIcon} size={18} />
-          </button>
-        )}
       </div>
     </div>
   );

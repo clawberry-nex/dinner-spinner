@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { signOut } from "next-auth/react";
 import { STANDARD_INGREDIENTS } from "@/lib/vocabulary";
 import { Button } from "@/app/_components/ui";
+import { useTheme } from "@/app/_components/theme-provider";
+import { Icon, type IconName } from "@/app/_components/icon";
+import type { ThemeSetting } from "@/lib/theme";
 
 type Props = {
   user: {
@@ -245,6 +248,9 @@ export default function SettingsClient({ user }: Props) {
         </div>
       </section>
 
+      {/* Appearance — theme picker. */}
+      <Appearance />
+
       {/* Change password — only for accounts that have one. */}
       {user.hasPassword && (
         <section>
@@ -429,6 +435,50 @@ export default function SettingsClient({ user }: Props) {
       </section>
 
     </>
+  );
+}
+
+function Appearance() {
+  const { setting, effective, set } = useTheme();
+  const options: Array<{ value: ThemeSetting; label: string; icon: IconName }> = [
+    { value: "system", label: "System", icon: "theme-auto" },
+    { value: "light",  label: "Light",  icon: "sun" },
+    { value: "dark",   label: "Dark",   icon: "moon" },
+  ];
+  return (
+    <section>
+      <h2 className="mb-3 text-xl font-semibold">Appearance</h2>
+      <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+        <div className="flex gap-2" role="radiogroup" aria-label="Theme">
+          {options.map((o) => {
+            const active = setting === o.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => set(o.value)}
+                className={[
+                  "flex flex-1 flex-col items-center gap-1 rounded-md border p-3 transition-colors",
+                  active
+                    ? "border-ink bg-ink text-paper"
+                    : "border-rule bg-paper text-ink-2 hover:border-ink-3",
+                ].join(" ")}
+              >
+                <Icon name={o.icon} size={20} />
+                <span className="text-sm font-medium">{o.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {setting === "system" && (
+          <p className="mt-2 text-xs text-zinc-500">
+            Following system: currently {effective}.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

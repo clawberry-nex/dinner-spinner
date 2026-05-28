@@ -14,6 +14,7 @@ type ThemeContextValue = {
   setting: ThemeSetting;
   effective: EffectiveMode;
   cycle: () => void;
+  set: (next: ThemeSetting) => void;
 };
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
@@ -72,6 +73,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => mql.removeEventListener("change", onChange);
   }, []);
 
+  const set = useCallback((next: ThemeSetting) => {
+    writeThemeSetting(localStorage, next);
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const resolved = resolveEffective(next, prefersDark);
+    setSetting(next);
+    setEffective(resolved);
+    applyMode(resolved);
+  }, []);
+
   const cycle = useCallback(() => {
     setSetting((current) => {
       const next = nextSetting(current);
@@ -85,7 +95,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ setting, effective, cycle }}>
+    <ThemeContext.Provider value={{ setting, effective, cycle, set }}>
       {children}
     </ThemeContext.Provider>
   );
