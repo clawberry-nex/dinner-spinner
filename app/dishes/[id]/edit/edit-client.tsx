@@ -11,7 +11,7 @@ export default function EditDishClient({ dish }: { dish: Dish }) {
   async function del() {
     if (!confirm("Delete this dish?")) return;
     const res = await fetch(`/api/dishes/${dish.id}`, { method: "DELETE" });
-    if (res.ok) router.push("/settings");
+    if (res.ok) router.push("/");
   }
 
   return (

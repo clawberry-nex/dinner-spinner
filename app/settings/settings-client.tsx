@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { signOut } from "next-auth/react";
-import type { Dish } from "@/lib/types";
 import { STANDARD_INGREDIENTS } from "@/lib/vocabulary";
 import { Button } from "@/app/_components/ui";
 
@@ -18,7 +16,6 @@ type Props = {
 };
 
 export default function SettingsClient({ user }: Props) {
-  const [dishes, setDishes] = useState<Dish[]>([]);
   const [existingNames, setExistingNames] = useState<string[]>([]);
   const [pantryDefaults, setPantryDefaults] = useState<string[]>([]);
   const [newPantryName, setNewPantryName] = useState("");
@@ -34,10 +31,6 @@ export default function SettingsClient({ user }: Props) {
   const [pwCurrent, setPwCurrent] = useState("");
   const [pwNext, setPwNext] = useState("");
   const [pwMsg, setPwMsg] = useState<string | null>(null);
-
-  // Bulk image gen.
-  const [bulkRunning, setBulkRunning] = useState(false);
-  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
 
   // Backup.
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
@@ -56,13 +49,11 @@ export default function SettingsClient({ user }: Props) {
   }, [existingNames]);
 
   async function reload() {
-    const [dRes, nRes, pRes, tRes] = await Promise.all([
-      fetch("/api/dishes"),
+    const [nRes, pRes, tRes] = await Promise.all([
       fetch("/api/ingredient-names"),
       fetch("/api/pantry-defaults"),
       fetch("/api/me/todoist"),
     ]);
-    if (dRes.ok) setDishes((await dRes.json()) as Dish[]);
     if (nRes.ok) setExistingNames((await nRes.json()) as string[]);
     if (pRes.ok) setPantryDefaults((await pRes.json()) as string[]);
     if (tRes.ok) {
@@ -134,38 +125,6 @@ export default function SettingsClient({ user }: Props) {
     }
   }
 
-  async function del(id: number) {
-    if (!confirm("Delete this dish?")) return;
-    const res = await fetch(`/api/dishes/${id}`, { method: "DELETE" });
-    if (res.ok) reload();
-  }
-
-  async function copyDish(d: Dish) {
-    const payload = {
-      title: `${d.title} (copy)`,
-      subtitle: d.subtitle ?? null,
-      recipe: d.recipe ?? null,
-      notes: d.notes ?? null,
-      tags: d.tags,
-      ingredients: d.ingredients,
-      baseServings: d.baseServings,
-      favorite: false,
-      imageUrl: null,
-      emoji: d.emoji ?? null,
-      accent: d.accent ?? null,
-      imageDescription: d.imageDescription ?? null,
-    };
-    const res = await fetch("/api/dishes", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      const created = (await res.json()) as Dish;
-      window.location.href = `/dishes/${created.id}/edit`;
-    }
-  }
-
   async function addPantryDefault(name: string) {
     const normalized = name.toLowerCase().trim();
     if (!normalized) return;
@@ -188,33 +147,6 @@ export default function SettingsClient({ user }: Props) {
     );
     if (res.ok) {
       setPantryDefaults((prev) => prev.filter((n) => n !== name));
-    }
-  }
-
-  async function bulkGenerate() {
-    if (!confirm("Generate AI photos for every dish missing one? This will use credits.")) return;
-    setBulkRunning(true);
-    setBulkMsg("Generating…");
-    try {
-      const res = await fetch("/api/dishes/images/backfill", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ overwrite: false }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: number;
-        failed?: Array<{ dishId: number; error: string }>;
-        total?: number;
-        error?: string;
-      };
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      const failedCount = data.failed?.length ?? 0;
-      setBulkMsg(`Generated ${data.ok ?? 0} / ${data.total ?? 0}. ${failedCount} failed.`);
-      await reload();
-    } catch (err) {
-      setBulkMsg(err instanceof Error ? err.message : "Bulk generation failed");
-    } finally {
-      setBulkRunning(false);
     }
   }
 
@@ -496,70 +428,6 @@ export default function SettingsClient({ user }: Props) {
         </div>
       </section>
 
-      {/* All dishes */}
-      <section>
-        <div className="mb-3 flex items-center gap-3">
-          <h2 className="text-xl font-semibold">All dishes ({dishes.length})</h2>
-          <Link
-            href="/add"
-            className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
-          >
-            + Add
-          </Link>
-          <Button
-            variant="ghost"
-            size="sm"
-            type="button"
-            onClick={bulkGenerate}
-            disabled={bulkRunning}
-          >
-            {bulkRunning ? "Generating…" : "Generate missing images"}
-          </Button>
-          {bulkMsg && <span className="text-sm text-ink-3">{bulkMsg}</span>}
-        </div>
-        {dishes.length === 0 ? (
-          <p className="text-zinc-500">No dishes yet.</p>
-        ) : (
-          <ul className="divide-y divide-zinc-200 rounded border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-            {dishes.map((d) => (
-              <li key={d.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex-1">
-                  <div className="font-medium">{d.title}</div>
-                  {d.subtitle && (
-                    <div className="text-sm text-zinc-500">{d.subtitle}</div>
-                  )}
-                  {d.tags.length > 0 && (
-                    <div className="mt-1 text-xs text-zinc-500">
-                      {d.tags.join(" · ")}
-                    </div>
-                  )}
-                </div>
-                <Link
-                  href={`/dishes/${d.id}/edit`}
-                  className="text-sm text-emerald-600 hover:underline"
-                >
-                  edit
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => copyDish(d)}
-                  className="text-sm text-zinc-500 hover:underline"
-                  title="Duplicate this dish as a new draft"
-                >
-                  copy
-                </button>
-                <button
-                  type="button"
-                  onClick={() => del(d.id)}
-                  className="text-sm text-red-600 hover:underline"
-                >
-                  delete
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </>
   );
 }

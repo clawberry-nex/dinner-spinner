@@ -134,17 +134,27 @@ export default function DishView({
               </h1>
               {dish.subtitle && <div className="mt-1 text-[14px] italic text-ink-2">{dish.subtitle}</div>}
             </div>
-            <button
-              type="button"
-              onClick={favorite}
-              aria-label={dish.favorite ? "Remove favourite" : "Mark as favourite"}
-              className={[
-                "grid h-10 w-10 place-items-center rounded-pill border",
-                dish.favorite ? "border-accent bg-accent text-accent-ink" : "border-rule bg-paper text-ink-2",
-              ].join(" ")}
-            >
-              <Icon name={dish.favorite ? "star-fill" : "star"} size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => router.push(`/dishes/${dish.id}/edit`)}
+                aria-label="Edit dish"
+                className="grid h-10 w-10 place-items-center rounded-pill border border-rule bg-paper text-ink-2"
+              >
+                <Icon name="pencil" size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={favorite}
+                aria-label={dish.favorite ? "Remove favourite" : "Mark as favourite"}
+                className={[
+                  "grid h-10 w-10 place-items-center rounded-pill border",
+                  dish.favorite ? "border-accent bg-accent text-accent-ink" : "border-rule bg-paper text-ink-2",
+                ].join(" ")}
+              >
+                <Icon name={dish.favorite ? "star-fill" : "star"} size={18} />
+              </button>
+            </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
             {dish.tags.map((t) => (
