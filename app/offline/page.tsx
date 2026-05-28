@@ -17,7 +17,7 @@ export default function OfflinePage() {
       <p className="mt-6 text-[13px]">
         <Link href="/" className="underline underline-offset-4">Back to the spinner</Link>
         <span className="mx-2 text-ink-3">·</span>
-        <Link href="/dishes" className="underline underline-offset-4">Browse dishes</Link>
+        <Link href="/me" className="underline underline-offset-4">Browse dishes</Link>
       </p>
     </main>
   );

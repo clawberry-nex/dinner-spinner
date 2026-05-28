@@ -5,9 +5,9 @@ import { auth } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { rowToDish, rowToProfile, type Dish } from "@/lib/types";
 import { AppHeader } from "@/app/_components/app-header";
-import { DishArt } from "@/app/_components/ui";
 import { Icon } from "@/app/_components/icon";
 import EditProfile from "./edit-profile";
+import { DishBrowser } from "./dish-browser";
 
 // Profiles are reachable from the open web (per the public-profile
 // design), but we don't want them indexed — the share-via-link model
@@ -51,6 +51,12 @@ export default async function ProfilePage(
   const dishes: Dish[] = dishRows.map(rowToDish);
   const displayName = profile.name?.trim() || `@${profile.handle}`;
 
+  // Tag list is derived from the dishes visible to this viewer. Visitors see
+  // tags from public dishes only; owner sees tags from everything.
+  const allTags = Array.from(
+    new Set(dishes.flatMap((d) => d.tags)),
+  ).sort();
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
       <AppHeader
@@ -68,10 +74,10 @@ export default async function ProfilePage(
         }
       />
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
-        <div className="mx-auto w-full max-w-3xl px-4 py-6">
+        <div className="mx-auto w-full max-w-6xl px-4 py-6">
           <ProfileHeader profile={profile} displayName={displayName} isOwner={isOwner} />
 
-          <DishGrid dishes={dishes} isOwner={isOwner} />
+          <DishBrowser initialDishes={dishes} allTags={allTags} isOwner={isOwner} />
         </div>
       </div>
     </div>
@@ -130,44 +136,3 @@ function ProfileHeader({
   );
 }
 
-function DishGrid({ dishes, isOwner }: { dishes: Dish[]; isOwner: boolean }) {
-  if (dishes.length === 0) {
-    return (
-      <p className="mt-8 text-center text-[14px] text-ink-3">
-        {isOwner ? "You haven't added any dishes yet." : "Nothing public here yet."}
-      </p>
-    );
-  }
-  return (
-    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {dishes.map((d) => (
-        <li key={d.id}>
-          <Link
-            href={`/dishes/${d.id}`}
-            className="group block overflow-hidden rounded-lg border border-rule bg-paper"
-          >
-            <div className="relative">
-              <DishArt dish={d} size="100%" corner="0" />
-              {isOwner && !d.public && (
-                <span
-                  className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-pill bg-ink/80 px-2 py-[2px] text-[10px] font-semibold uppercase tracking-[0.1em] text-paper"
-                  title="Private — only visible to you"
-                >
-                  private
-                </span>
-              )}
-            </div>
-            <div className="p-3">
-              <div className="line-clamp-1 text-[14px] font-medium text-ink">{d.title}</div>
-              {d.subtitle && (
-                <div className="mt-1 line-clamp-1 text-[12px] italic text-ink-3">
-                  {d.subtitle}
-                </div>
-              )}
-            </div>
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-}
