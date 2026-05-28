@@ -25,36 +25,43 @@ Next.js 16 (App Router) + TypeScript + Tailwind v4 + `@neondatabase/serverless` 
 ## Where things live
 
 - `app/page.tsx` — spinner (client component, tag filter via `GET /api/tags`)
-- `app/dishes/[id]/page.tsx` + `dish-view.tsx` — server fetch + client serving stepper
+- `app/dishes/[id]/page.tsx` + `dish-view.tsx` — server fetch + client serving stepper. **Anon-readable when `public=true`**; owner-only UI (edit/favorite/cook/plan/notes/history) is hidden for visitors.
 - `app/dishes/[id]/edit/page.tsx` — dedicated edit page, wraps `<DishForm>`
+- `app/u/[handle]/page.tsx` + `edit-profile.tsx` — public profile page. Owner sees all their dishes (lock badge on private); visitor sees only public. Open-web reachable (no auth required); `<meta name="robots" content="noindex">` set.
+- `app/me/page.tsx` — server redirect to `/u/<your-handle>`. Anon → `/auth/signin?callbackUrl=/me`.
 - `app/add/page.tsx` — Add Recipe: AI ingest by default, manual form fallback
 - `app/plan/page.tsx` — meal plan, aggregates via `lib/ingredients.ts::aggregateIngredients`
-- `app/settings/page.tsx` — Profile / Password / Todoist / Pantry / Backup / dish list (with edit links). Replaces `/admin` (`/admin` and `/admin/ingest` are 307 redirects for back-compat).
+- `app/settings/page.tsx` — Profile / Password / Todoist / Pantry / Backup. Entry point is the gear icon on the owner's profile page (not the tab bar). Replaces `/admin` (`/admin` and `/admin/ingest` are 307 redirects for back-compat).
 - `app/auth/signin/page.tsx`, `app/auth/signup/page.tsx` — NextAuth sign-in/up UI
-- `app/_components/dish-form.tsx` — shared `<DishForm>` used by `/add` and `/dishes/[id]/edit`
-- `app/_components/tab-bar.tsx` — 4 flat tabs + raised center "+" Add action
+- `app/_components/dish-form.tsx` — shared `<DishForm>` used by `/add` and `/dishes/[id]/edit`. Has a **Public** checkbox (default checked) that drives `dishes.public`.
+- `app/_components/tab-bar.tsx` — 4 flat tabs + raised center "+" Add. Right side is `Plan · You(user icon → /me)`. **Hidden for anon visitors** so shared profile/dish links render as standalone pages (driven by `isSignedIn` plumbed from `app/layout.tsx` → `RootShell` → `AppShell`).
 - `app/api/auth/[...nextauth]/route.ts` — NextAuth handlers
-- `app/api/auth/signup/route.ts` — email/password sign-up (subject to allowlist)
+- `app/api/auth/signup/route.ts` — email/password sign-up (subject to allowlist). Assigns a handle on first insert via `assignAvailableHandle`.
+- `app/api/me/profile/route.ts` — GET + PATCH for `handle` + `bio`. Handle is one-time editable (gated by `users.handle_changed_at`).
 - `app/api/me/todoist/route.ts`, `app/api/me/password/route.ts` — per-user self-management
-- `app/api/` — all domain routes are user-scoped. Mutations accept session cookie OR bearer `API_TOKEN` (the latter resolves to the seed owner). See `lib/auth-helpers.ts::resolveUserId`.
+- `app/api/` — all domain routes are user-scoped. Mutations accept session cookie OR bearer `API_TOKEN` (the latter resolves to the seed owner). See `lib/auth-helpers.ts::resolveUserId`. **`GET /api/dishes/[id]`** is the one exception — it serves public dishes anonymously.
 - `lib/db.ts` — Neon client (throws if `DATABASE_URL` missing)
-- `lib/auth.ts` — NextAuth v5 config (Google + Credentials, JWT sessions, allowlist gate, Google upsert). Exports `{ handlers, auth, signIn, signOut }`.
-- `lib/auth-helpers.ts` — `parseAllowlist`, `isEmailAllowed`, `hashPassword`, `verifyPassword`, `resolveUserId(req)` (bridges JWT session and env `API_TOKEN` → seed owner)
+- `lib/auth.ts` — NextAuth v5 config (Google + Credentials, JWT sessions, allowlist gate, Google upsert with handle assignment). Exports `{ handlers, auth, signIn, signOut }`.
+- `lib/auth-helpers.ts` — `parseAllowlist`, `isEmailAllowed`, `hashPassword`, `verifyPassword`, `resolveUserId(req)` (bridges JWT session and env `API_TOKEN` → seed owner), plus `HANDLE_REGEX`, `slugFromEmail`, `assignAvailableHandle` for profile handles. Server-only — client code mirrors the regex inline.
 - `lib/ingredients.ts` — `scaleIngredient`, `aggregateIngredients` (groups by lowercased `(name, unit)`), `formatQty`
 - `lib/todoist.ts` — Todoist client. Takes per-user `{ token, projectName }` as args (no longer reads env). **Pinned to `/api/v1/`** — the old `/rest/v2/` returns 410. Response shape is `{results, next_cursor}`; handle pagination.
 - `lib/pantry.ts` — `applyPantryDefaults(ingredients, userId)`, `getPantryDefaults(userId)` — both user-scoped.
-- `lib/types.ts` — Zod schemas + `Dish`/`Ingredient` types + `rowToDish` adapter
-- `proxy.ts` — NextAuth middleware (Next 16 renamed Middleware → Proxy; the file sits at project root and exports `default auth((req) => ...)`). Public-path exemptions: `/`, `/auth/*`, `/api/auth/*`, manifest/icons/favicon/offline. Everything else requires a session; API routes return 401 JSON, pages redirect to `/auth/signin`.
+- `lib/types.ts` — Zod schemas + `Dish`/`Ingredient` types + `rowToDish` adapter. Also `Profile`/`rowToProfile`.
+- `proxy.ts` — NextAuth middleware (Next 16 renamed Middleware → Proxy). Public-path exemptions: `/auth/*`, `/api/auth/*`, manifest/icons/favicon/offline, **`/u/*`, `/dishes/[id]` (page), `GET /api/dishes/[id]`**. Everything else requires a session; API routes return 401 JSON, pages redirect to `/auth/signin`.
 - `scripts/backfill-seed-owner.ts` — one-shot: assigns existing rows to seed owner. Run after seed owner's first Google sign-in.
+- `scripts/backfill-handles.ts` — one-shot: assigns a profile handle to every user that doesn't have one yet, derived from email local-part with collision suffixes. Run after adding `users.handle`, then `ALTER TABLE users ALTER COLUMN handle SET NOT NULL`.
 - `db/lockdown.sql` — second-stage migration (NOT NULL + meal_plan/pantry_names PK changes). Run after backfill.
 
 ## Auth model
 
 NextAuth v5 with JWT sessions, no DB adapter. `users` table stores email,
-name, image, optional `password_hash` (bcrypt), and per-user
-`todoist_token` / `todoist_project`. Sign-up is gated by `ALLOWED_EMAILS`
+name, image, optional `password_hash` (bcrypt), per-user
+`todoist_token` / `todoist_project`, and public-profile fields `handle`
+(unique, `[a-z0-9_-]{3,30}`), `bio`, and `handle_changed_at` (NULL until
+the user uses their one-time rename). Sign-up is gated by `ALLOWED_EMAILS`
 (comma-separated, lowercased; `*` = open). Sign-in providers: Google and
-email/password.
+email/password. Both paths call `assignAvailableHandle(slugFromEmail(...))`
+on insert so every user starts with a valid handle.
 
 Every domain row has a `user_id` FK to `users(id)`. API routes call
 `resolveUserId(req)` from `lib/auth-helpers.ts`, which returns either the
@@ -63,7 +70,20 @@ the seed owner's `user_id` (read from `SEED_OWNER_EMAIL`). The bearer path
 is the only way for curl-from-scripts to mutate data; per-user token
 minting is not yet implemented.
 
-Cross-user requests return **404** (not 403) so existence isn't leaked.
+**Public-profile reads are the exception** to the user-scoped model:
+
+- `GET /u/[handle]` (page) — open to anyone with the URL. Visitors see
+  only `public=true` dishes; the owner sees all their dishes with a lock
+  badge on private ones.
+- `GET /dishes/[id]` (page) and `GET /api/dishes/[id]` — anon-readable
+  when the dish is `public=true`. Private dishes 404 to non-owners.
+- Both routes set `<meta name="robots" content="noindex">` — the share-
+  via-link use case doesn't need SEO and we don't want crawlers indexing
+  user-generated content by default.
+
+Cross-user **private** reads return **404** (not 403) so existence isn't
+leaked. Cross-user **edits** (PATCH/DELETE on another user's dish)
+always 404 regardless of visibility.
 
 ## Env vars (all required in Vercel production env)
 
@@ -187,8 +207,10 @@ Model choice: Sonnet. Haiku missed recipes embedded in the long structured promp
 - **Servings scaling** multiplies `quantity * servings / baseServings`, unless `scalable: false` (then it's a no-op). `baseServings` is the source of truth — stored per dish.
 - **Optional ingredients** (`optional: true`) are excluded from the shopping list by default. `/plan` has an "include optional" toggle that flips it. Pantry and optional flags compose — a pantry+optional item is excluded by both conditions.
 - **Tag filter is AND, not OR**: a dish must contain every selected tag. Implemented with Postgres `tags @> $1::text[]`.
-- **Auth for everything**: every API route (except `/api/auth/*`) requires a session OR bearer `API_TOKEN`. Use `resolveUserId(req)` from `lib/auth-helpers.ts`. The bearer-token path resolves to the **seed owner**'s `user_id` (the user whose email matches `SEED_OWNER_EMAIL`). Per-user token minting doesn't exist yet — other users have to use the UI.
-- **Cross-user isolation**: cross-user requests return 404 (not 403). The `/api/dishes/[id]` GET, PATCH, DELETE all add `AND user_id = $userId` to their queries.
+- **Auth for everything (with two carve-outs)**: every API route requires a session OR bearer `API_TOKEN` via `resolveUserId(req)`. **Exceptions**: the public-profile page (`/u/[handle]`) and public-dish reads (`/dishes/[id]` page, `GET /api/dishes/[id]`) are anon-readable when the dish is `public=true`. Everything else (mutations, meal plan, cook log, pantry, settings, ingest) still requires a session. The bearer-token path resolves to the **seed owner**'s `user_id`. Per-user token minting doesn't exist yet.
+- **Cross-user isolation**: cross-user **private** reads return 404 (not 403). Public dish reads use `WHERE id = $1 AND (public = true OR user_id = $viewer)` so private dishes still 404 to non-owners. PATCH/DELETE still scope by `user_id` so cross-user mutations 404.
+- **Tab bar hides for anon visitors**: `app/layout.tsx` calls `auth()` and plumbs `isSignedIn` through `RootShell` → `AppShell`. Anon visitors on `/u/[handle]` or a public `/dishes/[id]` get a standalone-looking page with no bottom nav, matching the share-link mental model.
+- **Handle one-time rename**: `users.handle_changed_at` is `NULL` initially. The first successful PATCH /api/me/profile with a new handle stamps `now()`; subsequent rename attempts return `handle_already_changed`. Existing share links to the old handle will 404 — surfaced in the edit-profile form as a warning.
 - **Backup imports** are scoped to the importing user. Dish-id collisions with another user's row are silently no-op'd (the conflict UPDATE is gated by `dishes.user_id = ${userId}`) to prevent cross-user clobber.
 
 ## Verification

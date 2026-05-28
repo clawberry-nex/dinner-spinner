@@ -41,6 +41,8 @@ export const DishInputSchema = z.object({
   // When non-null, used as the image-gen prompt input instead of the
   // user-facing subtitle. Hidden from the public dish view.
   imageDescription: z.string().max(2_000).nullable().optional(),
+  // Visibility for the public profile page. Default true.
+  public: z.boolean().optional(),
 });
 
 export type DishInput = z.infer<typeof DishInputSchema>;
@@ -67,6 +69,7 @@ export const DishPatchSchema = z.object({
   accent: z.string().trim().max(60).nullable().optional(),
   notes: z.string().max(5_000).nullable().optional(),
   imageDescription: z.string().max(2_000).nullable().optional(),
+  public: z.boolean().optional(),
 });
 export type DishPatchInput = z.infer<typeof DishPatchSchema>;
 
@@ -84,12 +87,35 @@ export type Dish = {
   accent: string | null;
   notes: string | null;
   imageDescription: string | null;
+  public: boolean;
   lastCookedAt: string | null;
   averageRating: number | null;
   ratingCount: number;
   createdAt: string;
   updatedAt: string;
 };
+
+// Public profile view of a user. Email is intentionally omitted from
+// the visitor-facing payload.
+export type Profile = {
+  id: string;
+  handle: string;
+  name: string | null;
+  image: string | null;
+  bio: string | null;
+  handleLocked: boolean;
+};
+
+export function rowToProfile(row: Record<string, unknown>): Profile {
+  return {
+    id: row.id as string,
+    handle: row.handle as string,
+    name: (row.name as string | null) ?? null,
+    image: (row.image as string | null) ?? null,
+    bio: (row.bio as string | null) ?? null,
+    handleLocked: row.handle_changed_at != null,
+  };
+}
 
 export function rowToDish(row: Record<string, unknown>): Dish {
   const avg = row.avg_rating;
@@ -108,6 +134,7 @@ export function rowToDish(row: Record<string, unknown>): Dish {
     accent: (row.accent as string | null) ?? null,
     notes: (row.notes as string | null) ?? null,
     imageDescription: (row.image_description as string | null) ?? null,
+    public: (row.public as boolean | null) ?? true,
     lastCookedAt: row.last_cooked_at ? String(row.last_cooked_at) : null,
     averageRating: avg == null ? null : Number(avg),
     ratingCount: count == null ? 0 : Number(count),

@@ -3,6 +3,8 @@ import {
   hashPassword,
   isEmailAllowed,
   parseAllowlist,
+  slugFromEmail,
+  assignAvailableHandle,
 } from "@/lib/auth-helpers";
 
 export async function POST(req: Request) {
@@ -32,9 +34,16 @@ export async function POST(req: Request) {
   }
 
   const passwordHash = await hashPassword(password);
+  const handle = await assignAvailableHandle(
+    slugFromEmail(email),
+    async (h) => {
+      const r = await sql`SELECT 1 FROM users WHERE handle = ${h} LIMIT 1`;
+      return r.length > 0;
+    },
+  );
   await sql`
-    INSERT INTO users (email, name, password_hash)
-    VALUES (${email}, ${name}, ${passwordHash})
+    INSERT INTO users (email, name, password_hash, handle)
+    VALUES (${email}, ${name}, ${passwordHash}, ${handle})
   `;
   return Response.json({ ok: true });
 }

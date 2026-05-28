@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppHeader } from "@/app/_components/app-header";
 import { DishArt, Badge, Button, StepperButton, useToast } from "@/app/_components/ui";
@@ -31,9 +32,15 @@ function fmtAvg(avg: number | null): string {
 export default function DishView({
   dish: initial,
   history: initialHistory,
+  isOwner,
+  ownerHandle,
+  ownerName,
 }: {
   dish: Dish;
   history: CookLogEntry[];
+  isOwner: boolean;
+  ownerHandle: string | null;
+  ownerName: string | null;
 }) {
   const router = useRouter();
   const [dish, setDish] = useState(initial);
@@ -134,44 +141,56 @@ export default function DishView({
               </h1>
               {dish.subtitle && <div className="mt-1 text-[14px] italic text-ink-2">{dish.subtitle}</div>}
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => router.push(`/dishes/${dish.id}/edit`)}
-                aria-label="Edit dish"
-                className="grid h-10 w-10 place-items-center rounded-pill border border-rule bg-paper text-ink-2"
-              >
-                <Icon name="pencil" size={18} />
-              </button>
-              <button
-                type="button"
-                onClick={favorite}
-                aria-label={dish.favorite ? "Remove favourite" : "Mark as favourite"}
-                className={[
-                  "grid h-10 w-10 place-items-center rounded-pill border",
-                  dish.favorite ? "border-accent bg-accent text-accent-ink" : "border-rule bg-paper text-ink-2",
-                ].join(" ")}
-              >
-                <Icon name={dish.favorite ? "star-fill" : "star"} size={18} />
-              </button>
-            </div>
+            {isOwner && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => router.push(`/dishes/${dish.id}/edit`)}
+                  aria-label="Edit dish"
+                  className="grid h-10 w-10 place-items-center rounded-pill border border-rule bg-paper text-ink-2"
+                >
+                  <Icon name="pencil" size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={favorite}
+                  aria-label={dish.favorite ? "Remove favourite" : "Mark as favourite"}
+                  className={[
+                    "grid h-10 w-10 place-items-center rounded-pill border",
+                    dish.favorite ? "border-accent bg-accent text-accent-ink" : "border-rule bg-paper text-ink-2",
+                  ].join(" ")}
+                >
+                  <Icon name={dish.favorite ? "star-fill" : "star"} size={18} />
+                </button>
+              </div>
+            )}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
             {dish.tags.map((t) => (
               <span key={t} className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-3">· {t}</span>
             ))}
             <span className="flex-1" />
-            <span className="text-[11px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
-              last cooked {relTime(dish.lastCookedAt)}
-              {dish.ratingCount > 0 && (
-                <>
-                  {" · "}
-                  <span aria-label={`Average rating ${fmtAvg(dish.averageRating)} from ${dish.ratingCount} cooks`}>
-                    ★ {fmtAvg(dish.averageRating)} ({dish.ratingCount})
-                  </span>
-                </>
-              )}
-            </span>
+            {isOwner ? (
+              <span className="text-[11px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
+                last cooked {relTime(dish.lastCookedAt)}
+                {dish.ratingCount > 0 && (
+                  <>
+                    {" · "}
+                    <span aria-label={`Average rating ${fmtAvg(dish.averageRating)} from ${dish.ratingCount} cooks`}>
+                      ★ {fmtAvg(dish.averageRating)} ({dish.ratingCount})
+                    </span>
+                  </>
+                )}
+              </span>
+            ) : ownerHandle ? (
+              <Link
+                href={`/u/${ownerHandle}`}
+                className="text-[11px] text-ink-3 hover:text-ink-2"
+                style={{ fontFamily: "var(--font-mono)" }}
+              >
+                by {ownerName?.trim() || `@${ownerHandle}`}
+              </Link>
+            ) : null}
           </div>
           <DietChipRow dish={dish} />
         </div>
@@ -200,21 +219,25 @@ export default function DishView({
             <div className="min-w-9 text-center text-[28px] font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>{servings}</div>
             <StepperButton kind="plus" onClick={() => setServings((s) => s + 1)} ariaLabel="More servings" />
           </div>
-          <div className="mt-4 flex gap-2">
-            <Button variant="ink" size="md" onClick={() => router.push(`/dishes/${dish.id}/cook?servings=${servings}`)} className="flex-1">
-              <Icon name="flame" size={16} /> Cook mode
-            </Button>
-            <Button variant="ghost" size="md" onClick={() => setCookFormOpen(true)}>
-              <Icon name="check" size={14} /> Cooked
-            </Button>
-          </div>
-          <Button variant="ghost" size="md" onClick={addToPlan} className={["mt-2 w-full", inPlan ? "!text-good" : ""].join(" ")}>
-            <Icon name={inPlan ? "check" : "cart"} size={14} />
-            {inPlan ? `In plan (update to ${servings})` : "Add to meal plan"}
-          </Button>
+          {isOwner && (
+            <>
+              <div className="mt-4 flex gap-2">
+                <Button variant="ink" size="md" onClick={() => router.push(`/dishes/${dish.id}/cook?servings=${servings}`)} className="flex-1">
+                  <Icon name="flame" size={16} /> Cook mode
+                </Button>
+                <Button variant="ghost" size="md" onClick={() => setCookFormOpen(true)}>
+                  <Icon name="check" size={14} /> Cooked
+                </Button>
+              </div>
+              <Button variant="ghost" size="md" onClick={addToPlan} className={["mt-2 w-full", inPlan ? "!text-good" : ""].join(" ")}>
+                <Icon name={inPlan ? "check" : "cart"} size={14} />
+                {inPlan ? `In plan (update to ${servings})` : "Add to meal plan"}
+              </Button>
+            </>
+          )}
         </div>
 
-        {dish.notes && (
+        {isOwner && dish.notes && (
           <div
             className="mx-4 mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-ink dark:border-amber-700/60 dark:bg-amber-950/40"
             aria-label="Dish notes"
@@ -263,7 +286,7 @@ export default function DishView({
           </div>
         </div>
 
-        {history.length > 0 && (
+        {isOwner && history.length > 0 && (
           <div className="px-5 pt-4">
             <SectionHeader>Cook history</SectionHeader>
             <div className="mt-3 flex flex-col gap-[10px]">

@@ -100,3 +100,16 @@ ALTER TABLE cook_log      ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES users
 CREATE INDEX IF NOT EXISTS dishes_user_id_idx       ON dishes (user_id);
 CREATE INDEX IF NOT EXISTS pantry_names_user_id_idx ON pantry_names (user_id);
 CREATE INDEX IF NOT EXISTS cook_log_user_id_idx     ON cook_log (user_id);
+
+-- Public profiles. `handle` is the slug used in /u/[handle] URLs.
+-- Initially nullable so existing rows can be backfilled by
+-- scripts/backfill-handles.ts; flipped to NOT NULL afterwards.
+-- handle_changed_at gates the one-time rename: NULL = never changed,
+-- non-NULL = locked.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS handle            text UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bio               text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS handle_changed_at timestamptz;
+
+-- Per-dish visibility. Default true matches the public-by-default model;
+-- profile pages show only public dishes to non-owners.
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS public boolean NOT NULL DEFAULT true;

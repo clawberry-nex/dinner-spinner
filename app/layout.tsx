@@ -3,6 +3,7 @@ import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider, themeScript } from "./_components/theme-provider";
 import { RootShell } from "./_components/root-shell";
 import { Pwa } from "./_components/pwa";
+import { auth } from "@/lib/auth";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -38,7 +39,15 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The middleware redirects most anon traffic to /auth/signin already, but
+  // the public-profile and public-dish reads (and the sign-in page itself)
+  // render without a session. Pass that down so the tab bar can decide
+  // whether to render — a visitor on a shared link shouldn't see the app
+  // chrome.
+  const session = await auth();
+  const isSignedIn = !!(session?.user as { id?: string } | undefined)?.id;
+
   return (
     <html lang="en" className={`${inter.variable} ${fraunces.variable} ${jetbrains.variable}`}>
       <head>
@@ -46,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="h-[100dvh] overflow-hidden bg-bg text-ink">
         <ThemeProvider>
-          <RootShell>{children}</RootShell>
+          <RootShell isSignedIn={isSignedIn}>{children}</RootShell>
           <Pwa />
         </ThemeProvider>
       </body>

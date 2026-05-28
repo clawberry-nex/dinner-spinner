@@ -22,6 +22,18 @@ export default auth((req) => {
 
   const isApi = pathname.startsWith("/api/");
 
+  // Public-profile reads. /u/[handle] is always open. /dishes/[id] and
+  // /api/dishes/[id] GET let the route handler enforce per-dish visibility
+  // (private dishes 404 to non-owners). The signed-in path falls through
+  // to req.auth above; this branch handles anon visitors with no session.
+  if (
+    pathname.startsWith("/u/") ||
+    /^\/dishes\/\d+$/.test(pathname) ||
+    (isApi && /^\/api\/dishes\/\d+$/.test(pathname) && req.method === "GET")
+  ) {
+    return;
+  }
+
   // Bearer-token bypass for API routes. The route handler does the actual
   // constant-time validation via resolveUserId (lib/auth-helpers.ts);
   // the proxy just needs to let the request through.

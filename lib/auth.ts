@@ -7,6 +7,8 @@ import {
   parseAllowlist,
   isEmailAllowed,
   verifyPassword,
+  slugFromEmail,
+  assignAvailableHandle,
 } from "@/lib/auth-helpers";
 
 const allowlist = () => parseAllowlist(process.env.ALLOWED_EMAILS);
@@ -56,9 +58,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // user object so jwt() picks up the right id. Credentials provider
       // already produced our user_id in authorize() above.
       if (account?.provider === "google") {
+        const handle = await assignAvailableHandle(
+          slugFromEmail(email),
+          async (h) => {
+            const r = await sql`SELECT 1 FROM users WHERE handle = ${h} LIMIT 1`;
+            return r.length > 0;
+          },
+        );
         const rows = await sql`
-          INSERT INTO users (email, name, image)
-          VALUES (${email}, ${user.name ?? null}, ${user.image ?? null})
+          INSERT INTO users (email, name, image, handle)
+          VALUES (${email}, ${user.name ?? null}, ${user.image ?? null}, ${handle})
           ON CONFLICT (email) DO UPDATE
             SET name  = COALESCE(EXCLUDED.name,  users.name),
                 image = COALESCE(EXCLUDED.image, users.image)

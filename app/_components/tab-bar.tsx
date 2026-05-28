@@ -14,8 +14,8 @@ export function TabBar({ planCount = 0 }: { planCount?: number }) {
     { id: "browse",  href: "/dishes",  icon: "list", label: "Dishes" },
   ];
   const rightTabs: Tab[] = [
-    { id: "plan",     href: "/plan",     icon: "cart", label: "Plan", badge: planCount || undefined },
-    { id: "settings", href: "/settings", icon: "gear", label: "Settings" },
+    { id: "plan", href: "/plan", icon: "cart", label: "Plan", badge: planCount || undefined },
+    { id: "you",  href: "/me",   icon: "user", label: "You" },
   ];
 
   const activeId =
@@ -23,7 +23,7 @@ export function TabBar({ planCount = 0 }: { planCount?: number }) {
     : pathname.startsWith("/add") ? "add"
     : pathname.startsWith("/dishes") ? "browse"
     : pathname.startsWith("/plan") ? "plan"
-    : pathname.startsWith("/settings") ? "settings"
+    : pathname.startsWith("/u/") || pathname === "/me" || pathname.startsWith("/settings") ? "you"
     : "spinner";
 
   return (

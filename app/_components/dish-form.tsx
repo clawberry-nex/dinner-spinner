@@ -49,6 +49,7 @@ type Draft = {
   emoji: string;
   accent: string;
   favorite: boolean;
+  public: boolean;
   ingredients: IngredientDraft[];
 };
 
@@ -65,6 +66,7 @@ const EMPTY_DRAFT: Draft = {
   emoji: "",
   accent: "",
   favorite: false,
+  public: true,
   ingredients: [{ ...EMPTY_INGREDIENT }],
 };
 
@@ -82,6 +84,7 @@ function dishToDraft(d: Dish): Draft {
     emoji: d.emoji ?? "",
     accent: d.accent ?? "",
     favorite: d.favorite,
+    public: d.public,
     ingredients:
       d.ingredients.length > 0
         ? d.ingredients.map((i) => ({
@@ -113,6 +116,7 @@ function dishInputToDraft(d: DishInput): Draft {
     emoji: d.emoji ?? "",
     accent: d.accent ?? "",
     favorite: d.favorite ?? false,
+    public: d.public ?? true,
     ingredients:
       (d.ingredients ?? []).length > 0
         ? d.ingredients!.map((i) => ({
@@ -168,6 +172,7 @@ function draftToPayload(d: Draft) {
     emoji: d.emoji.trim() || null,
     accent: d.accent.trim() || null,
     favorite: d.favorite,
+    public: d.public,
   };
 }
 
@@ -549,6 +554,18 @@ export default function DishForm({
           }
         />
         ★ favourite
+      </label>
+      <label className="flex items-center gap-2 text-sm font-medium">
+        <input
+          type="checkbox"
+          className="h-4 w-4"
+          checked={draft.public}
+          onChange={(e) => setDraft({ ...draft, public: e.target.checked })}
+        />
+        Show on my public profile
+        <span className="text-xs font-normal text-zinc-500">
+          (uncheck to keep private — only you can see it)
+        </span>
       </label>
 
       <div>

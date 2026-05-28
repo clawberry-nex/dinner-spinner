@@ -5,7 +5,13 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
 
-export function RootShell({ children }: { children: ReactNode }) {
+export function RootShell({
+  children,
+  isSignedIn,
+}: {
+  children: ReactNode;
+  isSignedIn: boolean;
+}) {
   const [planCount, setPlanCount] = useState(0);
   const pathname = usePathname();
 
@@ -24,5 +30,9 @@ export function RootShell({ children }: { children: ReactNode }) {
     return () => { window.removeEventListener("storage", onStorage); window.clearInterval(t); };
   }, [pathname]);
 
-  return <AppShell planCount={planCount}>{children}</AppShell>;
+  return (
+    <AppShell planCount={planCount} hideTabs={!isSignedIn}>
+      {children}
+    </AppShell>
+  );
 }

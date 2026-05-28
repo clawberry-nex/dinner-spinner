@@ -8,8 +8,10 @@ export async function GET(
   req: NextRequest,
   ctx: RouteContext<"/api/dishes/[id]">,
 ) {
+  // Public dishes are readable anonymously; private dishes are owner-only.
+  // We DON'T 401 missing auth here — that would defeat the public-share
+  // case. resolveUserId returns null for anon and that's fine.
   const userId = await resolveUserId(req);
-  if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await ctx.params;
   const rows = await sql`
@@ -18,7 +20,7 @@ export async function GET(
       (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
       (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
     FROM dishes d
-    WHERE d.id = ${Number(id)} AND d.user_id = ${userId}
+    WHERE d.id = ${Number(id)} AND (d.public = true OR d.user_id = ${userId})
   `;
   if (rows.length === 0) {
     return Response.json({ error: "Not found" }, { status: 404 });
@@ -86,6 +88,7 @@ export async function PATCH(
       u.imageDescription === undefined
         ? existing.imageDescription
         : u.imageDescription,
+    public: u.public === undefined ? existing.public : u.public,
   };
 
   const rows = await sql`
@@ -102,6 +105,7 @@ export async function PATCH(
       accent = ${merged.accent ?? null},
       notes = ${merged.notes ?? null},
       image_description = ${merged.imageDescription ?? null},
+      public = ${merged.public},
       updated_at = now()
     WHERE id = ${Number(id)} AND user_id = ${userId}
     RETURNING *
