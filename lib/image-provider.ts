@@ -2,7 +2,8 @@
 // most specific provider it can configure from env, falling back to a
 // stub that surfaces a clear "not configured" error.
 //
-// Precedence: REPLICATE_API_TOKEN → ReplicateProvider (Vercel marketplace
+// Precedence: GEMINI_API_KEY → GoogleProvider (Nano Banana Pro direct),
+// else REPLICATE_API_TOKEN → ReplicateProvider (Vercel marketplace
 // integration auto-injects this), else IMAGE_GEN_URL + IMAGE_GEN_TOKEN
 // → generic HttpProvider, else StubProvider.
 
@@ -17,15 +18,19 @@ function stripMimeParams(value: string): string {
 }
 
 const NOT_CONFIGURED =
-  "image generation not configured: connect Replicate via Vercel (sets REPLICATE_API_TOKEN), or set IMAGE_GEN_URL and IMAGE_GEN_TOKEN";
+  "image generation not configured: set GEMINI_API_KEY, or connect Replicate via Vercel (sets REPLICATE_API_TOKEN), or set IMAGE_GEN_URL and IMAGE_GEN_TOKEN";
 
-// Replicate's flux-1.1-pro — slower (~5–10s) and pricier ($0.04/image)
-// than flux-schnell, but materially better at recognising specific
-// regional dishes and following long descriptive prompts. To swap
-// models, change this constant only — Replicate's hosted-model API
-// surface is uniform across Flux variants. flux-schnell is a solid
-// cheap fallback if generation cost ever becomes a concern.
+// Replicate's flux-1.1-pro — solid fallback if GEMINI_API_KEY isn't set.
+// flux-1.1-pro recognises specific regional dishes reasonably well and
+// follows long prompts; flux-schnell is the cheap alternative if cost
+// ever becomes a concern. To swap which Replicate model is used, change
+// this constant only.
 const REPLICATE_MODEL = "black-forest-labs/flux-1.1-pro";
+
+// Gemini's Nano Banana Pro (Gemini 3 Pro Image). Materially better than
+// Flux at named-dish recognition and long descriptive prompts. Slightly
+// slower (~22s vs ~7s on Flux) but quality justifies it.
+const GOOGLE_IMAGE_MODEL = "gemini-3-pro-image-preview";
 
 export class StubProvider implements ImageProvider {
   async generate(_prompt: string): Promise<{ bytes: Uint8Array; mime: string }> {
@@ -156,7 +161,67 @@ export class ReplicateProvider implements ImageProvider {
   }
 }
 
+// Gemini direct (Nano Banana Pro). One HTTP hop, returns the image as
+// inline base64 in the response. Faster than Replicate's proxy and the
+// images come back at higher quality (~2-3 MB jpeg vs Replicate's ~450 KB).
+export class GoogleProvider implements ImageProvider {
+  private readonly key: string;
+  private readonly model: string;
+
+  constructor(key: string, model: string = GOOGLE_IMAGE_MODEL) {
+    this.key = key;
+    this.model = model;
+  }
+
+  async generate(prompt: string): Promise<{ bytes: Uint8Array; mime: string }> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": this.key,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: ["IMAGE"],
+          imageConfig: { aspectRatio: "1:1", imageSize: "2K" },
+        },
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Gemini returned ${res.status}: ${body.slice(0, 200)}`);
+    }
+    type InlineData = {
+      mimeType?: string;
+      mime_type?: string;
+      data?: string;
+    };
+    type Part = { text?: string; inlineData?: InlineData; inline_data?: InlineData };
+    const json = (await res.json()) as {
+      candidates?: Array<{ content?: { parts?: Part[] } }>;
+    };
+    const parts: Part[] = json.candidates?.[0]?.content?.parts ?? [];
+    for (const p of parts) {
+      const inline = p.inlineData ?? p.inline_data;
+      if (inline?.data) {
+        const mime = stripMimeParams(
+          inline.mimeType ?? inline.mime_type ?? "image/jpeg",
+        );
+        return { bytes: new Uint8Array(Buffer.from(inline.data, "base64")), mime };
+      }
+    }
+    // Surface any prose Gemini emitted instead of an image — usually a
+    // safety refusal or a content-policy hit.
+    const text = parts.map((p) => p.text).filter(Boolean).join(" ").slice(0, 300);
+    throw new Error(`Gemini returned no image${text ? `: ${text}` : ""}`);
+  }
+}
+
 export function getProvider(): ImageProvider {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) return new GoogleProvider(geminiKey);
   const replicateToken = process.env.REPLICATE_API_TOKEN;
   if (replicateToken) return new ReplicateProvider(replicateToken);
   const url = process.env.IMAGE_GEN_URL;
