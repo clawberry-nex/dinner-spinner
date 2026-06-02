@@ -151,7 +151,7 @@ Rules:
 
 ### Standard ingredient names (use these when possible)
 
-The full list lives in `lib/vocabulary.ts::STANDARD_INGREDIENTS` (~150 items across vegetables, fruits, herbs, spices, proteins, dairy, pantry, nuts, sweets). Notable conventions:
+The full list lives in `lib/vocabulary.ts::STANDARD_INGREDIENTS` (~200 items across vegetables, fruits, herbs, spices, proteins, dairy, pantry, nuts, sweets). Notable conventions:
 
 - All **singular**: `onion`, `carrot`, `tomato`, `egg`, `clove` (when used as a name, e.g. for the spice).
 - **Compound colours stay together**: `green chili`, `red pepper`, `yellow pepper`.
@@ -164,21 +164,21 @@ The full list lives in `lib/vocabulary.ts::STANDARD_INGREDIENTS` (~150 items acr
 
 ```
 "2 small onions, cut into 3cm dice"
-→ { quantity: 2, unit: "stuks", descriptor: "small", name: "onion", preparation: "cut into 3cm dice" }
+→ { quantity: 2, unit: "piece", descriptor: "small", name: "onion", preparation: "cut into 3cm dice" }
 
 "0.5 fresh green chilli, thinly sliced"
-→ { quantity: 0.5, unit: "stuks", name: "green chili", preparation: "thinly sliced" }
+→ { quantity: 0.5, unit: "piece", name: "green chili", preparation: "thinly sliced" }
   (no descriptor — "fresh" is implied; "green" stays with name)
 
 "0.5 large aubergine, peeled and cut into 3cm dice"
-→ { quantity: 0.5, unit: "stuks", descriptor: "large", name: "aubergine", preparation: "peeled and cut into 3cm dice" }
+→ { quantity: 0.5, unit: "piece", descriptor: "large", name: "aubergine", preparation: "peeled and cut into 3cm dice" }
 
 "2 medium tomatoes, peeled and chopped"
-→ { quantity: 2, unit: "stuks", descriptor: "medium", name: "tomato", preparation: "peeled and chopped" }
+→ { quantity: 2, unit: "piece", descriptor: "medium", name: "tomato", preparation: "peeled and chopped" }
   (plural → singular)
 
 "4 cloves garlic, sliced"
-→ { quantity: 4, unit: "cloves", name: "garlic", preparation: "sliced" }
+→ { quantity: 4, unit: "clove", name: "garlic", preparation: "sliced" }
 
 "200 g French beans, trimmed"
 → { quantity: 200, unit: "g", name: "French beans", preparation: "trimmed" }
