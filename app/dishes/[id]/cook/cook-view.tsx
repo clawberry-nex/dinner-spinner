@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Dish, Ingredient } from "@/lib/types";
+import type { Dish, Ingredient, MethodRef } from "@/lib/types";
 import { Icon } from "@/app/_components/icon";
 import { StepperButton } from "@/app/_components/ui";
 import {
@@ -11,61 +11,41 @@ import {
   scaleIngredient,
   visibleUnit,
 } from "@/lib/ingredients";
+import {
+  parseMethod,
+  groupIngredientsBySection,
+  findNameSpans,
+  findPhraseSpans,
+} from "@/lib/recipe";
 import { findTimers } from "@/lib/timer-parse";
 import { useTimers } from "./use-timers";
 import TimerPanel from "./timer-panel";
 
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 type Span =
-  | { kind: "ingredient"; start: number; end: number; idx: number }
+  | { kind: "ingredient"; start: number; end: number; idxs: number[] }
   | { kind: "timer"; start: number; end: number; seconds: number; label: string };
 
-function findIngredientSpans(text: string, ingredients: Ingredient[]): Span[] {
-  if (ingredients.length === 0) return [];
-  const entries = ingredients
-    .map((ing, idx) => ({ name: ing.name.trim(), idx }))
-    .filter((e) => e.name.length >= 3)
-    .sort((a, b) => b.name.length - a.name.length);
-  if (entries.length === 0) return [];
-
-  const alternation = entries.map((e) => escapeRegex(e.name)).join("|");
-  const re = new RegExp(`\\b(?:${alternation})s?\\b`, "gi");
-  const spans: Span[] = [];
-
-  for (const m of text.matchAll(re)) {
-    const matched = m[0];
-    const normalized = matched.replace(/s$/i, "").toLowerCase();
-    const hit = entries.find(
-      (e) =>
-        e.name.toLowerCase() === normalized ||
-        e.name.toLowerCase() === matched.toLowerCase(),
-    );
-    if (!hit) continue;
-    const start = m.index ?? 0;
-    spans.push({
-      kind: "ingredient",
-      start,
-      end: start + matched.length,
-      idx: hit.idx,
-    });
-  }
-  return spans;
-}
-
-// Linkify a step's plain text. Matches ingredient names (clickable to
-// scroll their row into view) and duration patterns like "15 min" /
-// "2 hours" (clickable to start a countdown timer). Overlapping spans
-// resolve earliest-start-wins; equal starts favor the longer span.
+// Linkify a step's plain text. Ingredient references come from the dish's
+// methodRefs (phrase lookup) when present, else fall back to literal name
+// matching. Duration patterns ("15 min") become tappable timers.
+// Overlaps resolve earliest-start-wins; equal starts favor the longer span.
 function linkifyStep(
   text: string,
   ingredients: Ingredient[],
-  onTapIngredient: (index: number) => void,
+  methodRefs: MethodRef[] | null,
+  onTapIngredients: (idxs: number[]) => void,
   onStartTimer: (label: string, seconds: number) => void,
 ): React.ReactNode[] {
-  const ingredientSpans = findIngredientSpans(text, ingredients);
+  const ingRaw =
+    methodRefs && methodRefs.length > 0
+      ? findPhraseSpans(text, methodRefs)
+      : findNameSpans(text, ingredients);
+  const ingredientSpans: Span[] = ingRaw.map((s) => ({
+    kind: "ingredient",
+    start: s.start,
+    end: s.end,
+    idxs: s.idxs,
+  }));
   const timerSpans: Span[] = findTimers(text).map((t) => ({
     kind: "timer",
     start: t.start,
@@ -79,7 +59,6 @@ function linkifyStep(
     return b.end - b.start - (a.end - a.start);
   });
 
-  // Drop overlapping spans — earlier (or longer, on tie) wins.
   const picked: Span[] = [];
   let cursor = 0;
   for (const s of all) {
@@ -94,9 +73,7 @@ function linkifyStep(
   let lastIndex = 0;
   let key = 0;
   for (const s of picked) {
-    if (s.start > lastIndex) {
-      parts.push(text.slice(lastIndex, s.start));
-    }
+    if (s.start > lastIndex) parts.push(text.slice(lastIndex, s.start));
     const matched = text.slice(s.start, s.end);
     if (s.kind === "ingredient") {
       parts.push(
@@ -105,7 +82,7 @@ function linkifyStep(
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onTapIngredient(s.idx);
+            onTapIngredients(s.idxs);
           }}
           className="inline underline decoration-dotted decoration-emerald-500 underline-offset-2 hover:bg-emerald-100 dark:hover:bg-emerald-950"
         >
@@ -133,58 +110,6 @@ function linkifyStep(
   }
   if (lastIndex < text.length) parts.push(text.slice(lastIndex));
   return parts;
-}
-
-type Section = {
-  title: string | null;
-  steps: string[];
-};
-
-// Parse a simple recipe markdown blob into sections with steps.
-// Recognizes:
-//   ## Heading   — starts a new section
-//   1. Step text — numbered list item
-//   - Step text  — bulleted list item
-// Other content is ignored (blank lines, free paragraphs, etc.).
-function parseRecipe(md: string): Section[] {
-  const sections: Section[] = [];
-  let current: Section | null = null;
-  const ensureSection = () => {
-    if (!current) {
-      current = { title: null, steps: [] };
-      sections.push(current);
-    }
-    return current;
-  };
-
-  for (const rawLine of md.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    const heading = line.match(/^#{1,6}\s+(.*)$/);
-    if (heading) {
-      current = { title: heading[1].trim(), steps: [] };
-      sections.push(current);
-      continue;
-    }
-
-    const numbered = line.match(/^\d+\.\s+(.*)$/);
-    if (numbered) {
-      ensureSection().steps.push(numbered[1].trim());
-      continue;
-    }
-
-    const bulleted = line.match(/^[-*]\s+(.*)$/);
-    if (bulleted) {
-      ensureSection().steps.push(bulleted[1].trim());
-      continue;
-    }
-
-    // Paragraph (not a list item or heading). Treat it as its own step.
-    ensureSection().steps.push(line);
-  }
-
-  return sections.filter((s) => s.steps.length > 0);
 }
 
 function useWakeLock() {
@@ -249,13 +174,14 @@ export default function CookView({
   const router = useRouter();
   const [servings, setServings] = useState<number>(initialServings);
   const [doneSteps, setDoneSteps] = useState<Set<string>>(new Set());
-  const [highlightedIdx, setHighlightedIdx] = useState<number | null>(null);
+  const [highlighted, setHighlighted] = useState<Set<number>>(new Set());
+  const highlightToken = useRef(0);
   const ingredientRefs = useRef<Array<HTMLLIElement | null>>([]);
   const wakeLock = useWakeLock();
   const timers = useTimers();
 
   const sections = useMemo(
-    () => (dish.recipe ? parseRecipe(dish.recipe) : []),
+    () => (dish.recipe ? parseMethod(dish.recipe) : []),
     [dish.recipe],
   );
 
@@ -276,15 +202,27 @@ export default function CookView({
     });
   }
 
-  const scrollToIngredient = useCallback((idx: number) => {
-    const el = ingredientRefs.current[idx];
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    setHighlightedIdx(idx);
+  const scrollToIngredients = useCallback((idxs: number[]) => {
+    const valid = idxs.filter(
+      (i) => i >= 0 && ingredientRefs.current[i] != null,
+    );
+    if (valid.length === 0) return;
+    ingredientRefs.current[valid[0]]?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    const token = ++highlightToken.current;
+    setHighlighted(new Set(valid));
     window.setTimeout(() => {
-      setHighlightedIdx((cur) => (cur === idx ? null : cur));
+      if (highlightToken.current === token) setHighlighted(new Set());
     }, 1600);
   }, []);
+
+  const ingredientGroups = useMemo(
+    () =>
+      groupIngredientsBySection(scaledIngredients, (ing) => ing.section ?? null),
+    [scaledIngredients],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
@@ -319,32 +257,53 @@ export default function CookView({
             {wakeLock.supported === false ? "screen may auto-lock" : wakeLock.active ? "screen lock prevented" : "…"}
           </div>
         </div>
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-1 overflow-auto px-4 pb-3 text-[14px]">
-          {scaledIngredients.map((ing, i) => {
-            const unit = visibleUnit(ing.unit);
-            const pantry = !!ing.pantry;
-            const optional = !!ing.optional;
-            const highlighted = highlightedIdx === i;
-            return (
-              <li
-                key={i}
-                ref={(el) => { ingredientRefs.current[i] = el; }}
-                className={[
-                  "rounded-md px-2 py-1 transition-colors",
-                  highlighted ? "bg-accent-tint" : "",
-                  pantry ? "italic text-ink-3" : "text-ink",
-                ].join(" ")}
-              >
-                <span className="text-[12px] text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
-                  {formatQty(ing.quantity)}{unit ? ` ${unit}` : ""}
-                </span>{" "}
-                {ing.descriptor && <span className="text-ink-3">{ing.descriptor} </span>}
-                {ing.name}
-                {optional && <span className="text-[11px] text-ink-3"> (optional)</span>}
-              </li>
-            );
-          })}
-        </ul>
+        <div className="overflow-auto px-4 pb-3 text-[14px]">
+          {ingredientGroups.map((group, gi) => (
+            <div key={gi} className={gi > 0 ? "mt-2" : ""}>
+              {group.title && (
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-3">
+                  {group.title}
+                </div>
+              )}
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-1">
+                {group.items.map(({ item: ing, index: i }) => {
+                  const unit = visibleUnit(ing.unit);
+                  const pantry = !!ing.pantry;
+                  const optional = !!ing.optional;
+                  const isHighlighted = highlighted.has(i);
+                  return (
+                    <li
+                      key={i}
+                      ref={(el) => {
+                        ingredientRefs.current[i] = el;
+                      }}
+                      className={[
+                        "rounded-md px-2 py-1 transition-colors",
+                        isHighlighted ? "bg-accent-tint" : "",
+                        pantry ? "italic text-ink-3" : "text-ink",
+                      ].join(" ")}
+                    >
+                      <span
+                        className="text-[12px] text-ink-3"
+                        style={{ fontFamily: "var(--font-mono)" }}
+                      >
+                        {formatQty(ing.quantity)}
+                        {unit ? ` ${unit}` : ""}
+                      </span>{" "}
+                      {ing.descriptor && (
+                        <span className="text-ink-3">{ing.descriptor} </span>
+                      )}
+                      {ing.name}
+                      {optional && (
+                        <span className="text-[11px] text-ink-3"> (optional)</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto px-4 py-4">
@@ -384,7 +343,7 @@ export default function CookView({
                           {done ? <Icon name="check" size={12} /> : stepIdx + 1}
                         </span>
                         <span className="flex-1">
-                          {linkifyStep(step, scaledIngredients, scrollToIngredient, timers.start)}
+                          {linkifyStep(step, scaledIngredients, dish.methodRefs, scrollToIngredients, timers.start)}
                         </span>
                       </button>
                     </li>
