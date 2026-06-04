@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { DishPatchSchema, rowToDish } from "@/lib/types";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { applyPantryDefaults } from "@/lib/pantry";
+import { sanitizeMethodRefs } from "@/lib/recipe";
 
 export async function GET(
   req: NextRequest,
@@ -73,6 +74,11 @@ export async function PATCH(
       ? await applyPantryDefaults(u.ingredients, userId)
       : existing.ingredients;
 
+  const methodRefs =
+    u.methodRefs === undefined
+      ? sanitizeMethodRefs(existing.methodRefs, ingredients.length)
+      : sanitizeMethodRefs(u.methodRefs, ingredients.length);
+
   const merged = {
     title: u.title ?? existing.title,
     subtitle: u.subtitle === undefined ? existing.subtitle : u.subtitle,
@@ -106,6 +112,7 @@ export async function PATCH(
       notes = ${merged.notes ?? null},
       image_description = ${merged.imageDescription ?? null},
       public = ${merged.public},
+      method_refs = ${methodRefs == null ? null : JSON.stringify(methodRefs)}::jsonb,
       updated_at = now()
     WHERE id = ${Number(id)} AND user_id = ${userId}
     RETURNING *

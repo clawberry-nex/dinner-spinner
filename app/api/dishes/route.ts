@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { DishInputSchema, rowToDish } from "@/lib/types";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { applyPantryDefaults } from "@/lib/pantry";
+import { sanitizeMethodRefs } from "@/lib/recipe";
 import { buildImagePrompt } from "@/lib/image-prompt";
 import { getProvider } from "@/lib/image-provider";
 import { uploadDishImage } from "@/lib/image-storage";
@@ -58,14 +59,16 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  const ingredients = await applyPantryDefaults(parsed.data.ingredients, userId);
   const d = {
     ...parsed.data,
-    ingredients: await applyPantryDefaults(parsed.data.ingredients, userId),
+    ingredients,
+    methodRefs: sanitizeMethodRefs(parsed.data.methodRefs, ingredients.length),
   };
   const rows = await sql`
     INSERT INTO dishes (
       user_id, title, subtitle, recipe, tags, ingredients, base_servings,
-      favorite, image_url, emoji, accent, notes, image_description, public
+      favorite, image_url, emoji, accent, notes, image_description, public, method_refs
     )
     VALUES (
       ${userId},
@@ -81,7 +84,8 @@ export async function POST(req: Request) {
       ${d.accent ?? null},
       ${d.notes ?? null},
       ${d.imageDescription ?? null},
-      ${d.public ?? true}
+      ${d.public ?? true},
+      ${d.methodRefs == null ? null : JSON.stringify(d.methodRefs)}::jsonb
     )
     RETURNING *
   `;
