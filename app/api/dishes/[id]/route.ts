@@ -74,10 +74,19 @@ export async function PATCH(
       ? await applyPantryDefaults(u.ingredients, userId)
       : existing.ingredients;
 
+  // methodRefs indices are positional (into the ingredients array). On omit,
+  // re-sanitize the existing refs against the (possibly changed) ingredient
+  // count so any now-out-of-range index is dropped; an explicit null clears;
+  // an array replaces. (A raw-API reorder that keeps the same count but omits
+  // methodRefs can leave refs pointing at the wrong row — a recoverable cook-
+  // mode highlight mismatch, not data corruption; the in-app form clears refs
+  // on any ingredient edit.)
   const methodRefs =
     u.methodRefs === undefined
       ? sanitizeMethodRefs(existing.methodRefs, ingredients.length)
-      : sanitizeMethodRefs(u.methodRefs, ingredients.length);
+      : u.methodRefs === null
+        ? null
+        : sanitizeMethodRefs(u.methodRefs, ingredients.length);
 
   const merged = {
     title: u.title ?? existing.title,
