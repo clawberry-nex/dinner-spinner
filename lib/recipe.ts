@@ -153,7 +153,7 @@ export function findPhraseSpans(
     const re = new RegExp(escapeRegex(phrase), "gi");
     for (const m of text.matchAll(re)) {
       const start = m.index ?? 0;
-      spans.push({ start, end: start + m[0].length, idxs: ref.ingredients });
+      spans.push({ start, end: start + m[0].length, idxs: ref.ingredients.slice() });
     }
   }
   return spans;

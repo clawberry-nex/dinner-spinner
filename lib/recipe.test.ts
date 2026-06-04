@@ -6,6 +6,7 @@ import {
   findNameSpans,
   findPhraseSpans,
   sanitizeMethodRefs,
+  escapeRegex,
 } from "./recipe.ts";
 
 // ---- parseMethod ----
@@ -42,7 +43,7 @@ test("drops empty sections", () => {
 });
 
 // ---- groupIngredientsBySection ----
-const get = (x) => x.section ?? null;
+const get = (x: { section?: string | null }) => x.section ?? null;
 
 test("groups by section in first-seen order, null section trails last", () => {
   const items = [
@@ -99,6 +100,20 @@ test("findPhraseSpans finds every occurrence of a phrase", () => {
   const refs = [{ phrase: "onion", ingredients: [0] }];
   const spans = findPhraseSpans("onion here, onion there", refs);
   assert.equal(spans.length, 2);
+});
+
+test("findPhraseSpans returns independent idxs arrays per span", () => {
+  const refs = [{ phrase: "onion", ingredients: [0] }];
+  const spans = findPhraseSpans("onion and onion", refs);
+  assert.equal(spans.length, 2);
+  assert.notEqual(spans[0].idxs, spans[1].idxs); // different array objects
+  spans[0].idxs.push(99);
+  assert.deepEqual(spans[1].idxs, [0]); // mutation isolated
+  assert.deepEqual(refs[0].ingredients, [0]); // original ref untouched
+});
+
+test("escapeRegex escapes regex metacharacters", () => {
+  assert.equal(escapeRegex("a.b+c(d)"), "a\\.b\\+c\\(d\\)");
 });
 
 // ---- sanitizeMethodRefs ----
