@@ -40,8 +40,6 @@ test("ingredient items declare an optional section field", () => {
       ingredients?: { items?: { properties?: Record<string, unknown> } };
     };
   };
-  assert.ok(
-    s.properties?.ingredients?.items?.properties?.section,
-    "ingredient items should expose a `section` property",
-  );
+  const itemProps = s.properties?.ingredients?.items?.properties ?? {};
+  assert.ok("section" in itemProps, "ingredient items should expose a `section` property");
 });

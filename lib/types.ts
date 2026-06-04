@@ -33,6 +33,8 @@ export type Ingredient = z.infer<typeof IngredientSchema>;
 // the dish's `ingredients` array.
 export const MethodRefSchema = z.object({
   phrase: z.string().trim().min(1).max(80),
+  // Cap per-phrase fan-out: a phrase referencing >20 distinct ingredients
+  // would be incoherent. Independent of the dish's total ingredient count.
   ingredients: z.array(z.number().int().nonnegative()).min(1).max(20),
 });
 
