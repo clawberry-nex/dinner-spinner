@@ -40,7 +40,28 @@ test("includes core ingredient parsing rules", () => {
 test("includes obvious-tag whitelist and forbids personal tags", () => {
   const p = buildIngestPrompt(FIXTURE);
   assert.ok(p.includes("vegetarian"));
-  assert.ok(p.toLowerCase().includes("finn likes this"));
+  assert.ok(p.toLowerCase().includes("no personal tags"));
+});
+
+test("translates all text to the target language (default English)", () => {
+  const p = buildIngestPrompt(FIXTURE);
+  assert.ok(/translate/i.test(p));
+  assert.ok(p.includes("English"));
+  const dutch = buildIngestPrompt({ ...FIXTURE, targetLanguage: "Dutch" });
+  assert.ok(dutch.includes("Dutch"));
+});
+
+test("asks for numbered steps and section headers", () => {
+  const p = buildIngestPrompt(FIXTURE);
+  assert.ok(/numbered steps/i.test(p));
+  assert.ok(p.includes("## "));
+});
+
+test("documents the section field and methodRefs", () => {
+  const p = buildIngestPrompt(FIXTURE);
+  assert.ok(/section/i.test(p));
+  assert.ok(p.includes("methodRefs"));
+  assert.ok(p.includes("the seeds")); // loose-reference example
 });
 
 test("includes at least one standard ingredient name", () => {
