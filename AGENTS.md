@@ -120,6 +120,7 @@ ingredient is a JSON object:
   scalable?: boolean,     // default true
   optional?: boolean,     // default false
   alternatives?: string[], // e.g. ["olive oil"] for "butter or olive oil"
+  section?: string,        // recipe part: "Dough"/"Filling" — display grouping, NOT a shopping-list split
 }
 ```
 
@@ -134,6 +135,7 @@ ingredient is a JSON object:
 | `scalable` | `false` if the quantity is FIXED regardless of servings. Default = scalable. | `false` for `1 bay leaf`, `1 cinnamon stick`, `1 stock cube`, `1 star anise` | yes, with the literal fixed quantity (scaler is a no-op). |
 | `optional` | `true` if the recipe explicitly lists the ingredient as optional / garnish. Default = required. | `true` for `(optional) coriander garnish`, `(optional) chilli flakes`, `lime wedges to serve` | excluded by default; user can opt in via `/plan` toggle. |
 | `alternatives` | Alternative ingredient names the user can swap in. Only the primary goes on the shopping list. | `["olive oil"]` for "butter or olive oil", `["ghee"]` for "butter or ghee". | no — only the primary is shopped for. |
+| `section` | The recipe part this ingredient belongs to (multi-part recipes). Display-only — grouped on the dish/cook views; never splits the shopping list. | `Dough`, `Filling`, `Toppings` | no (organizational only) |
 
 Rules:
 - **`fresh` is implied** — never put `fresh` in `descriptor`. Everything's assumed fresh.
@@ -142,6 +144,7 @@ Rules:
 - **Use the standard vocabularies in `lib/vocabulary.ts`** for both `unit` and `name` whenever possible. Diverge only when nothing fits — then type a sensible custom value. The admin form uses these as `<datalist>` autocomplete hints.
 - **Mark `pantry: true`** on items the user always has in stock. The authoritative list is **user-curated in the DB** (`pantry_names` table, scoped by `user_id`) and exposed at `GET /api/pantry-defaults` (auth required; bearer `API_TOKEN` returns the seed owner's list). Agents must fetch the list at runtime before ingesting a recipe — the hardcoded `lib/vocabulary.ts::PANTRY_DEFAULTS` set is only a fallback in `lib/pantry.ts::getPantryDefaults` if the query fails. The server re-applies exact-match defaults on every POST/PATCH, but agents should still set `pantry` explicitly using **semantic judgment** for near-matches the exact check would miss: `"cumin"` and `"1 tsp cumin powder"` are both pantry even though neither matches the set exactly; `"smoked paprika"` is not pantry even though plain `"paprika"` might be. When in doubt, don't flag it.
 - If an item is truly free-text ("salt and black pepper to taste"), just put it with `unit: "to taste"`, `quantity: 1`, and leave descriptor/preparation empty. Mark `pantry: true` for salt/pepper.
+- The `recipe` field (cooking method) must be **Markdown numbered steps** ("1.", "2.", …) optionally under `## Section` headers (e.g. `## Make the dough`), written in the target language. The top-level `methodRefs` array lists `{phrase, ingredients[]}` objects where `phrase` is an exact substring of the written method text and `ingredients` is an array of 0-based ingredient indices — used by cook mode to highlight ingredients as each step is read. Every ingredient that appears by name in the method should have a corresponding entry.
 
 ### Standard units (use these when possible)
 
@@ -186,17 +189,28 @@ The full list lives in `lib/vocabulary.ts::STANDARD_INGREDIENTS` (~200 items acr
 
 ## AI ingest pipeline (`/add`)
 
-The ingest flow is **async** because Vercel Hobby caps function duration at 60s and Sonnet vision on a recipe photo can take 60–90s. Pipeline:
+The ingest flow is **async** because Vercel Hobby caps function duration at 60s and vision on a recipe photo can take 60–90s. Pipeline:
 
 1. **Browser** (`<IngestInput>`): compresses photo to ≤1280px JPEG, base64-encodes, POSTs to `/api/ingest` with `{input?, image?}`.
-2. **`POST /api/ingest`** (`app/api/ingest/route.ts`): auths the user, builds the prompt via `lib/ingest/prompt.ts::buildIngestPrompt`, calls claude-agent's `POST /api/v1/chat-async` (`lib/ingest/claude-agent.ts::startClaudeAgentJob`) with `model: "sonnet"` and the `DISH_INPUT_JSON_SCHEMA`. claude-agent returns `{job_id}` in <1s. Route returns `{jobId}` (HTTP 202) to the browser.
+2. **`POST /api/ingest`** (`app/api/ingest/route.ts`): auths the user, builds the prompt via `lib/ingest/prompt.ts::buildIngestPrompt`, calls claude-agent's `POST /api/v1/chat-async` (`lib/ingest/claude-agent.ts::startClaudeAgentJob`) with `model: "haiku"` and the `DISH_INPUT_JSON_SCHEMA`. claude-agent returns `{job_id}` in <1s. Route returns `{jobId}` (HTTP 202) to the browser.
 3. **Browser polls** `GET /api/ingest/jobs/[id]` every 1.5s for up to 3 min.
 4. **`GET /api/ingest/jobs/[id]`** (`app/api/ingest/jobs/[id]/route.ts`): proxies claude-agent's `GET /api/v1/jobs/{id}` (`pollClaudeAgentJob`). When status flips to `done`, re-validates the `structured` payload against `DishInputSchema` (defense in depth — claude-agent enforces JSON Schema structurally but not all our semantic constraints) and returns `{status: "done", dish}`. On `failed`, returns the error envelope.
 5. **Browser** swaps the form to manual mode with the parsed dish prefilled. User reviews and saves.
 
 Why async — direct calls to `POST /api/v1/chat` from Vercel were hitting the 60s wall on real photos. `/chat-async` + polling makes the Vercel function ~1s regardless of how long the agent takes.
 
-Model choice: Sonnet. Haiku missed recipes embedded in the long structured prompt during testing; Opus took 60-80s+ even on simple cases.
+**Model: Haiku** (not Sonnet). With the anyOf-free tool schema (see below), Haiku reliably produces a valid structured payload — including a well-formed `methodRefs` array — within claude-agent's 8-turn structured-output budget. Sonnet was exhausting that budget on the heavier normalized prompt before emitting a valid result.
+
+**Translation**: the ingest prompt passes the user's `default_language` (from `users.default_language`; NULL = English) and instructs the model to write the `title`, `subtitle`, cooking method, and human-readable fields (`descriptor`, `preparation`) in that language. Ingredient `name` fields and `imageDescription` always stay canonical English (to keep aggregation and pantry matching language-neutral).
+
+**Structured outputs from ingest** (`DISH_INPUT_JSON_SCHEMA`, `lib/ingest/schema.ts`):
+- `ingredients[].section` — recipe part (e.g. `"Dough"`, `"Filling"`). Display grouping; never splits the shopping list.
+- `methodRefs` — top-level array of `{phrase: string, ingredients: number[]}`. `phrase` is an exact substring of the written method text; `ingredients` are 0-based indices into the ingredients array. Powers cook-mode highlighting.
+- `recipe` — Markdown numbered steps under optional `## Section` headers, written in the target language.
+
+**anyOf-free schema requirement (`stripNullFromAnyOf`)**: the `DISH_INPUT_JSON_SCHEMA` is post-processed by `stripNullFromAnyOf` (`lib/ingest/schema.ts`) before being sent to claude-agent. This removes the `{type:"null"}` branch from every `anyOf` in the schema. **This is required** because claude-agent reconstructs the schema via `json-schema-to-zod`, which does not support `anyOf` — it degrades `.nullable()` fields to `z.unknown()`. Without stripping, complex fields like `methodRefs` arrive as a JSON string instead of a real array, breaking the whole structured-output contract. Keep the ingest schema anyOf-free.
+
+**Language setting**: users set their preferred recipe language in Settings → "Recipe language". API: `GET /PATCH /api/me/language`. DB column: `users.default_language` (VARCHAR, NULL = English).
 
 ## Non-obvious things
 
@@ -212,6 +226,7 @@ Model choice: Sonnet. Haiku missed recipes embedded in the long structured promp
 - **Tab bar hides for anon visitors**: `app/layout.tsx` calls `auth()` and plumbs `isSignedIn` through `RootShell` → `AppShell`. Anon visitors on `/u/[handle]` or a public `/dishes/[id]` get a standalone-looking page with no bottom nav, matching the share-link mental model.
 - **Handle one-time rename**: `users.handle_changed_at` is `NULL` initially. The first successful PATCH /api/me/profile with a new handle stamps `now()`; subsequent rename attempts return `handle_already_changed`. Existing share links to the old handle will 404 — surfaced in the edit-profile form as a warning.
 - **Backup imports** are scoped to the importing user. Dish-id collisions with another user's row are silently no-op'd (the conflict UPDATE is gated by `dishes.user_id = ${userId}`) to prevent cross-user clobber.
+- **Cook-mode highlighting** resolves ingredient references by first looking up each step phrase in `dishes.method_refs` (ingest-resolved `{phrase, ingredients[]}` pairs), falling back to literal ingredient name string-matching when `method_refs` is absent or a phrase is not found.
 
 ## Verification
 
