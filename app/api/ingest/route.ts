@@ -7,6 +7,8 @@ import {
   startClaudeAgentJob,
   ClaudeAgentError,
 } from "@/lib/ingest/claude-agent";
+import { sql } from "@/lib/db";
+import { languageName } from "@/lib/languages";
 
 // Async pattern: this route only KICKS OFF the ingest job and returns a
 // job_id in <1s. The browser polls /api/ingest/jobs/[id] for the result.
@@ -71,9 +73,16 @@ export async function POST(request: Request): Promise<Response> {
 
   const pantrySet = await getPantryDefaults(userId);
   const pantryList = Array.from(pantrySet).sort();
+  const langRows = await sql`
+    SELECT default_language FROM users WHERE id = ${userId}
+  `;
+  const targetLanguage = languageName(
+    (langRows[0]?.default_language as string | null) ?? null,
+  );
   const prompt = buildIngestPrompt({
     userInput: input ?? null,
     pantryList,
+    targetLanguage,
   });
 
   try {
@@ -83,12 +92,12 @@ export async function POST(request: Request): Promise<Response> {
       image,
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
-      // Haiku 4.5 — once we disabled extended thinking and pinned the
-      // submit_result MCP tool with alwaysLoad on the agent side, Haiku
-      // hits the ~16s mark with the same parse quality as Sonnet and at
-      // ~⅓ the cost. Previous Haiku failure ("missed the recipe") was
-      // the multi-turn thinking ambiguity, not capacity.
-      model: "haiku",
+      // Sonnet — ingest now also translates the full method and resolves
+      // ingredient references (methodRefs), which is meaningfully harder than
+      // the old extract-only task. Ingest is an infrequent per-recipe op, so
+      // the higher cost is negligible. Re-evaluate Haiku if cost becomes a
+      // concern AND translation/ref quality holds.
+      model: "sonnet",
     });
     return Response.json({ jobId: job.jobId }, { status: 202 });
   } catch (err) {
