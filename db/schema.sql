@@ -113,3 +113,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS handle_changed_at timestamptz;
 -- Per-dish visibility. Default true matches the public-by-default model;
 -- profile pages show only public dishes to non-owners.
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS public boolean NOT NULL DEFAULT true;
+
+-- Ingest normalization (2026-06): per-step phrase→ingredient links resolved
+-- at ingest for cook-mode highlighting, and per-user default recipe language.
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS method_refs jsonb;
+ALTER TABLE users  ADD COLUMN IF NOT EXISTS default_language text;
