@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Dish, DishInput, Ingredient } from "@/lib/types";
+import type { Dish, DishInput, Ingredient, MethodRef } from "@/lib/types";
 import { PANTRY_DEFAULTS, STANDARD_INGREDIENTS, STANDARD_UNITS } from "@/lib/vocabulary";
 import { moveItem } from "@/lib/reorder";
 import { Button } from "./ui";
@@ -16,6 +16,7 @@ type IngredientDraft = {
   descriptor: string;
   name: string;
   preparation: string;
+  section: string;
   pantry: boolean;
   // `fixed` is the inverse of `scalable`. Default false (i.e. scalable).
   fixed: boolean;
@@ -30,6 +31,7 @@ const EMPTY_INGREDIENT: IngredientDraft = {
   descriptor: "",
   name: "",
   preparation: "",
+  section: "",
   pantry: false,
   fixed: false,
   optional: false,
@@ -51,6 +53,11 @@ type Draft = {
   favorite: boolean;
   public: boolean;
   ingredients: IngredientDraft[];
+  // Ingest-derived links, carried through edits untouched. Cleared on save if
+  // the ingredient list changed (indices would go stale). `refNames` is the
+  // snapshot of ingredient names the refs were computed against.
+  methodRefs: MethodRef[] | null;
+  refNames: string[] | null;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -68,6 +75,8 @@ const EMPTY_DRAFT: Draft = {
   favorite: false,
   public: true,
   ingredients: [{ ...EMPTY_INGREDIENT }],
+  methodRefs: null,
+  refNames: null,
 };
 
 function dishToDraft(d: Dish): Draft {
@@ -93,12 +102,15 @@ function dishToDraft(d: Dish): Draft {
             descriptor: i.descriptor ?? "",
             name: i.name,
             preparation: i.preparation ?? "",
+            section: i.section ?? "",
             pantry: !!i.pantry,
             fixed: i.scalable === false,
             optional: !!i.optional,
             alternativesInput: (i.alternatives ?? []).join(", "),
           }))
         : [{ ...EMPTY_INGREDIENT }],
+    methodRefs: d.methodRefs ?? null,
+    refNames: d.methodRefs?.length ? d.ingredients.map((i) => i.name) : null,
   };
 }
 
@@ -125,12 +137,15 @@ function dishInputToDraft(d: DishInput): Draft {
             descriptor: i.descriptor ?? "",
             name: i.name,
             preparation: i.preparation ?? "",
+            section: i.section ?? "",
             pantry: !!i.pantry,
             fixed: i.scalable === false,
             optional: !!i.optional,
             alternativesInput: (i.alternatives ?? []).join(", "),
           }))
         : [{ ...EMPTY_INGREDIENT }],
+    methodRefs: d.methodRefs ?? null,
+    refNames: d.methodRefs?.length ? (d.ingredients ?? []).map((i) => i.name) : null,
   };
 }
 
@@ -148,6 +163,7 @@ function draftToPayload(d: Draft) {
         name: i.name.trim(),
         descriptor: i.descriptor.trim() || null,
         preparation: i.preparation.trim() || null,
+        section: i.section.trim() || null,
         pantry: i.pantry || null,
         // fixed checkbox (UI) → scalable:false (data)
         scalable: i.fixed ? false : null,
@@ -155,6 +171,13 @@ function draftToPayload(d: Draft) {
         alternatives: alternatives.length > 0 ? alternatives : null,
       };
     });
+  const currentNames = ingredients.map((i) => i.name);
+  const refsValid =
+    d.methodRefs != null &&
+    d.refNames != null &&
+    d.refNames.length === currentNames.length &&
+    d.refNames.every((n, idx) => n === currentNames[idx]);
+  const methodRefs = refsValid ? d.methodRefs : null;
   const tags = d.tagsInput
     .split(",")
     .map((t) => t.trim())
@@ -166,6 +189,7 @@ function draftToPayload(d: Draft) {
     notes: d.notes.trim() || null,
     tags,
     ingredients,
+    methodRefs,
     baseServings: Number(d.baseServings) || 4,
     imageUrl: d.imageUrl.trim() || null,
     imageDescription: d.imageDescription.trim() || null,
@@ -719,6 +743,14 @@ export default function DishForm({
                       updateIngredient(i, { preparation: e.target.value })
                     }
                     className="min-w-[10rem] flex-1 rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                  <input
+                    placeholder="section (Dough…)"
+                    value={ing.section}
+                    onChange={(e) =>
+                      updateIngredient(i, { section: e.target.value })
+                    }
+                    className="w-32 rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />
                   <label className="flex shrink-0 items-center gap-1.5 py-1 text-xs text-zinc-500 select-none">
                     <input
