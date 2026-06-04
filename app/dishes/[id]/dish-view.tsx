@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { AppHeader } from "@/app/_components/app-header";
 import { DishArt, Badge, Button, StepperButton, useToast } from "@/app/_components/ui";
 import { Icon } from "@/app/_components/icon";
-import { MarkdownLite } from "@/app/_components/markdown-lite";
+import { RecipeMethod } from "@/app/_components/recipe-method";
+import { groupIngredientsBySection } from "@/lib/recipe";
 import type { CookLogEntry, Dish } from "@/lib/types";
 import { computeDietFlags, formatDietChips } from "@/lib/diet";
 import { clearLastServings, readLastServings, writeLastServings } from "@/lib/last-servings";
@@ -257,32 +258,70 @@ export default function DishView({
         <div className="px-5 pb-2">
           <SectionHeader>Ingredients</SectionHeader>
           <div className="mt-2">
-            {dish.ingredients.map((ing, i) => {
-              const qty = (ing.quantity ?? 0) * (ing.scalable === false ? 1 : ratio);
-              const unit = ing.unit && ing.unit !== "piece" ? ` ${ing.unit}` : "";
-              return (
-                <div
-                  key={i}
-                  className={["flex items-baseline gap-3 border-b border-rule-soft py-[10px]", ing.pantry ? "italic text-ink-3" : "text-ink"].join(" ")}
-                >
-                  <span className="min-w-[52px] text-right text-[12px] font-medium text-ink-3" style={{ fontFamily: "var(--font-mono)" }}>
-                    {ing.quantity ? formatQty(qty) : ""}{unit}
-                  </span>
-                  <span className="flex-1 text-[14px] leading-snug" style={{ fontFamily: "var(--font-sans)" }}>
-                    {ing.descriptor && <span className="text-ink-3">{ing.descriptor} </span>}
-                    {ing.name}
-                    {ing.alternatives?.length ? <span className="text-ink-3"> (or {ing.alternatives.join(", ")})</span> : null}
-                    {ing.preparation && <span className="text-ink-3">, {ing.preparation}</span>}
-                    {ing.optional && <span className="text-ink-3"> (optional)</span>}
-                  </span>
-                  <span className="flex gap-1">
-                    {ing.pantry && <Badge>pantry</Badge>}
-                    {ing.scalable === false && <Badge>fixed</Badge>}
-                  </span>
+            {groupIngredientsBySection(dish.ingredients, (ing) => ing.section ?? null).map(
+              (group, gi) => (
+                <div key={gi}>
+                  {group.title && (
+                    <div className="mt-3 mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">
+                      {group.title}
+                    </div>
+                  )}
+                  {group.items.map(({ item: ing, index: i }) => {
+                    const qty =
+                      (ing.quantity ?? 0) * (ing.scalable === false ? 1 : ratio);
+                    const unit =
+                      ing.unit && ing.unit !== "piece" ? ` ${ing.unit}` : "";
+                    return (
+                      <div
+                        key={i}
+                        className={[
+                          "flex items-baseline gap-3 border-b border-rule-soft py-[10px]",
+                          ing.pantry ? "italic text-ink-3" : "text-ink",
+                        ].join(" ")}
+                      >
+                        <span
+                          className="min-w-[52px] text-right text-[12px] font-medium text-ink-3"
+                          style={{ fontFamily: "var(--font-mono)" }}
+                        >
+                          {ing.quantity ? formatQty(qty) : ""}
+                          {unit}
+                        </span>
+                        <span
+                          className="flex-1 text-[14px] leading-snug"
+                          style={{ fontFamily: "var(--font-sans)" }}
+                        >
+                          {ing.descriptor && (
+                            <span className="text-ink-3">{ing.descriptor} </span>
+                          )}
+                          {ing.name}
+                          {ing.alternatives?.length ? (
+                            <span className="text-ink-3">
+                              {" "}
+                              (or {ing.alternatives.join(", ")})
+                            </span>
+                          ) : null}
+                          {ing.preparation && (
+                            <span className="text-ink-3">, {ing.preparation}</span>
+                          )}
+                          {ing.optional && (
+                            <span className="text-ink-3"> (optional)</span>
+                          )}
+                        </span>
+                        <span className="flex gap-1">
+                          {ing.pantry && <Badge>pantry</Badge>}
+                          {ing.scalable === false && <Badge>fixed</Badge>}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-            {!dish.ingredients.length && <div className="py-4 text-[13px] text-ink-3">No ingredients listed.</div>}
+              ),
+            )}
+            {!dish.ingredients.length && (
+              <div className="py-4 text-[13px] text-ink-3">
+                No ingredients listed.
+              </div>
+            )}
           </div>
         </div>
 
@@ -301,7 +340,7 @@ export default function DishView({
           <div className="px-5 pt-4 pb-8">
             <SectionHeader>The recipe</SectionHeader>
             <div className="mt-3 text-[15px] leading-[1.55] text-ink" style={{ fontFamily: "var(--font-sans)" }}>
-              <MarkdownLite text={dish.recipe} />
+              <RecipeMethod text={dish.recipe} />
             </div>
           </div>
         )}
