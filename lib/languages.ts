@@ -4,7 +4,8 @@
 // recipe text into the user's chosen language; English is the canonical
 // default and the language of ingredient `name` vocabulary.
 
-export type SupportedLanguage = { code: string; label: string };
+export type LanguageCode = "en" | "nl" | "de" | "fr" | "es" | "it";
+export type SupportedLanguage = { code: LanguageCode; label: string };
 
 // English first — it is the default and the canonical ingredient-name language.
 export const SUPPORTED_LANGUAGES: SupportedLanguage[] = [
