@@ -26,7 +26,9 @@ const APPLY = process.argv.includes("--apply");
 const onlyIdx = process.argv.indexOf("--only");
 const ONLY = onlyIdx >= 0 ? Number(process.argv[onlyIdx + 1]) : null;
 
-const token = process.env.NEX_API_TOKEN;
+// Typed string (not string|undefined) so the closure below sees a narrowed
+// type; the guard still throws at runtime when unset/empty.
+const token: string = process.env.NEX_API_TOKEN ?? "";
 if (!token) throw new Error("NEX_API_TOKEN required");
 const baseUrl =
   process.env.CLAUDE_AGENT_URL ?? "https://nex.tail7f6b96.ts.net:10000";

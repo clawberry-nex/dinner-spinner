@@ -17,7 +17,11 @@ export const SUPPORTED_LANGUAGES: SupportedLanguage[] = [
   { code: "it", label: "Italian" },
 ];
 
-const BY_CODE = new Map(SUPPORTED_LANGUAGES.map((l) => [l.code, l.label]));
+// Keyed by plain string so lookups accept arbitrary stored/user values
+// (the SUPPORTED_LANGUAGES array keeps its literal-union `code` typing).
+const BY_CODE = new Map<string, string>(
+  SUPPORTED_LANGUAGES.map((l) => [l.code, l.label]),
+);
 
 // Resolve a stored code to a human language name for the ingest prompt.
 // NULL / unknown / undefined → "English" (the default target).
