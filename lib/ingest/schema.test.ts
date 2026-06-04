@@ -26,3 +26,22 @@ test("schema declares an ingredients array of objects", () => {
   assert.equal(ing?.type, "array");
   assert.equal(ing?.items?.type, "object");
 });
+
+test("schema declares an optional methodRefs property", () => {
+  // methodRefs is .nullable().optional(), so Zod v4 may emit it as an `anyOf`
+  // wrapper rather than a bare {type:"array"}. Assert the property exists.
+  const s = DISH_INPUT_JSON_SCHEMA as { properties?: Record<string, unknown> };
+  assert.ok(s.properties && "methodRefs" in s.properties, "methodRefs property exists");
+});
+
+test("ingredient items declare an optional section field", () => {
+  const s = DISH_INPUT_JSON_SCHEMA as {
+    properties?: {
+      ingredients?: { items?: { properties?: Record<string, unknown> } };
+    };
+  };
+  assert.ok(
+    s.properties?.ingredients?.items?.properties?.section,
+    "ingredient items should expose a `section` property",
+  );
+});

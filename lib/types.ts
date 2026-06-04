@@ -18,14 +18,31 @@ export const IngredientSchema = z.object({
     .max(8)
     .nullable()
     .optional(),
+  // The recipe part this ingredient belongs to, mirroring a "## Section"
+  // header in the method (e.g. "Dough", "Filling", "Toppings"). Display-only —
+  // never affects shopping-list aggregation. Null/absent for single-part recipes.
+  section: z.string().trim().max(40).nullable().optional(),
 });
 
 export type Ingredient = z.infer<typeof IngredientSchema>;
+
+// A link from a phrase in the (translated) method text to the ingredient(s)
+// it references. Resolved at ingest so cook-mode highlighting is a precise
+// lookup — language- and loose-reference-proof ("the seeds" → cumin seeds,
+// "the dough" → flour+water+yeast). `ingredients` holds 0-based indices into
+// the dish's `ingredients` array.
+export const MethodRefSchema = z.object({
+  phrase: z.string().trim().min(1).max(80),
+  ingredients: z.array(z.number().int().nonnegative()).min(1).max(20),
+});
+
+export type MethodRef = z.infer<typeof MethodRefSchema>;
 
 export const DishInputSchema = z.object({
   title: z.string().trim().min(1).max(200),
   subtitle: z.string().trim().max(300).nullable().optional(),
   recipe: z.string().max(20_000).nullable().optional(),
+  methodRefs: z.array(MethodRefSchema).max(300).nullable().optional(),
   tags: z.array(z.string().trim().min(1).max(40)).default([]),
   ingredients: z.array(IngredientSchema).default([]),
   baseServings: z.number().int().positive().max(100).default(4),
@@ -60,6 +77,7 @@ export const DishPatchSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   subtitle: z.string().trim().max(300).nullable().optional(),
   recipe: z.string().max(20_000).nullable().optional(),
+  methodRefs: z.array(MethodRefSchema).max(300).nullable().optional(),
   tags: z.array(z.string().trim().min(1).max(40)).optional(),
   ingredients: z.array(IngredientSchema).optional(),
   baseServings: z.number().int().positive().max(100).optional(),
@@ -78,6 +96,7 @@ export type Dish = {
   title: string;
   subtitle: string | null;
   recipe: string | null;
+  methodRefs: MethodRef[] | null;
   tags: string[];
   ingredients: Ingredient[];
   baseServings: number;
@@ -125,6 +144,7 @@ export function rowToDish(row: Record<string, unknown>): Dish {
     title: row.title as string,
     subtitle: (row.subtitle as string | null) ?? null,
     recipe: (row.recipe as string | null) ?? null,
+    methodRefs: (row.method_refs as MethodRef[] | null) ?? null,
     tags: (row.tags as string[]) ?? [],
     ingredients: (row.ingredients as Ingredient[]) ?? [],
     baseServings: row.base_servings as number,
