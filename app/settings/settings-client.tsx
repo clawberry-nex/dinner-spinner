@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { signOut } from "next-auth/react";
 import { STANDARD_INGREDIENTS } from "@/lib/vocabulary";
+import { SUPPORTED_LANGUAGES } from "@/lib/languages";
 import { Button } from "@/app/_components/ui";
 import { useTheme } from "@/app/_components/theme-provider";
 import { Icon, type IconName } from "@/app/_components/icon";
@@ -22,6 +23,10 @@ export default function SettingsClient({ user }: Props) {
   const [existingNames, setExistingNames] = useState<string[]>([]);
   const [pantryDefaults, setPantryDefaults] = useState<string[]>([]);
   const [newPantryName, setNewPantryName] = useState("");
+
+  // Language section.
+  const [language, setLanguage] = useState<string | null>(null);
+  const [languageMsg, setLanguageMsg] = useState<string | null>(null);
 
   // Todoist section.
   const [todoistHasToken, setTodoistHasToken] = useState(false);
@@ -52,10 +57,11 @@ export default function SettingsClient({ user }: Props) {
   }, [existingNames]);
 
   async function reload() {
-    const [nRes, pRes, tRes] = await Promise.all([
+    const [nRes, pRes, tRes, lRes] = await Promise.all([
       fetch("/api/ingredient-names"),
       fetch("/api/pantry-defaults"),
       fetch("/api/me/todoist"),
+      fetch("/api/me/language"),
     ]);
     if (nRes.ok) setExistingNames((await nRes.json()) as string[]);
     if (pRes.ok) setPantryDefaults((await pRes.json()) as string[]);
@@ -67,6 +73,10 @@ export default function SettingsClient({ user }: Props) {
       setTodoistHasToken(td.hasToken);
       setTodoistProject(td.projectName);
       setTodoistProjectInput(td.projectName ?? "");
+    }
+    if (lRes.ok) {
+      const ld = (await lRes.json()) as { language: string | null };
+      setLanguage(ld.language);
     }
   }
 
@@ -108,6 +118,17 @@ export default function SettingsClient({ user }: Props) {
       setTodoistProjectInput("");
       await reload();
     }
+  }
+
+  async function saveLanguage(value: string | null) {
+    setLanguageMsg(null);
+    setLanguage(value);
+    const res = await fetch("/api/me/language", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ language: value }),
+    });
+    setLanguageMsg(res.ok ? "Saved." : `HTTP ${res.status}`);
   }
 
   async function changePassword(e: React.FormEvent) {
@@ -250,6 +271,31 @@ export default function SettingsClient({ user }: Props) {
 
       {/* Appearance — theme picker. */}
       <Appearance />
+
+      {/* Recipe language */}
+      <section>
+        <h2 className="mb-3 text-xl font-semibold">Recipe language</h2>
+        <p className="mb-3 text-xs text-zinc-500">
+          New recipes are translated into this language when you add them.
+          Ingredient names stay in English so shopping lists merge correctly.
+        </p>
+        <div className="flex items-center gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <select
+            value={language ?? "en"}
+            onChange={(e) => saveLanguage(e.target.value)}
+            className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            {SUPPORTED_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+          {languageMsg && (
+            <span className="text-sm text-zinc-600">{languageMsg}</span>
+          )}
+        </div>
+      </section>
 
       {/* Change password — only for accounts that have one. */}
       {user.hasPassword && (
