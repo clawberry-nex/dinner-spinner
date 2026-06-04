@@ -47,3 +47,6 @@ next-env.d.ts
 
 # Core dumps from local process crashes.
 core.*
+
+# Backfill dry-run preview artifacts.
+backfill-preview-*.json
