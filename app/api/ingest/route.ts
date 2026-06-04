@@ -92,12 +92,12 @@ export async function POST(request: Request): Promise<Response> {
       image,
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
-      // Sonnet — ingest now also translates the full method and resolves
-      // ingredient references (methodRefs), which is meaningfully harder than
-      // the old extract-only task. Ingest is an infrequent per-recipe op, so
-      // the higher cost is negligible. Re-evaluate Haiku if cost becomes a
-      // concern AND translation/ref quality holds.
-      model: "sonnet",
+      // Haiku. Empirically: with the anyOf-free tool schema (see
+      // lib/ingest/schema.ts) Haiku reliably calls submit_result with a
+      // well-formed methodRefs array and completes within claude-agent's
+      // 8-turn structured-output budget. Sonnet exhausted that budget on this
+      // heavier translate+methodRefs prompt (Reached maximum number of turns).
+      model: "haiku",
     });
     return Response.json({ jobId: job.jobId }, { status: 202 });
   } catch (err) {
