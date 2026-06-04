@@ -69,7 +69,9 @@ async function reingestOne(row: Record<string, unknown>) {
     responseSchema: DISH_INPUT_JSON_SCHEMA,
     token,
     baseUrl,
-    model: "sonnet",
+    // Haiku — matches the live ingest route; completes within claude-agent's
+    // 8-turn structured-output budget where Sonnet exhausted it.
+    model: "haiku",
   });
   // Poll until done.
   for (let i = 0; i < 120; i++) {
