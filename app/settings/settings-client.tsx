@@ -122,13 +122,19 @@ export default function SettingsClient({ user }: Props) {
 
   async function saveLanguage(value: string | null) {
     setLanguageMsg(null);
+    const prev = language;
     setLanguage(value);
     const res = await fetch("/api/me/language", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ language: value }),
     });
-    setLanguageMsg(res.ok ? "Saved." : `HTTP ${res.status}`);
+    if (res.ok) {
+      setLanguageMsg("Saved.");
+    } else {
+      setLanguage(prev); // revert optimistic change so UI matches server
+      setLanguageMsg(`HTTP ${res.status}`);
+    }
   }
 
   async function changePassword(e: React.FormEvent) {
@@ -280,7 +286,11 @@ export default function SettingsClient({ user }: Props) {
           Ingredient names stay in English so shopping lists merge correctly.
         </p>
         <div className="flex items-center gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <label htmlFor="recipe-language-select" className="sr-only">
+            Recipe language
+          </label>
           <select
+            id="recipe-language-select"
             value={language ?? "en"}
             onChange={(e) => saveLanguage(e.target.value)}
             className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
