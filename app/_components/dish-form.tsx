@@ -110,7 +110,7 @@ function dishToDraft(d: Dish): Draft {
           }))
         : [{ ...EMPTY_INGREDIENT }],
     methodRefs: d.methodRefs ?? null,
-    refNames: d.methodRefs?.length ? d.ingredients.map((i) => i.name) : null,
+    refNames: d.methodRefs?.length ? d.ingredients.map((i) => i.name.trim()) : null,
   };
 }
 
@@ -145,7 +145,7 @@ function dishInputToDraft(d: DishInput): Draft {
           }))
         : [{ ...EMPTY_INGREDIENT }],
     methodRefs: d.methodRefs ?? null,
-    refNames: d.methodRefs?.length ? (d.ingredients ?? []).map((i) => i.name) : null,
+    refNames: d.methodRefs?.length ? (d.ingredients ?? []).map((i) => i.name.trim()) : null,
   };
 }
 
