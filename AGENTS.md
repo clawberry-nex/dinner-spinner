@@ -40,12 +40,14 @@ Next.js 16 (App Router) + TypeScript + Tailwind v4 + `@neondatabase/serverless` 
 - `app/api/me/profile/route.ts` — GET + PATCH for `handle` + `bio`. Handle is one-time editable (gated by `users.handle_changed_at`).
 - `app/api/me/todoist/route.ts`, `app/api/me/password/route.ts` — per-user self-management
 - `app/api/` — all domain routes are user-scoped. Mutations accept session cookie OR bearer `API_TOKEN` (the latter resolves to the seed owner). See `lib/auth-helpers.ts::resolveUserId`. **`GET /api/dishes/[id]`** is the one exception — it serves public dishes anonymously.
+- `app/api/dishes/[id]/image/route.ts` — `POST` triggers async photo regeneration (see Non-obvious things). `app/api/dishes/[id]/image/jobs/[jobId]/route.ts` — poll endpoint for the edit-page progress UI.
 - `lib/db.ts` — Neon client (throws if `DATABASE_URL` missing)
 - `lib/auth.ts` — NextAuth v5 config (Google + Credentials, JWT sessions, allowlist gate, Google upsert with handle assignment). Exports `{ handlers, auth, signIn, signOut }`.
 - `lib/auth-helpers.ts` — `parseAllowlist`, `isEmailAllowed`, `hashPassword`, `verifyPassword`, `resolveUserId(req)` (bridges JWT session and env `API_TOKEN` → seed owner), plus `HANDLE_REGEX`, `slugFromEmail`, `assignAvailableHandle` for profile handles. Server-only — client code mirrors the regex inline.
 - `lib/ingredients.ts` — `scaleIngredient`, `aggregateIngredients` (groups by lowercased `(name, unit)`), `formatQty`
 - `lib/todoist.ts` — Todoist client. Takes per-user `{ token, projectName }` as args (no longer reads env). **Pinned to `/api/v1/`** — the old `/rest/v2/` returns 410. Response shape is `{results, next_cursor}`; handle pagination.
 - `lib/pantry.ts` — `applyPantryDefaults(ingredients, userId)`, `getPantryDefaults(userId)` — both user-scoped.
+- `lib/dish-image.ts` — `generateAndStoreImage(dish, userId)`: prompt → provider → blob → update dish. Shared by create-route auto-gen and the async regenerate job.
 - `lib/types.ts` — Zod schemas + `Dish`/`Ingredient` types + `rowToDish` adapter. Also `Profile`/`rowToProfile`.
 - `proxy.ts` — NextAuth middleware (Next 16 renamed Middleware → Proxy). Public-path exemptions: `/auth/*`, `/api/auth/*`, manifest/icons/favicon/offline, **`/u/*`, `/dishes/[id]` (page), `GET /api/dishes/[id]`**. Everything else requires a session; API routes return 401 JSON, pages redirect to `/auth/signin`.
 - `scripts/backfill-seed-owner.ts` — one-shot: assigns existing rows to seed owner. Run after seed owner's first Google sign-in.
@@ -227,6 +229,7 @@ Why async — direct calls to `POST /api/v1/chat` from Vercel were hitting the 6
 - **Handle one-time rename**: `users.handle_changed_at` is `NULL` initially. The first successful PATCH /api/me/profile with a new handle stamps `now()`; subsequent rename attempts return `handle_already_changed`. Existing share links to the old handle will 404 — surfaced in the edit-profile form as a warning.
 - **Backup imports** are scoped to the importing user. Dish-id collisions with another user's row are silently no-op'd (the conflict UPDATE is gated by `dishes.user_id = ${userId}`) to prevent cross-user clobber.
 - **Cook-mode highlighting** resolves ingredient references by first looking up each step phrase in `dishes.method_refs` (ingest-resolved `{phrase, ingredients[]}` pairs), falling back to literal ingredient name string-matching when `method_refs` is absent or a phrase is not found.
+- **Dish-photo regeneration is async.** `POST /api/dishes/[id]/image` inserts an `image_jobs` row (`status` pending→done/failed), runs `lib/dish-image.ts::generateAndStoreImage` in Vercel `after()` (`maxDuration=60`), and returns `202 {jobId}`. The edit-page `<DishForm>` polls `GET /api/dishes/[id]/image/jobs/[jobId]` every 2s (up to 3 min) until `done`/`failed`. `image_jobs` rows are pruned (>1 day) opportunistically on each POST — no cron. The create-route's auto-image-gen uses the same `generateAndStoreImage` helper (fire-and-forget via `after()`, no job row). Why async: a synchronous regenerate (~30-60s Replicate gen) outran the client and looked "stuck on Generating…" even though the image saved server-side.
 
 ## Verification
 
