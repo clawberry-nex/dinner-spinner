@@ -1,10 +1,12 @@
 import type { NextRequest } from "next/server";
+import { after } from "next/server";
 import { sql } from "@/lib/db";
 import { rowToDish } from "@/lib/types";
 import { resolveUserId } from "@/lib/auth-helpers";
-import { buildImagePrompt } from "@/lib/image-prompt";
-import { getProvider } from "@/lib/image-provider";
-import { uploadDishImage } from "@/lib/image-storage";
+import { generateAndStoreImage } from "@/lib/dish-image";
+
+// after() runs the ~30-60s generation post-response; give it budget.
+export const maxDuration = 60;
 
 export async function POST(
   req: NextRequest,
@@ -26,29 +28,32 @@ export async function POST(
   }
   const dish = rowToDish(rows[0]);
 
-  let imageUrl: string;
-  try {
-    const prompt = buildImagePrompt({
-      title: dish.title,
-      subtitle: dish.subtitle,
-      imageDescription: dish.imageDescription,
-    });
-    const { bytes, mime } = await getProvider().generate(prompt);
-    imageUrl = await uploadDishImage(dishId, bytes, mime);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "image generation failed";
-    return Response.json({ error: message }, { status: 502 });
-  }
+  // Opportunistic prune — keep image_jobs small without a cron.
+  await sql`DELETE FROM image_jobs WHERE created_at < now() - interval '1 day'`;
 
-  const updated = await sql`
-    UPDATE dishes
-       SET image_url = ${imageUrl},
-           updated_at = now()
-     WHERE id = ${dishId} AND user_id = ${userId}
+  const jobRows = await sql`
+    INSERT INTO image_jobs (dish_id, user_id, status)
+    VALUES (${dishId}, ${userId}, 'pending')
     RETURNING id
   `;
-  if (updated.length === 0) {
-    return Response.json({ error: "Not found" }, { status: 404 });
-  }
-  return Response.json({ imageUrl });
+  const jobId = jobRows[0].id as string;
+
+  after(async () => {
+    try {
+      const imageUrl = await generateAndStoreImage(dish, userId);
+      await sql`
+        UPDATE image_jobs SET status = 'done', image_url = ${imageUrl}, updated_at = now()
+         WHERE id = ${jobId}
+      `;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "image generation failed";
+      await sql`
+        UPDATE image_jobs SET status = 'failed', error = ${message}, updated_at = now()
+         WHERE id = ${jobId}
+      `.catch(() => {});
+    }
+  });
+
+  return Response.json({ jobId }, { status: 202 });
 }
