@@ -4,9 +4,7 @@ import { DishInputSchema, rowToDish } from "@/lib/types";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { applyPantryDefaults } from "@/lib/pantry";
 import { sanitizeMethodRefs } from "@/lib/recipe";
-import { buildImagePrompt } from "@/lib/image-prompt";
-import { getProvider } from "@/lib/image-provider";
-import { uploadDishImage } from "@/lib/image-storage";
+import { generateAndStoreImage } from "@/lib/dish-image";
 
 export async function GET(req: Request) {
   const userId = await resolveUserId(req);
@@ -94,20 +92,8 @@ export async function POST(req: Request) {
   if (dish.imageUrl == null) {
     after(async () => {
       try {
-        const prompt = buildImagePrompt({
-          title: dish.title,
-          subtitle: dish.subtitle,
-          imageDescription: dish.imageDescription,
-        });
-        const { bytes, mime } = await getProvider().generate(prompt);
-        const url = await uploadDishImage(dish.id, bytes, mime);
-        await sql`
-          UPDATE dishes
-             SET image_url = ${url}, updated_at = now()
-           WHERE id = ${dish.id}
-        `;
+        await generateAndStoreImage(dish, userId);
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn(`auto image-gen failed for dish ${dish.id}:`, err);
       }
     });
