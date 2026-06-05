@@ -118,3 +118,21 @@ ALTER TABLE dishes ADD COLUMN IF NOT EXISTS public boolean NOT NULL DEFAULT true
 -- at ingest for cook-mode highlighting, and per-user default recipe language.
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS method_refs jsonb;
 ALTER TABLE users  ADD COLUMN IF NOT EXISTS default_language text;
+
+-- Async dish-image regeneration jobs (2026-06). POST /api/dishes/[id]/image
+-- inserts a pending row, runs generation in after(), and flips status to
+-- done/failed; the edit page polls GET .../image/jobs/[jobId]. Rows are
+-- opportunistically pruned (>1 day) on each POST — no cron. gen_random_uuid()
+-- comes from pgcrypto (already enabled above).
+CREATE TABLE IF NOT EXISTS image_jobs (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  dish_id     int  NOT NULL REFERENCES dishes(id) ON DELETE CASCADE,
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status      text NOT NULL DEFAULT 'pending',
+  image_url   text,
+  error       text,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS image_jobs_dish_id_idx ON image_jobs (dish_id);
+CREATE INDEX IF NOT EXISTS image_jobs_created_at_idx ON image_jobs (created_at);
