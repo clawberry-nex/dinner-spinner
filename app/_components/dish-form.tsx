@@ -329,12 +329,34 @@ export default function DishForm({
         method: "POST",
       });
       const data = (await res.json().catch(() => ({}))) as {
-        imageUrl?: string;
+        jobId?: string;
         error?: string;
       };
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      if (!data.imageUrl) throw new Error("response missing imageUrl");
-      setDraft((d) => ({ ...d, imageUrl: data.imageUrl! }));
+      if (!res.ok || !data.jobId) {
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      const jobId = data.jobId;
+      const deadline = Date.now() + 180_000; // poll up to 3 min
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const poll = await fetch(
+          `/api/dishes/${draft.id}/image/jobs/${jobId}`,
+        );
+        const pd = (await poll.json().catch(() => ({}))) as {
+          status?: string;
+          imageUrl?: string | null;
+          error?: string | null;
+        };
+        if (!poll.ok) throw new Error(pd.error ?? `HTTP ${poll.status}`);
+        if (pd.status === "done" && pd.imageUrl) {
+          setDraft((d) => ({ ...d, imageUrl: pd.imageUrl! }));
+          return;
+        }
+        if (pd.status === "failed") {
+          throw new Error(pd.error ?? "Generation failed");
+        }
+      }
+      setImageMsg("Still generating — refresh in a moment.");
     } catch (err) {
       setImageMsg(err instanceof Error ? err.message : "Generation failed");
     } finally {
