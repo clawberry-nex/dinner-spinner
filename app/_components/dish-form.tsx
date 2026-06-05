@@ -347,7 +347,7 @@ export default function DishForm({
           imageUrl?: string | null;
           error?: string | null;
         };
-        if (!poll.ok) throw new Error(pd.error ?? `HTTP ${poll.status}`);
+        if (!poll.ok) continue; // tolerate a transient poll blip; deadline backstops
         if (pd.status === "done" && pd.imageUrl) {
           setDraft((d) => ({ ...d, imageUrl: pd.imageUrl! }));
           return;
