@@ -161,6 +161,9 @@ body {
 @keyframes ds-stepin   { from { transform: translateX(18px); } to { transform: none; } }
 @keyframes ds-stepin-r { from { transform: translateX(42px); } to { transform: none; } }
 @keyframes ds-stepin-l { from { transform: translateX(-42px); } to { transform: none; } }
+/* "time's up" timer flash — pulses opacity (never to 0, so a frozen clock can
+   never hide the dock) for the finished-timer rose card in cook mode. */
+@keyframes ds-flash    { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
 /* focus-frame settle pop for the Decide filmstrip — keeps the centering
    translate so it doesn't jump off-axis mid-animation. */
 @keyframes ds-framepop { 0% { transform: translate(-50%,-50%) scale(1); } 45% { transform: translate(-50%,-50%) scale(1.05); } 100% { transform: translate(-50%,-50%) scale(1); } }
