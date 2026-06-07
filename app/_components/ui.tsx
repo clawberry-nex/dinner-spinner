@@ -99,6 +99,68 @@ export function StepperButton({ kind, onClick, ariaLabel }: { kind: "plus" | "mi
   );
 }
 
+// Servings stepper — ported from the V2 prototype (components.jsx). −/＋ around
+// a serif numeral with a "servings" eyebrow; a reset-to-base chip appears when
+// the count has deviated from `base`. Clamping to ≥1 is the caller's job
+// (pass an onChange that floors at 1). `big` enlarges for the hero/action bar.
+export function ServingsStepper({
+  value,
+  base,
+  onChange,
+  onReset,
+  big = false,
+}: {
+  value: number;
+  base: number;
+  onChange: (next: number) => void;
+  onReset?: () => void;
+  big?: boolean;
+}) {
+  const deviated = value !== base;
+  const sz = big ? "h-11 w-11" : "h-[34px] w-[34px]";
+  return (
+    <div className="flex items-center" style={{ gap: big ? 14 : 10 }}>
+      <button
+        type="button"
+        onClick={() => onChange(value - 1)}
+        aria-label="Fewer servings"
+        className={`grid ${sz} place-items-center rounded-pill border-0 bg-surface-2 text-text transition-colors hover:bg-surface-3`}
+      >
+        <Icon name="minus" size={big ? 20 : 16} />
+      </button>
+      <div className="text-center" style={{ minWidth: big ? 64 : 48 }}>
+        <div
+          className="tnum font-medium leading-none text-text"
+          style={{ fontFamily: "var(--font-serif)", fontSize: big ? 32 : 22 }}
+        >
+          {value}
+        </div>
+        <div className="mt-[3px] text-[9px] font-semibold uppercase tracking-[0.18em] text-text-faint" style={{ fontFamily: "var(--font-sans)" }}>
+          serving{value > 1 ? "s" : ""}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(value + 1)}
+        aria-label="More servings"
+        className={`grid ${sz} place-items-center rounded-pill border-0 bg-surface-2 text-text transition-colors hover:bg-surface-3`}
+      >
+        <Icon name="plus" size={big ? 20 : 16} />
+      </button>
+      {deviated && onReset && (
+        <button
+          type="button"
+          onClick={onReset}
+          className="ml-[2px] inline-flex items-center gap-[6px] rounded-pill bg-surface-2 px-[11px] py-[6px] text-[12.5px] font-medium text-text-dim transition-colors hover:bg-surface-3"
+          style={{ fontFamily: "var(--font-sans)" }}
+        >
+          <Icon name="reset" size={13} />base {base}
+        </button>
+      )}
+    </div>
+  );
+}
+
 type DishArtDish = { emoji?: string | null; accent?: string | null; imageUrl?: string | null };
 export function DishArt({
   dish,
