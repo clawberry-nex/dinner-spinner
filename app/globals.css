@@ -1,73 +1,171 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* Dark mode is driven by [data-mode=dark] on <html>, set by ThemeProvider. */
+/* Dinner Spinner V2 — warm-editorial, dark-first.
+   "A beautiful modern cookbook, in the dark, on the counter."
+
+   Dark is the DEFAULT (:root). Light is opt-in via [data-mode=light]; the
+   ThemeProvider's themeScript always sets an explicit data-mode before first
+   paint, so the `dark:` variant (keyed on [data-mode=dark]) keeps working. */
 @custom-variant dark (&:where([data-mode=dark], [data-mode=dark] *));
+@custom-variant light (&:where([data-mode=light], [data-mode=light] *));
 
 :root {
-  --bg:        #F5EFE3;
-  --bg-alt:    #EDE5D3;
-  --paper:     #FBF7EE;
-  --ink:       #1E1A14;
-  --ink-2:     #4A4237;
-  --ink-3:     #8A8172;
-  --rule:      #D9CFBA;
-  --rule-soft: #E8DFC9;
-  --accent:    oklch(58% 0.14 38);
-  --accent-ink:#FFF8EE;
-  --accent-tint:oklch(92% 0.04 38);
-  --warn:      oklch(60% 0.17 55);
-  --good:      oklch(55% 0.1 155);
-  --r-sm: 6px;
-  --r-md: 12px;
-  --r-lg: 20px;
+  /* — warm dark palette (default) — */
+  --bg:         #15110E;   /* warm espresso near-black */
+  --bg-deep:    #100D0B;   /* recessed / cook mode */
+  --surface:    #1F1915;   /* raised card */
+  --surface-2:  #2A221C;   /* higher / inputs */
+  --surface-3:  #362B23;   /* highest / hover, active */
+  --line:       rgba(238, 222, 204, 0.10);
+  --line-2:     rgba(238, 222, 204, 0.16);
+
+  --text:       #F3EADF;   /* warm cream */
+  --text-dim:   #BBAE9F;
+  --text-faint: #877B6C;
+
+  /* appetizing warm accent — terracotta/saffron */
+  --accent:       #E27D45;
+  --accent-2:     #EFA15A;   /* lighter ember */
+  --accent-deep:  #B9582C;
+  --accent-tint:  rgba(226, 125, 69, 0.14);
+  --accent-line:  rgba(226, 125, 69, 0.35);
+  --accent-ink:   #2A140A;   /* dark ink for text on an accent fill */
+
+  --gold:   #E6B450;   /* ratings / stars */
+  --sage:   #9DB17C;   /* veg / fresh / positive */
+  --sage-tint: rgba(157, 177, 124, 0.15);
+  --rose:   #D9756E;   /* favorite heart / heads-up / warn */
+  --rose-tint: rgba(217, 117, 110, 0.15);
+  --blue:   #7FA6B5;   /* info / cool accent */
+
+  /* radii */
+  --r-xs: 5px;
+  --r-sm: 8px;
+  --r-md: 11px;
+  --r-lg: 14px;
+  --r-xl: 18px;
   --r-pill: 999px;
+
+  /* shadows (theme-flipping) */
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 28px rgba(0,0,0,0.45);
+  --shadow-pop:  0 20px 60px rgba(0,0,0,0.6), 0 2px 0 rgba(255,255,255,0.04) inset;
+
+  /* type */
+  --serif: var(--font-spectral), Georgia, "Times New Roman", serif;
+  --sans:  var(--font-schibsted), system-ui, sans-serif;
+
+  --motion: 1;            /* tweakable motion multiplier */
+  --nav-h: 72px;          /* bottom-nav height (content scroll padding) */
+  --safe-top: 28px;       /* top inset */
 }
 
-[data-mode=dark] {
-  --bg:        #14110C;
-  --bg-alt:    #1E1A12;
-  --paper:     #1C1812;
-  --ink:       #F5EFE3;
-  --ink-2:     #C8BFA8;
-  --ink-3:     #8A8172;
-  --rule:      #332C20;
-  --rule-soft: #28221A;
-  --accent:    oklch(72% 0.14 38);
-  --accent-ink:#1C1812;
-  --accent-tint:oklch(30% 0.05 38);
+/* — light theme (opt-in) — both modes are real — */
+[data-mode=light] {
+  --bg:         #F7F1E8;
+  --bg-deep:    #EFE7DA;
+  --surface:    #FFFCF7;
+  --surface-2:  #F3EADF;
+  --surface-3:  #EADFCF;
+  --line:       rgba(60, 42, 28, 0.10);
+  --line-2:     rgba(60, 42, 28, 0.16);
+  --text:       #2A211A;
+  --text-dim:   #6E6155;
+  --text-faint: #9B8E7F;
+  --accent-tint: rgba(186, 88, 44, 0.12);
+  --accent-line: rgba(186, 88, 44, 0.32);
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 22px rgba(80,52,30,0.10);
+  --shadow-pop:  0 24px 60px rgba(80,52,30,0.22);
 }
 
 @theme inline {
-  --color-bg:         var(--bg);
-  --color-bg-alt:     var(--bg-alt);
-  --color-paper:      var(--paper);
-  --color-ink:        var(--ink);
-  --color-ink-2:      var(--ink-2);
-  --color-ink-3:      var(--ink-3);
-  --color-rule:       var(--rule);
-  --color-rule-soft:  var(--rule-soft);
-  --color-accent:     var(--accent);
-  --color-accent-ink: var(--accent-ink);
-  --color-accent-tint:var(--accent-tint);
-  --color-warn:       var(--warn);
-  --color-good:       var(--good);
+  /* — V2 semantic colors — */
+  --color-bg:          var(--bg);
+  --color-bg-deep:     var(--bg-deep);
+  --color-surface:     var(--surface);
+  --color-surface-2:   var(--surface-2);
+  --color-surface-3:   var(--surface-3);
+  --color-line:        var(--line);
+  --color-line-2:      var(--line-2);
+  --color-text:        var(--text);
+  --color-text-dim:    var(--text-dim);
+  --color-text-faint:  var(--text-faint);
+  --color-accent:      var(--accent);
+  --color-accent-2:    var(--accent-2);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-line: var(--accent-line);
+  --color-accent-ink:  var(--accent-ink);
+  --color-gold:        var(--gold);
+  --color-sage:        var(--sage);
+  --color-sage-tint:   var(--sage-tint);
+  --color-rose:        var(--rose);
+  --color-rose-tint:   var(--rose-tint);
+  --color-blue:        var(--blue);
+
+  /* — backward-compat aliases (old token names → new values).
+     Lets pre-V2 surfaces keep rendering during the incremental rollout;
+     dropped in the finalize phase once every surface is migrated. — */
+  --color-paper:      var(--surface);
+  --color-bg-alt:     var(--bg-deep);
+  --color-ink:        var(--text);
+  --color-ink-2:      var(--text-dim);
+  --color-ink-3:      var(--text-faint);
+  --color-rule:       var(--line);
+  --color-rule-soft:  var(--line-2);
+  --color-warn:       var(--rose);
+  --color-good:       var(--sage);
+
+  /* — radii — */
+  --radius-xs:   var(--r-xs);
   --radius-sm:   var(--r-sm);
   --radius-md:   var(--r-md);
   --radius-lg:   var(--r-lg);
+  --radius-xl:   var(--r-xl);
   --radius-pill: var(--r-pill);
-  --font-disp: var(--font-fraunces), Georgia, serif;
-  --font-sans: var(--font-inter), -apple-system, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  /* — fonts — */
+  --font-serif: var(--font-spectral), Georgia, "Times New Roman", serif;
+  --font-disp:  var(--font-spectral), Georgia, serif;  /* alias */
+  --font-sans:  var(--font-schibsted), system-ui, sans-serif;
+  --font-mono:  var(--font-jetbrains), ui-monospace, monospace;
 }
 
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
-html { color-scheme: light; }
-html[data-mode=dark] { color-scheme: dark; }
+html { color-scheme: dark; }
+html[data-mode=light] { color-scheme: light; }
 body {
   background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-sans);
+  color: var(--text);
+  font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 ::selection { background: var(--accent); color: var(--accent-ink); }
+
+/* tabular figures for quantities */
+.tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* hide scrollbars on horizontal rails / phone scroll regions */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* — entrance animations — transform-only so a frozen/throttled animation clock
+   (background tab, html-to-image capture, print) can never trap content
+   invisible. Animate from translate/scale, never from opacity:0. — */
+@keyframes ds-rise   { from { transform: translateY(12px); } to { transform: none; } }
+@keyframes ds-pop    { 0% { transform: scale(0.92); } 60% { transform: scale(1.02); } 100% { transform: scale(1); } }
+@keyframes ds-spin   { to { transform: rotate(360deg); } }
+@keyframes ds-breathe{ 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@keyframes ds-stepin   { from { transform: translateX(18px); } to { transform: none; } }
+@keyframes ds-stepin-r { from { transform: translateX(42px); } to { transform: none; } }
+@keyframes ds-stepin-l { from { transform: translateX(-42px); } to { transform: none; } }
+
+.rise   { animation: ds-rise calc(0.45s * var(--motion)) cubic-bezier(.2,.7,.2,1) both; }
+.pop    { animation: ds-pop  calc(0.4s  * var(--motion)) cubic-bezier(.2,.7,.2,1) both; }
+.spin   { animation: ds-spin calc(1s    * var(--motion)) linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}

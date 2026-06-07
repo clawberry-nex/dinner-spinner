@@ -50,3 +50,6 @@ core.*
 
 # Backfill dry-run preview artifacts.
 backfill-preview-*.json
+
+# Design handoff bundle (reference material — not part of the app).
+/references/

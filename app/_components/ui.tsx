@@ -121,27 +121,19 @@ export function DishArt({
 
 export function BrandMark({ size = 28, spinning = false }: { size?: number; spinning?: boolean }) {
   return (
-    <span
-      className="relative inline-flex shrink-0 items-center justify-center rounded-full bg-ink text-paper font-semibold"
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/icons/logo-mark.svg"
+      alt="Dinner Spinner"
+      width={size}
+      height={size}
+      className="shrink-0 select-none"
+      draggable={false}
       style={{
-        width: size, height: size,
-        fontFamily: "var(--font-disp)",
-        fontSize: size * 0.42, letterSpacing: -0.5,
-        transition: "transform 0.4s",
+        transition: "transform 0.5s cubic-bezier(.2,.7,.2,1)",
         transform: spinning ? "rotate(360deg)" : "none",
       }}
-    >
-      DS
-      <span
-        style={{
-          position: "absolute", top: -2, left: "50%", transform: "translateX(-50%)",
-          width: 0, height: 0,
-          borderLeft: `${size * 0.1}px solid transparent`,
-          borderRight: `${size * 0.1}px solid transparent`,
-          borderBottom: `${size * 0.14}px solid var(--accent)`,
-        }}
-      />
-    </span>
+    />
   );
 }
 
