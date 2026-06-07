@@ -29,6 +29,27 @@ export function Badge({ children }: { children: ReactNode }) {
   );
 }
 
+// Five-star rating display with partial fill on the active star. Ported from
+// the V2 prototype's `Stars` atom: gold filled stars over a dim track. Purely
+// presentational — pass `value` (0–5, fractional OK).
+export function Stars({ value = 0, size = 14, gap = 1 }: { value?: number; size?: number; gap?: number }) {
+  return (
+    <span className="inline-flex" style={{ gap }}>
+      {[1, 2, 3, 4, 5].map((i) => {
+        const fillPct = Math.max(0, Math.min(1, value - (i - 1))) * 100;
+        return (
+          <span key={i} style={{ position: "relative", width: size, height: size, display: "inline-block" }}>
+            <Icon name="star" size={size} fill style={{ position: "absolute", inset: 0, color: "var(--gold)", opacity: 0.25 }} />
+            <span style={{ position: "absolute", inset: 0, width: `${fillPct}%`, overflow: "hidden" }}>
+              <Icon name="star" size={size} fill style={{ color: "var(--gold)" }} />
+            </span>
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 type ButtonProps = {
   variant?: "primary" | "ghost" | "ink" | "link";
   size?: "sm" | "md" | "lg";
