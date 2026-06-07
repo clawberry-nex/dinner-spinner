@@ -53,3 +53,8 @@ backfill-preview-*.json
 
 # Design handoff bundle (reference material — not part of the app).
 /references/
+
+# Local V2-redesign verification scratch (not committed).
+/_mint-session.mjs
+/p[0-9]*-*.png
+/verify/
