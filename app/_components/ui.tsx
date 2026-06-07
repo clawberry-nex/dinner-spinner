@@ -84,21 +84,36 @@ export function DishArt({
   size = 64,
   corner = "var(--radius-md)",
   className,
+  fill = false,
+  emojiSize,
 }: {
   dish: DishArtDish | null;
   size?: number | string;
   corner?: string;
   className?: string;
+  // When true, the art fills its positioned parent (100%×100%) instead of
+  // imposing its own box. Lets callers control the frame (e.g. portrait
+  // filmstrip cards) while DishArt still owns the photo-vs-placeholder logic.
+  fill?: boolean;
+  // Explicit emoji glyph size for the placeholder; defaults to a fraction of
+  // a numeric `size`, or 64 otherwise.
+  emojiSize?: number;
 }) {
   const accent = dish?.accent || "oklch(70% 0.14 40)";
-  const style: CSSProperties = {
-    width: size, height: typeof size === "number" ? size : "auto",
-    aspectRatio: typeof size === "string" ? "16/10" : undefined,
-    borderRadius: corner, overflow: "hidden", position: "relative",
-    background: `linear-gradient(135deg, ${accent}, oklch(from ${accent} calc(l + 0.1) c calc(h - 20)))`,
-    flexShrink: 0,
-  };
-  const iconSize = typeof size === "number" ? size * 0.42 : 64;
+  const style: CSSProperties = fill
+    ? {
+        position: "absolute", inset: 0, width: "100%", height: "100%",
+        overflow: "hidden",
+        background: `linear-gradient(135deg, ${accent}, oklch(from ${accent} calc(l + 0.1) c calc(h - 20)))`,
+      }
+    : {
+        width: size, height: typeof size === "number" ? size : "auto",
+        aspectRatio: typeof size === "string" ? "16/10" : undefined,
+        borderRadius: corner, overflow: "hidden", position: "relative",
+        background: `linear-gradient(135deg, ${accent}, oklch(from ${accent} calc(l + 0.1) c calc(h - 20)))`,
+        flexShrink: 0,
+      };
+  const iconSize = emojiSize ?? (typeof size === "number" ? size * 0.42 : 64);
   if (dish?.imageUrl) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={dish.imageUrl} alt="" className={className} style={{ ...style, objectFit: "cover" }} />;

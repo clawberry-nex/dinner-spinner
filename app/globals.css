@@ -161,6 +161,9 @@ body {
 @keyframes ds-stepin   { from { transform: translateX(18px); } to { transform: none; } }
 @keyframes ds-stepin-r { from { transform: translateX(42px); } to { transform: none; } }
 @keyframes ds-stepin-l { from { transform: translateX(-42px); } to { transform: none; } }
+/* focus-frame settle pop for the Decide filmstrip — keeps the centering
+   translate so it doesn't jump off-axis mid-animation. */
+@keyframes ds-framepop { 0% { transform: translate(-50%,-50%) scale(1); } 45% { transform: translate(-50%,-50%) scale(1.05); } 100% { transform: translate(-50%,-50%) scale(1); } }
 
 .rise   { animation: ds-rise calc(0.45s * var(--motion)) cubic-bezier(.2,.7,.2,1) both; }
 .pop    { animation: ds-pop  calc(0.4s  * var(--motion)) cubic-bezier(.2,.7,.2,1) both; }

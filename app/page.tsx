@@ -2,22 +2,30 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppHeader } from "./_components/app-header";
-import { Chip, DishArt, Button } from "./_components/ui";
-import { Icon } from "./_components/icon";
+import { DishArt, Button } from "./_components/ui";
+import { Icon, type IconName } from "./_components/icon";
 import type { Dish } from "@/lib/types";
-import { pickWithRationale } from "@/lib/spinner";
+import { computeDietFlags, formatDietChips } from "@/lib/diet";
+import { pickWithRationale, type WeightFactor } from "@/lib/spinner";
+
+type Phase = "idle" | "spinning" | "result";
+
+// How long the deceleration transition runs before we flip to the result
+// phase. Kept just under the CSS transition so the frame-pop lands as the
+// reel settles. Mobile / desktop share this — the few hundred ms of slack
+// is imperceptible.
+const SPIN_MS = 2650;
 
 export default function SpinnerPage() {
   const router = useRouter();
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [spinning, setSpinning] = useState(false);
-  const [landed, setLanded] = useState<Dish | null>(null);
-  const [rationale, setRationale] = useState<string | null>(null);
-  const [cycleIdx, setCycleIdx] = useState(0);
-  const [rotation, setRotation] = useState(0);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [pick, setPick] = useState<Dish | null>(null);
+  const [factors, setFactors] = useState<WeightFactor[]>([]);
+  const [pickPoolSize, setPickPoolSize] = useState(0);
+  const [spinSeed, setSpinSeed] = useState(0);
   const timerRef = useRef<number | null>(null);
 
   // Hydrate filters from localStorage after mount (no SSR mismatch).
@@ -48,302 +56,725 @@ export default function SpinnerPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [selected.join(",")]);
 
+  const reset = () => {
+    setPhase("idle");
+    setPick(null);
+    setFactors([]);
+  };
+
   const toggleTag = (t: string) => {
-    setLanded(null);
-    setRationale(null);
+    reset();
     setSelected((ts) => (ts.includes(t) ? ts.filter((x) => x !== t) : [...ts, t]));
   };
 
   const spin = () => {
-    if (spinning) return;
+    if (phase === "spinning") return;
     if (!dishes.length) return;
+    // Compute the pick FIRST so the reel can decelerate onto it.
     const result = pickWithRationale(dishes, { tags: selected });
-    const pool = dishes;
-    setSpinning(true);
-    setLanded(null);
-    setRationale(null);
-    setRotation((r) => r + 360 * 5 + Math.random() * 360);
-    // Wheel rotation animates over 2.2s (CSS transition below). Sync the
-    // text randomization to the same wall-clock duration, with easing so
-    // it slows down toward the end. Stopping by elapsed time (not by a
-    // fixed frame count) keeps the two in lockstep regardless of pool size.
-    const SPIN_MS = 2200;
-    const startedAt =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    let i = 0;
-    const tick = () => {
-      setCycleIdx(i % pool.length);
-      i++;
-      const now =
-        typeof performance !== "undefined" ? performance.now() : Date.now();
-      const elapsed = now - startedAt;
-      if (elapsed >= SPIN_MS) {
-        setSpinning(false);
-        setLanded(result.dish);
-        setRationale(result.rationale);
-        return;
-      }
-      const progress = elapsed / SPIN_MS;
-      // Fast at start (~35ms), slowing to ~235ms by the end.
-      const delay = 35 + Math.pow(progress, 3) * 200;
-      timerRef.current = window.setTimeout(tick, delay);
-    };
-    tick();
+    setPick(result.dish);
+    setFactors(result.factors);
+    setPickPoolSize(result.poolSize);
+    setPhase("spinning");
+    setSpinSeed((s) => s + 1);
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => setPhase("result"), SPIN_MS);
   };
 
   useEffect(() => () => { if (timerRef.current) window.clearTimeout(timerRef.current); }, []);
 
-  const displayed = landed || dishes[cycleIdx] || dishes[0];
-  const weekday = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: "long" }), []);
+  const narrowed = selected.length > 0;
+  const poolSize = dishes.length;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
-      <AppHeader />
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
-       <div className="mx-auto w-full max-w-3xl">
-        <div className="px-5 pt-2 pb-5">
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-            Tonight · {weekday}
-          </div>
-          <h1 className="m-0 text-[40px] font-medium leading-[1.02] tracking-[-0.03em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
-            What&rsquo;s for<br />
-            <em className="italic text-accent">dinner?</em>
-          </h1>
-          <p className="mt-[6px] max-w-[280px] text-[13px] text-ink-2">
-            {dishes.length} {dishes.length === 1 ? "dish" : "dishes"} in the pool.{" "}
-            {selected.length ? `Filtered by ${selected.join(" + ")}.` : "Nothing ruled out."}
-          </p>
-        </div>
-
-        <div className="-mx-2 flex gap-[6px] overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {allTags.slice(0, 12).map((t) => (
-            <div key={t} className="shrink-0">
-              <Chip active={selected.includes(t)} onClick={() => toggleTag(t)}>{t}</Chip>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-24 lg:pb-10">
+        <div className="mx-auto flex w-full max-w-5xl flex-col px-5 pt-[var(--safe-top)] lg:px-10">
+          {/* Header section — no AppHeader; the shell owns the brand chrome. */}
+          <div className="lg:mt-2">
+            <div className="mb-[10px] text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
+              Dinner Spinner
             </div>
-          ))}
-        </div>
-
-        <div className="relative mx-4 min-h-[360px] flex flex-col items-center pt-2">
-          <WheelStage
-            pool={dishes}
-            displayed={displayed}
-            spinning={spinning}
-            landed={landed}
-            rotation={rotation}
-            onSpin={spin}
-          />
-          {landed && !spinning && (
-            <LandedCard
-              dish={landed}
-              rationale={rationale}
-              onDismiss={() => {
-                setLanded(null);
-                setRationale(null);
+            <h1
+              className="m-0 font-medium leading-[1.04] tracking-[-0.02em] text-text"
+              style={{
+                fontFamily: "var(--font-serif)",
+                fontSize: phase === "result" ? "clamp(22px,5vw,30px)" : "clamp(32px,7vw,46px)",
+                transition: "font-size .3s ease",
               }}
-              onView={() => router.push(`/dishes/${landed.id}`)}
-              onSpinAgain={spin}
+            >
+              {phase === "result" ? (
+                "Tonight, make"
+              ) : (
+                <>
+                  What&rsquo;s for<br className="lg:hidden" />{" "}
+                  <em className="italic text-accent">dinner?</em>
+                </>
+              )}
+            </h1>
+            {phase !== "result" && (
+              <div className="mt-2 text-[13.5px] text-text-dim lg:text-[15px]">
+                {poolSize} {poolSize === 1 ? "dish" : "dishes"} in the running
+                {narrowed && " · narrowed"}
+              </div>
+            )}
+          </div>
+
+          {/* Inline tag-chip rail (the real /api/tags filter + persistence). */}
+          {phase !== "result" && allTags.length > 0 && (
+            <div className="-mx-1 mt-4 flex gap-[6px] overflow-x-auto px-1 pb-1 no-scrollbar lg:flex-wrap lg:overflow-visible">
+              {allTags.slice(0, 14).map((t) => {
+                const on = selected.includes(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => toggleTag(t)}
+                    className={[
+                      "inline-flex shrink-0 items-center gap-[5px] whitespace-nowrap rounded-pill border px-3 py-[6px] text-[13px] transition-colors",
+                      on
+                        ? "border-accent bg-accent text-accent-ink"
+                        : "border-line-2 bg-transparent text-text-dim hover:border-text-faint",
+                    ].join(" ")}
+                    style={{ letterSpacing: 0.2 }}
+                  >
+                    {t}
+                    {on && <Icon name="close" size={12} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {poolSize === 0 ? (
+            <EmptyPool
+              narrowed={narrowed}
+              onClear={() => { reset(); setSelected([]); }}
+              onAdd={() => router.push("/add")}
             />
+          ) : (
+            <>
+              {/* Reel stage. The Filmstrip is mounted continuously across
+                  idle → spinning → result so its imperatively-set rest index
+                  survives into the frozen result frame. During idle/spinning
+                  it doubles as the desktop reel (sizes itself wide from its
+                  measured width). At desktop *result* we hide this whole block
+                  (lg:hidden) and show the hero two-column below instead; on
+                  mobile it stays, frozen on the pick, with the detail stacked
+                  beneath. */}
+              <div className={phase === "result" ? "lg:hidden" : ""}>
+                <div className="mt-6 flex flex-col lg:mt-10 lg:min-h-[46vh] lg:justify-center">
+                  <Filmstrip
+                    pool={dishes}
+                    pick={pick}
+                    phase={phase}
+                    spinSeed={spinSeed}
+                  />
+
+                  {phase === "result" && pick ? (
+                    <MobileResultDetail
+                      dish={pick}
+                      factors={factors}
+                      poolSize={pickPoolSize}
+                      narrowed={narrowed}
+                      onAgain={spin}
+                      onReset={reset}
+                      onOpen={() => router.push(`/dishes/${pick.id}`)}
+                    />
+                  ) : (
+                    <div className="mt-7 flex flex-col items-center gap-4 lg:mt-10">
+                      <p className="text-center text-[13px] text-text-faint lg:text-[14px]">
+                        {phase === "spinning"
+                          ? "Letting the reel settle…"
+                          : "Spin the reel — it lands on one, and tells you why."}
+                      </p>
+                      <Button
+                        variant="primary"
+                        onClick={spin}
+                        disabled={phase === "spinning"}
+                        className="h-14 w-full max-w-md text-[16.5px] lg:h-[58px] lg:w-auto lg:min-w-[260px] lg:px-9 lg:text-[17px]"
+                      >
+                        {phase === "spinning" ? (
+                          <>
+                            <SpinnerGlyph />Choosing…
+                          </>
+                        ) : (
+                          <>
+                            <Icon name="sparkle" size={20} style={{ color: "var(--accent-ink)" }} />
+                            Spin the reel
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Desktop result hero — replaces the reel at lg on result. */}
+              {phase === "result" && pick && (
+                <DesktopResultHero
+                  dish={pick}
+                  factors={factors}
+                  poolSize={pickPoolSize}
+                  narrowed={narrowed}
+                  onAgain={spin}
+                  onReset={reset}
+                  onOpen={() => router.push(`/dishes/${pick.id}`)}
+                />
+              )}
+            </>
           )}
         </div>
-
-        {!dishes.length && (
-          <div className="mx-4 my-4 rounded-lg border border-dashed border-rule p-6 text-center text-[13px] text-ink-3">
-            No dishes match the current filter.
-          </div>
-        )}
-        <style>{`@keyframes revealUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }`}</style>
-       </div>
       </div>
     </div>
   );
 }
 
-function wedgePath(i: number, n: number): string {
-  // SVG wedge from center (50,50) on a circle of radius 50, starting from
-  // the top and proceeding clockwise. Index 0 is the wedge anchored at 12 o'clock.
-  if (n === 1) {
-    // One slice = full circle, drawn as two half-arcs.
-    return "M 50 0 A 50 50 0 1 1 50 100 A 50 50 0 1 1 50 0 Z";
-  }
-  const startRad = ((-90 + (i / n) * 360) * Math.PI) / 180;
-  const endRad = ((-90 + ((i + 1) / n) * 360) * Math.PI) / 180;
-  const sx = 50 + 50 * Math.cos(startRad);
-  const sy = 50 + 50 * Math.sin(startRad);
-  const ex = 50 + 50 * Math.cos(endRad);
-  const ey = 50 + 50 * Math.sin(endRad);
-  const largeArc = 1 / n > 0.5 ? 1 : 0;
-  return `M 50 50 L ${sx} ${sy} A 50 50 0 ${largeArc} 1 ${ex} ${ey} Z`;
-}
-
-function WheelStage({ pool, displayed, spinning, landed, rotation, onSpin }: {
-  pool: Dish[]; displayed?: Dish; spinning: boolean; landed: Dish | null; rotation: number; onSpin: () => void;
+// ---------------------------------------------------------------
+// The filmstrip — a reel of real dish cards streaming past a focus
+// frame, decelerating onto the pre-computed pick. Imperative animation
+// via refs + inline style, ported from the prototype. Responsive: it
+// measures its own width and scales the card box up on wide layouts.
+// ---------------------------------------------------------------
+function Filmstrip({
+  pool,
+  pick,
+  phase,
+  spinSeed,
+}: {
+  pool: Dish[];
+  pick: Dish | null;
+  phase: Phase;
+  spinSeed: number;
 }) {
-  const slices = pool.slice(0, 10);
-  const n = Math.max(slices.length, 1);
-  const sliceDeg = 360 / n;
-  const size = "min(340px, calc(100vw - 80px))";
-  const wheelTransform = `rotate(${rotation}deg)`;
-  const wheelTransition = spinning
-    ? "transform 2.2s cubic-bezier(0.15, 0.85, 0.2, 1)"
-    : "transform 0.4s";
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [w, setW] = useState(380);
+
+  useEffect(() => {
+    const measure = () => { if (wrapRef.current) setW(wrapRef.current.offsetWidth); };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  // Wider layouts (desktop / tablet) get larger cards and more breathing room.
+  const wide = w >= 720;
+  const CARD = wide ? 176 : 132;
+  const CARDH = wide ? 222 : 168;
+  const GAP = wide ? 22 : 16;
+  const STEP = CARD + GAP;
+  const EMOJI = wide ? 84 : 66;
+
+  // A long reel: the pool repeated, so there's a lot to stream past.
+  const LOOPS = 7;
+  const reel = useMemo(() => {
+    const out: Dish[] = [];
+    for (let i = 0; i < LOOPS; i++) out.push(...pool);
+    return out;
+  }, [pool]);
+
+  const centerOffset = w / 2 - CARD / 2;
+  const restIndexRef = useRef(Math.min(2, Math.max(0, pool.length - 1)));
+
+  // Run the spin animation whenever a new spinSeed arrives with a pick.
+  useEffect(() => {
+    if (phase !== "spinning" || !pick || !trackRef.current || !wrapRef.current) return;
+    const track = trackRef.current;
+    // Measure fresh: the wrap may have been display:none (e.g. behind the
+    // desktop hero) when `w` was last captured, which would zero the math.
+    const liveW = wrapRef.current.offsetWidth || w;
+    if (liveW !== w) setW(liveW);
+    const liveCenter = liveW / 2 - CARD / 2;
+    const pickIdx = pool.findIndex((d) => d.id === pick.id);
+    // Land on an occurrence of the pick deep in the reel (loop LOOPS-2).
+    const landLoop = LOOPS - 2;
+    let landIdx = landLoop * pool.length + pickIdx;
+    if (pickIdx < 0) landIdx = landLoop * pool.length;
+    restIndexRef.current = landIdx;
+    const targetX = liveCenter - landIdx * STEP;
+    // Reset near the start (equivalent visual frame), no transition.
+    const startIdx = 1 * pool.length + (pickIdx >= 0 ? pickIdx % pool.length : 0);
+    const startX = liveCenter - startIdx * STEP;
+    track.style.transition = "none";
+    track.style.transform = `translateX(${startX}px)`;
+    track.style.filter = "blur(0px)";
+    void track.offsetWidth; // reflow
+    requestAnimationFrame(() => {
+      track.style.transition = "transform 2.7s cubic-bezier(.08,.66,.1,1), filter 2.7s ease";
+      track.style.transform = `translateX(${targetX}px)`;
+      // Blur peaks mid-spin then clears.
+      track.style.filter = "blur(3px)";
+      window.setTimeout(() => { if (track) track.style.filter = "blur(0px)"; }, 1800);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spinSeed]);
+
+  // When the pool itself changes (a filter narrowed/widened the set) and we're
+  // not mid-spin, drop back to a default rest frame and clear any imperatively
+  // set transform/filter so the declarative idle position re-applies cleanly.
+  // Guards against a stale rest index pointing past the rebuilt reel.
+  const poolKey = pool.map((d) => d.id).join(",");
+  useEffect(() => {
+    if (phase === "spinning") return;
+    restIndexRef.current = Math.min(2, Math.max(0, pool.length - 1));
+    const track = trackRef.current;
+    if (track) {
+      track.style.transition = "none";
+      track.style.filter = "blur(0px)";
+      track.style.transform = `translateX(${w / 2 - CARD / 2 - restIndexRef.current * STEP}px)`;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poolKey]);
+
+  // Resting position when idle / result (centered on the current rest index).
+  const idleX = centerOffset - restIndexRef.current * STEP;
+  const FRAME_W = CARD + 14;
+  const FRAME_H = CARDH + 14;
+
   return (
     <div
-      className={[
-        "relative flex flex-col items-center transition-[opacity,transform] duration-300",
-        landed && !spinning ? "pointer-events-none scale-[0.92] opacity-25" : "",
-      ].join(" ")}
+      ref={wrapRef}
+      className="relative overflow-hidden"
+      style={{ height: phase === "result" ? CARDH + 22 : CARDH + 30, margin: "10px 0 0" }}
     >
-      <div className="relative" style={{ width: size, height: size }}>
-        <div
-          className="absolute inset-0 rounded-full overflow-hidden border-4 border-paper shadow-[0_16px_40px_rgba(0,0,0,0.12)]"
-          style={{ transform: wheelTransform, transition: wheelTransition }}
-        >
-          {slices.length ? (
-            <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice" className="h-full w-full">
-              <defs>
-                {slices.map((d) => (
-                  <clipPath key={d.id} id={`thumb-clip-${d.id}`}>
-                    <circle cx={0} cy={0} r={9} />
-                  </clipPath>
-                ))}
-              </defs>
-              {/* Colored wedge backgrounds with thin separator strokes. */}
-              {slices.map((d, i) => {
-                const accent = d.accent || `oklch(${60 + (i % 3) * 8}% 0.12 ${(i * 37) % 360})`;
-                return (
-                  <path
-                    key={d.id}
-                    d={wedgePath(i, n)}
-                    fill={accent}
-                    stroke="var(--paper)"
-                    strokeWidth={0.6}
+      {/* depth band behind the reel */}
+      <div
+        className="pointer-events-none absolute left-0 right-0 top-1/2 z-0 -translate-y-1/2"
+        style={{
+          height: CARDH + 24,
+          background: "radial-gradient(70% 120% at 50% 50%, var(--surface) 0%, transparent 72%)",
+          opacity: 0.6,
+        }}
+      />
+
+      {/* the track */}
+      <div
+        ref={trackRef}
+        className="absolute left-0 top-1/2 z-[1] flex"
+        style={{
+          gap: GAP,
+          transform: `translateX(${idleX}px)`,
+          marginTop: -(CARDH / 2),
+          willChange: "transform, filter",
+        }}
+      >
+        {reel.map((d, i) => {
+          const centered = phase !== "spinning" && i === restIndexRef.current;
+          const dimNeighbor = phase === "result" ? 0.34 : 0.52;
+          return (
+            <div
+              key={i}
+              className="relative shrink-0 overflow-hidden"
+              style={{
+                width: CARD,
+                height: CARDH,
+                borderRadius: 12,
+                border: "1px solid var(--line-2)",
+                transform: centered ? "scale(1.02)" : "scale(0.88)",
+                opacity: centered ? 1 : phase === "spinning" ? 0.78 : dimNeighbor,
+                boxShadow: centered ? "0 18px 40px -12px rgba(0,0,0,0.6)" : "none",
+                transition:
+                  "transform .42s cubic-bezier(.2,.7,.2,1), opacity .42s ease, box-shadow .42s ease",
+              }}
+            >
+              <DishArt dish={d} fill emojiSize={EMOJI} />
+              {/* legibility scrim + title on wide cards */}
+              {wide && (
+                <>
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{ background: "linear-gradient(180deg, transparent 55%, rgba(15,11,8,0.72) 100%)" }}
                   />
-                );
-              })}
-              {/* Per-wedge dish thumbnails at the wedge centroid. */}
-              {slices.map((d, i) => {
-                if (!d.imageUrl) return null;
-                const midDeg = (i + 0.5) * sliceDeg - 90;
-                const rad = (midDeg * Math.PI) / 180;
-                const cx = 50 + Math.cos(rad) * 32;
-                const cy = 50 + Math.sin(rad) * 32;
-                return (
-                  <g key={d.id} transform={`translate(${cx} ${cy})`}>
-                    <circle cx={0} cy={0} r={9.4} fill="var(--paper)" />
-                    <image
-                      href={d.imageUrl}
-                      x={-9}
-                      y={-9}
-                      width={18}
-                      height={18}
-                      preserveAspectRatio="xMidYMid slice"
-                      clipPath={`url(#thumb-clip-${d.id})`}
-                    />
-                  </g>
-                );
-              })}
-            </svg>
-          ) : (
-            <div className="absolute inset-0" style={{ background: "var(--bg-alt)" }} />
-          )}
-        </div>
-        <div className="absolute inset-0" style={{ transform: wheelTransform, transition: wheelTransition }}>
-          {slices.map((d, i) => {
-            // Emoji/letter label as fallback for dishes WITHOUT a photo;
-            // the photo + accent wedge speaks for itself.
-            if (d.imageUrl) return null;
-            const midDeg = (i + 0.5) * sliceDeg - 90;
-            const rad = (midDeg * Math.PI) / 180;
-            const cx = 50 + Math.cos(rad) * 32;
-            const cy = 50 + Math.sin(rad) * 32;
-            const label = d.emoji || d.title.trim().charAt(0).toUpperCase() || "·";
-            return (
-              <div
-                key={d.id}
-                className="absolute flex h-9 w-9 items-center justify-center text-paper"
-                style={{
-                  left: `${cx}%`,
-                  top: `${cy}%`,
-                  transform: "translate(-50%, -50%)",
-                  fontFamily: "var(--font-disp)", fontSize: 22, fontWeight: 600,
-                  textShadow: "0 1px 2px rgba(0,0,0,0.35)",
-                }}
-              >
-                {label}
-              </div>
-            );
-          })}
-        </div>
+                  <div
+                    className="absolute bottom-[11px] left-3 right-3 line-clamp-2 text-[14px] font-semibold leading-[1.15] text-white"
+                    style={{ fontFamily: "var(--font-serif)" }}
+                  >
+                    {d.title}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* edge fades */}
+      <div
+        className="pointer-events-none absolute inset-0 z-[3]"
+        style={{
+          background:
+            "linear-gradient(90deg, var(--bg) 0%, transparent 20%, transparent 80%, var(--bg) 100%)",
+        }}
+      />
+
+      {/* center focus frame — hugs the card with an even inset */}
+      <div
+        key={`frame-${phase}-${spinSeed}`}
+        className="pointer-events-none absolute left-1/2 top-1/2 z-[4] -translate-x-1/2 -translate-y-1/2"
+        style={{
+          width: FRAME_W,
+          height: FRAME_H,
+          borderRadius: 15,
+          border: "2px solid var(--accent)",
+          animation: phase === "result" ? "ds-framepop .55s cubic-bezier(.2,.8,.2,1)" : "none",
+        }}
+      >
         <div
-          className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1"
-          style={{ borderLeft: "10px solid transparent", borderRight: "10px solid transparent", borderTop: "16px solid var(--ink)" }}
+          className="absolute left-1/2 top-[-7px]"
+          style={{ transform: "translateX(-50%) rotate(45deg)", width: 11, height: 11, background: "var(--accent)", borderRadius: 2 }}
         />
+        <div
+          className="absolute bottom-[-7px] left-1/2"
+          style={{ transform: "translateX(-50%) rotate(45deg)", width: 11, height: 11, background: "var(--accent)", borderRadius: 2 }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// Mobile result detail — sits BELOW the persistent (frozen) filmstrip,
+// so it carries no reel of its own. Title + reasons + actions stacked.
+// ---------------------------------------------------------------
+function MobileResultDetail({
+  dish,
+  factors,
+  poolSize,
+  narrowed,
+  onAgain,
+  onReset,
+  onOpen,
+}: {
+  dish: Dish;
+  factors: WeightFactor[];
+  poolSize: number;
+  narrowed: boolean;
+  onAgain: () => void;
+  onReset: () => void;
+  onOpen: () => void;
+}) {
+  return (
+    <div className="mx-auto mt-3 w-full max-w-md">
+      <div className="text-center" style={{ animation: "ds-rise .45s cubic-bezier(.2,.7,.2,1) both" }}>
+        <h2
+          className="m-0 text-[24px] font-semibold leading-[1.1] tracking-[-0.01em] text-text"
+          style={{ fontFamily: "var(--font-serif)" }}
+        >
+          {dish.title}
+        </h2>
+        {dish.subtitle && <div className="mt-1 text-[13.5px] text-text-dim">{dish.subtitle}</div>}
+        <DietChips dish={dish} className="mt-[9px] justify-center" />
+      </div>
+
+      <div
+        className="mt-[13px] rounded-[var(--radius-lg)] border border-line bg-surface p-[13px_16px] shadow-[var(--shadow-card)]"
+        style={{ animation: "ds-rise .45s cubic-bezier(.2,.7,.2,1) both" }}
+      >
+        <div className="mb-[10px] text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
+          Why this one · from {poolSize} {narrowed ? "matching" : "dishes"}
+        </div>
+        <ReasonRows factors={factors} />
+      </div>
+
+      <div className="mt-[13px] flex gap-[10px]">
+        <Button variant="ghost" onClick={onAgain} className="shrink-0 px-[18px]">
+          <Icon name="shuffle" size={18} />Again
+        </Button>
+        <Button variant="primary" onClick={onOpen} className="flex-1">
+          Open recipe<Icon name="arrowR" size={18} style={{ color: "var(--accent-ink)" }} />
+        </Button>
+      </div>
+      <div className="mt-[11px] text-center">
         <button
           type="button"
-          onClick={onSpin}
-          className="absolute left-1/2 top-1/2 grid h-28 w-28 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-rule bg-paper text-ink shadow-[0_8px_20px_rgba(0,0,0,0.15)] disabled:opacity-60"
-          disabled={spinning || !pool.length}
-          aria-label="Spin"
+          onClick={onReset}
+          className="p-1 text-[13.5px] font-semibold text-text-faint"
+          style={{ fontFamily: "var(--font-sans)" }}
         >
-          <span className="text-center">
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3">
-              {spinning ? "…" : "Tap"}
-            </span>
-            <span className="block text-[22px] font-medium" style={{ fontFamily: "var(--font-disp)" }}>
-              {spinning ? "spinning" : "Spin"}
-            </span>
-          </span>
+          Not tonight
         </button>
       </div>
-      {displayed && (
-        <div className="mt-4 text-center">
-          <div className="text-[11px] uppercase tracking-[0.14em] text-ink-3">Currently showing</div>
-          <div className="text-[18px] font-medium text-ink" style={{ fontFamily: "var(--font-disp)" }}>{displayed.title}</div>
-        </div>
-      )}
     </div>
   );
 }
 
-function LandedCard({ dish, rationale, onDismiss, onView, onSpinAgain }: {
-  dish: Dish; rationale: string | null; onDismiss: () => void; onView: () => void; onSpinAgain: () => void;
+// ---------------------------------------------------------------
+// Desktop result hero — a two-column hero shown at ≥lg on result: big art
+// on the left, title + reasons + actions on the right.
+// ---------------------------------------------------------------
+function DesktopResultHero({
+  dish,
+  factors,
+  poolSize,
+  narrowed,
+  onAgain,
+  onReset,
+  onOpen,
+}: {
+  dish: Dish;
+  factors: WeightFactor[];
+  poolSize: number;
+  narrowed: boolean;
+  onAgain: () => void;
+  onReset: () => void;
+  onOpen: () => void;
 }) {
   return (
-    <div
-      className="absolute left-0 right-0 top-0 flex flex-col gap-3 rounded-lg border border-rule bg-paper p-[18px] shadow-[0_20px_40px_-8px_rgba(0,0,0,0.25),0_4px_12px_rgba(0,0,0,0.08)]"
-      style={{ animation: "revealUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1)" }}
-    >
-      <div className="flex items-center justify-between">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent">✦ Tonight&rsquo;s pick</div>
-        <button type="button" onClick={onDismiss} aria-label="Dismiss" className="p-1 text-lg leading-none text-ink-3">×</button>
-      </div>
-      <div className="flex items-center gap-[14px]">
-        <DishArt dish={dish} size={76} />
-        <div className="min-w-0 flex-1">
-          <div className="text-[26px] font-medium leading-[1.05] tracking-[-0.02em] text-ink" style={{ fontFamily: "var(--font-disp)" }}>
-            {dish.title}
-          </div>
-          {dish.subtitle && <div className="mt-[2px] text-[12px] italic text-ink-3">{dish.subtitle}</div>}
+      <div
+        className="mt-8 hidden gap-11 lg:grid"
+        style={{ gridTemplateColumns: "minmax(320px, 440px) 1fr", alignItems: "start" }}
+      >
+        <button
+          type="button"
+          onClick={onOpen}
+          className="relative block w-full overflow-hidden rounded-[var(--radius-xl)] shadow-[var(--shadow-pop)]"
+          style={{ aspectRatio: "0.92", animation: "ds-rise .5s cubic-bezier(.2,.7,.2,1) both" }}
+        >
+          <DishArt dish={dish} fill emojiSize={130} />
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ background: "linear-gradient(180deg, transparent 60%, rgba(15,11,8,0.55) 100%)" }}
+          />
           {dish.tags?.length ? (
-            <div className="mt-[6px] flex gap-[10px] text-[11px] text-ink-2" style={{ fontFamily: "var(--font-mono)" }}>
-              <span>{dish.tags.slice(0, 3).join(" · ")}</span>
+            <div className="absolute bottom-4 left-[18px] flex flex-wrap gap-2">
+              {dish.tags.slice(0, 3).map((t) => (
+                <span
+                  key={t}
+                  className="rounded-pill px-[11px] py-[5px] text-[12px] font-semibold text-white"
+                  style={{ background: "rgba(20,14,11,0.5)", backdropFilter: "blur(8px)" }}
+                >
+                  {t}
+                </span>
+              ))}
             </div>
           ) : null}
+        </button>
+
+        <div style={{ animation: "ds-rise .5s cubic-bezier(.2,.7,.2,1) both", animationDelay: ".08s" }}>
+          <h2
+            className="m-0 text-[38px] font-semibold leading-[1.06] tracking-[-0.015em] text-text"
+            style={{ fontFamily: "var(--font-serif)" }}
+          >
+            {dish.title}
+          </h2>
+          {dish.subtitle && (
+            <div className="mt-[10px] max-w-[560px] text-[16px] leading-[1.45] text-text-dim">
+              {dish.subtitle}
+            </div>
+          )}
+          <DietChips dish={dish} className="mt-4" />
+
+          <div className="mt-6 max-w-[560px] rounded-[var(--radius-lg)] border border-line bg-surface p-[18px_22px] shadow-[var(--shadow-card)]">
+            <div className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
+              Why this one · from {poolSize} {narrowed ? "matching" : "dishes"}
+            </div>
+            <ReasonRows factors={factors} desktop />
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button variant="primary" onClick={onOpen} className="px-[26px]">
+              Open recipe<Icon name="arrowR" size={18} style={{ color: "var(--accent-ink)" }} />
+            </Button>
+            <Button variant="ghost" onClick={onAgain}>
+              <Icon name="shuffle" size={18} />Again
+            </Button>
+            <button
+              type="button"
+              onClick={onReset}
+              className="px-2 text-[14px] font-medium text-text-faint"
+              style={{ fontFamily: "var(--font-sans)" }}
+            >
+              Not tonight
+            </button>
+          </div>
         </div>
       </div>
-      {rationale && (
-        <div
-          className="text-[11px] leading-[1.4] text-ink-3"
-          style={{ fontFamily: "var(--font-mono)" }}
-          title="Why this one?"
+  );
+}
+
+// ---------------------------------------------------------------
+// Reason rows — maps the real weight factors to icon + signal display.
+// ---------------------------------------------------------------
+type FactorDisplay = {
+  icon: IconName;
+  color: string;
+  fill: boolean;
+  text: string;
+  dir: "up" | "down" | "flat";
+  strong: boolean;
+};
+
+// Title-case a factor label while preserving symbols/numbers (e.g.
+// "rated 4.5★" → "Rated 4.5★", "cooked 3 days ago" → "Cooked 3 Days Ago").
+function titleCase(s: string): string {
+  return s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+
+function describeFactor(f: WeightFactor): FactorDisplay {
+  const dir: FactorDisplay["dir"] = f.multiplier > 1 ? "up" : f.multiplier < 1 ? "down" : "flat";
+  const up = dir === "up";
+  const strong = f.multiplier >= 2 || f.multiplier <= 0.4;
+  const label = f.label.toLowerCase();
+
+  let icon: IconName = "sparkle";
+  let color = "var(--text-dim)";
+  let fill = false;
+
+  if (label.includes("★") || label.includes("rated")) {
+    icon = "star";
+    color = up ? "var(--gold)" : "var(--text-faint)";
+    fill = true;
+  } else if (label.includes("favourite") || label.includes("favorite")) {
+    icon = "heart";
+    color = "var(--rose)";
+    fill = true;
+  } else if (label.includes("cooked")) {
+    icon = "clock";
+    color = up ? "var(--sage)" : "var(--text-faint)";
+  }
+
+  return { icon, color, fill, text: titleCase(f.label), dir, strong };
+}
+
+function signalGlyph(dir: FactorDisplay["dir"], strong: boolean): string {
+  if (dir === "up") return strong ? "▲▲" : "▲";
+  if (dir === "down") return strong ? "▼▼" : "▼";
+  return "—";
+}
+
+function ReasonRows({ factors, desktop }: { factors: WeightFactor[]; desktop?: boolean }) {
+  if (factors.length === 0) {
+    return (
+      <div className="flex items-center gap-[11px]">
+        <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] bg-surface-2">
+          <Icon name="sparkle" size={14} style={{ color: "var(--text-dim)" }} />
+        </span>
+        <span className="flex-1 text-[14px] text-text">A fair shot from the pool</span>
+        <span className="text-[12px] font-semibold text-text-faint">—</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col" style={desktop ? undefined : { gap: 10 }}>
+      {factors.map((f, i) => {
+        const m = describeFactor(f);
+        return (
+          <div
+            key={i}
+            className={[
+              "flex items-center",
+              desktop ? "gap-[13px] py-[11px]" : "gap-[11px]",
+            ].join(" ")}
+            style={
+              desktop && i < factors.length - 1
+                ? { borderBottom: "1px solid var(--line)" }
+                : undefined
+            }
+          >
+            <span
+              className={[
+                "flex shrink-0 items-center justify-center rounded-[8px] bg-surface-2",
+                desktop ? "h-[30px] w-[30px] rounded-[9px]" : "h-[26px] w-[26px]",
+              ].join(" ")}
+            >
+              <Icon name={m.icon} size={desktop ? 15 : 14} fill={m.fill} style={{ color: m.color }} />
+            </span>
+            <span className={["flex-1 text-text", desktop ? "text-[14.5px]" : "text-[14px]"].join(" ")}>
+              {m.text}
+            </span>
+            <span
+              className="font-semibold"
+              style={{
+                fontSize: desktop ? 13 : 12,
+                color: m.dir === "up" ? "var(--sage)" : "var(--text-faint)",
+              }}
+            >
+              {signalGlyph(m.dir, m.strong)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// Diet chips — derived from ingredients via lib/diet (no persistence).
+// ---------------------------------------------------------------
+function DietChips({ dish, className }: { dish: Dish; className?: string }) {
+  const chips = useMemo(() => formatDietChips(computeDietFlags(dish.ingredients)), [dish.ingredients]);
+  if (!chips.length) return null;
+  return (
+    <div className={["flex flex-wrap gap-[6px]", className ?? ""].join(" ")}>
+      {chips.map((c) => (
+        <span
+          key={c.label}
+          className="inline-flex items-center gap-[5px] rounded-pill border px-[10px] py-[3px] text-[11.5px] font-medium"
+          style={{
+            color: c.tone === "good" ? "var(--sage)" : "var(--rose)",
+            borderColor: c.tone === "good" ? "var(--sage-tint)" : "var(--rose-tint)",
+            background: c.tone === "good" ? "var(--sage-tint)" : "var(--rose-tint)",
+          }}
         >
-          {rationale}
-        </div>
+          {c.tone === "good" && <Icon name="leaf" size={12} />}
+          {c.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+function SpinnerGlyph() {
+  return (
+    <span
+      style={{
+        width: 18,
+        height: 18,
+        borderRadius: "50%",
+        border: "2.5px solid rgba(42,20,10,0.3)",
+        borderTopColor: "var(--accent-ink)",
+        display: "inline-block",
+        animation: "ds-spin .7s linear infinite",
+      }}
+    />
+  );
+}
+
+function EmptyPool({
+  narrowed,
+  onClear,
+  onAdd,
+}: {
+  narrowed: boolean;
+  onClear: () => void;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center px-6 py-12 text-center lg:py-20">
+      <div className="text-[56px] opacity-50 lg:text-[64px]">🍽️</div>
+      <h2
+        className="mt-4 text-[22px] font-medium text-text lg:text-[26px]"
+        style={{ fontFamily: "var(--font-serif)" }}
+      >
+        {narrowed ? "Nothing matches" : "Your kitchen’s empty"}
+      </h2>
+      <p className="mt-2 max-w-sm text-[14px] leading-[1.5] text-text-dim lg:text-[15px]">
+        {narrowed
+          ? "No dish fits all of those filters. Loosen them and try again."
+          : "Add your first recipe and the spinner will start suggesting dinners."}
+      </p>
+      {narrowed ? (
+        <Button variant="ghost" onClick={onClear} className="mt-[18px]">
+          Clear filters
+        </Button>
+      ) : (
+        <Button variant="primary" onClick={onAdd} className="mt-[18px]">
+          <Icon name="sparkle" size={18} style={{ color: "var(--accent-ink)" }} />
+          Add a recipe
+        </Button>
       )}
-      <div className="mt-1 flex gap-2">
-        <Button variant="primary" size="md" onClick={onView} className="flex-1">View recipe</Button>
-        <Button variant="ghost" size="md" onClick={onSpinAgain} aria-label="Spin again"><Icon name="dice" size={16} /></Button>
-      </div>
     </div>
   );
 }
