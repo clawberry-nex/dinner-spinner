@@ -12,10 +12,11 @@ import { DishInputSchema } from "@/lib/types";
 import { getPantryDefaults } from "@/lib/pantry";
 import { languageName } from "@/lib/languages";
 import { createDishForUser } from "@/lib/dish-create";
+import { generateAndStoreImage } from "@/lib/dish-image";
 import { submitImageBatch, pollBatch, type BatchRequest } from "@/lib/gemini-batch";
 import { buildImagePrompt } from "@/lib/image-prompt";
 import { uploadDishImage } from "@/lib/image-storage";
-import { type ImportRow, type ImageBatch } from "./types";
+import { type ImportRow, type ImportChunk, type ImageBatch } from "./types";
 
 const CLAUDE_AGENT_BASE_URL =
   process.env.CLAUDE_AGENT_URL ?? "https://nex.tail7f6b96.ts.net:10000";
@@ -33,6 +34,13 @@ const IMAGE_APPLY_SLICE = 12; // image uploads applied per step (~each ≤300ms)
 // interval regardless of client cadence, and bound the total wait.
 const IMAGE_POLL_INTERVAL_MS = 15_000;
 const IMAGE_MAX_ATTEMPTS = 80; // ~20 min of polling, then give up (dishes stay imageless)
+// Small imports skip the batch API entirely and generate images synchronously
+// per dish (the same fast, single-request path the rest of the app uses) — no
+// minutes-long RUNNING batch, no polling, no 503 storm. The Gemini *batch* API
+// (with its throttled polling above) is reserved for large imports where its
+// parallelism is worth the latency.
+const IMAGE_SYNC_THRESHOLD = 12; // ≤ this many pending dishes → sync per-dish
+const IMAGE_SYNC_SLICE = 2; // dishes generated per advance step in sync mode
 
 function token(): string {
   // Routes guard NEX_API_TOKEN presence before calling advance; assert here.
@@ -235,7 +243,45 @@ async function targetLang(userId: string): Promise<string> {
   return languageName((rows[0]?.default_language as string | null) ?? null);
 }
 
-// ---------- imaging ----------
+// ---------- imaging: sync per-dish (small imports) ----------
+// Generate a small slice of images per step via the single-image path. Each is
+// one synchronous request (no batch, no polling) — fast and 503-storm-proof.
+async function advanceImagingSync(row: ImportRow, pending: ImportChunk[]): Promise<ImportRow> {
+  const slice = pending.slice(0, IMAGE_SYNC_SLICE);
+  const ids = slice.map((c) => c.dishId as number);
+  const dishRows = await sql`
+    SELECT id, title, subtitle, image_description
+      FROM dishes WHERE id = ANY(${ids}::int[]) AND user_id = ${row.user_id}
+  `;
+  const byId = new Map(dishRows.map((d) => [d.id as number, d]));
+  for (const chunk of slice) {
+    const d = byId.get(chunk.dishId as number);
+    if (!d) {
+      chunk.image = "failed";
+      continue;
+    }
+    try {
+      await generateAndStoreImage(
+        {
+          id: d.id as number,
+          title: d.title as string,
+          subtitle: (d.subtitle as string | null) ?? null,
+          imageDescription: (d.image_description as string | null) ?? null,
+        },
+        row.user_id,
+      );
+      chunk.image = "done";
+    } catch {
+      chunk.image = "failed"; // leave imageless — regenerable from the dish
+    }
+  }
+  if (!row.chunks.some((c) => c.status === "created" && (c.image ?? "pending") === "pending")) {
+    row.status = "done";
+  }
+  return saveRow(row);
+}
+
+// ---------- imaging: Gemini batch (large imports) ----------
 async function advanceImaging(row: ImportRow): Promise<ImportRow> {
   const apiKey = process.env.GEMINI_API_KEY;
   const pending = row.chunks.filter(
@@ -246,8 +292,16 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
     return saveRow(row);
   }
 
-  // No image provider configured → finish imageless (each dish is regenerable
-  // later via its image button). This is also the local-dev path (no key).
+  // Small imports → fast synchronous per-dish generation (no Gemini batch). This
+  // also recovers any ≤-threshold import that had already kicked off a slow
+  // batch — we generate directly and leave the stale batch unpolled.
+  if (pending.length <= IMAGE_SYNC_THRESHOLD) {
+    return advanceImagingSync(row, pending);
+  }
+
+  // --- BATCH mode (large imports only) ---
+  // No batch image key → finish imageless (each dish is regenerable later via
+  // its image button). This is also the local-dev path (no key).
   if (!apiKey) {
     for (const c of pending) c.image = "failed";
     row.status = "done";
