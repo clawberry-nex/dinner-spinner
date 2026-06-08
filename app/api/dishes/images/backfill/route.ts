@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { sql } from "@/lib/db";
 import { rowToDish } from "@/lib/types";
-import { resolveUserId, isSeedOwner } from "@/lib/auth-helpers";
+import { resolveUserId, isPremiumImageUser } from "@/lib/auth-helpers";
 import { buildImagePrompt } from "@/lib/image-prompt";
 import { getProvider } from "@/lib/image-provider";
 import { uploadDishImage } from "@/lib/image-storage";
@@ -61,7 +61,7 @@ async function runWithConcurrency<T, R>(
 export async function POST(req: NextRequest) {
   const userId = await resolveUserId(req);
   if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const premium = await isSeedOwner(userId);
+  const premium = await isPremiumImageUser(userId);
 
   let body: BulkBody = {};
   try {

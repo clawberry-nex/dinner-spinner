@@ -8,12 +8,13 @@ import {
 } from "@/lib/ingest/claude-agent";
 import { buildIngestPrompt } from "@/lib/ingest/prompt";
 import { DISH_INPUT_JSON_SCHEMA } from "@/lib/ingest/schema";
+import { coerceMethodRefs } from "@/lib/ingest/sanitize";
 import { DishInputSchema } from "@/lib/types";
 import { getPantryDefaults } from "@/lib/pantry";
 import { languageName } from "@/lib/languages";
 import { createDishForUser } from "@/lib/dish-create";
 import { generateAndStoreImage } from "@/lib/dish-image";
-import { isSeedOwner } from "@/lib/auth-helpers";
+import { isPremiumImageUser } from "@/lib/auth-helpers";
 import { submitImageBatch, pollBatch, cancelBatch, type BatchRequest } from "@/lib/gemini-batch";
 import { buildImagePrompt } from "@/lib/image-prompt";
 import { uploadDishImage } from "@/lib/image-storage";
@@ -223,18 +224,10 @@ async function advanceParsing(row: ImportRow): Promise<ImportRow> {
 }
 
 async function createDishFromStructured(structured: unknown, userId: string): Promise<number> {
-  // Same methodRefs resilience as the single-ingest poll route.
-  const raw = structured as Record<string, unknown> | null;
-  if (raw && typeof raw === "object") {
-    if (typeof raw.methodRefs === "string") {
-      try {
-        raw.methodRefs = JSON.parse(raw.methodRefs);
-      } catch {
-        delete raw.methodRefs;
-      }
-    }
-    if (raw.methodRefs != null && !Array.isArray(raw.methodRefs)) delete raw.methodRefs;
-  }
+  // Same methodRefs resilience as the single-ingest poll route — coerce a
+  // string, drop a non-array, and drop individually-malformed entries instead
+  // of failing the whole dish (see lib/ingest/sanitize.ts).
+  coerceMethodRefs(structured);
   const validated = DishInputSchema.safeParse(structured);
   if (!validated.success) throw new Error("parsed dish failed validation");
   // autoImage:false — the batch importer generates images via the Gemini batch.
@@ -296,10 +289,10 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
     return saveRow(row);
   }
 
-  // The Gemini batch is Nano Banana Pro — premium, seed-owner-only. Non-owners
-  // route every import (regardless of size) through the per-dish sync path, which
-  // uses the cheaper flux model. Cancel any batch already in flight first.
-  if (!(await isSeedOwner(row.user_id))) {
+  // The Gemini batch is Nano Banana Pro — premium (seed owner + PREMIUM_IMAGE_EMAILS).
+  // Non-premium users route every import (regardless of size) through the per-dish
+  // sync path, which uses the cheaper flux model. Cancel any batch in flight first.
+  if (!(await isPremiumImageUser(row.user_id))) {
     if (apiKey && row.image_batches.length) {
       for (const b of row.image_batches) {
         if (!b.applied) await cancelBatch(apiKey, b.name);

@@ -1,5 +1,6 @@
 import { resolveUserId } from "@/lib/auth-helpers";
 import { DishInputSchema } from "@/lib/types";
+import { coerceMethodRefs } from "@/lib/ingest/sanitize";
 import {
   pollClaudeAgentJob,
   ClaudeAgentError,
@@ -48,24 +49,12 @@ export async function GET(
     });
 
     if (result.status === "done") {
-      // methodRefs resilience: claude-agent's structured output can occasionally
-      // hand back methodRefs as a JSON string or a malformed value. Coerce a
-      // string, and if it still isn't an array, drop it — the recipe (translated,
-      // sectioned, numbered) is still valuable and cook mode falls back to
-      // string-matching when methodRefs is absent.
-      const raw = result.structured as Record<string, unknown> | null;
-      if (raw && typeof raw === "object") {
-        if (typeof raw.methodRefs === "string") {
-          try {
-            raw.methodRefs = JSON.parse(raw.methodRefs);
-          } catch {
-            delete raw.methodRefs;
-          }
-        }
-        if (raw.methodRefs != null && !Array.isArray(raw.methodRefs)) {
-          delete raw.methodRefs;
-        }
-      }
+      // methodRefs resilience: claude-agent's structured output can hand back
+      // methodRefs as a JSON string, a non-array, or an array with individually-
+      // malformed entries (e.g. an over-length phrase). Coerce/drop them rather
+      // than failing the whole dish — cook mode falls back to string-matching for
+      // any that are absent. (See lib/ingest/sanitize.ts.)
+      coerceMethodRefs(result.structured);
 
       // Re-validate the structured payload against our canonical Zod schema.
       // claude-agent enforces JSON Schema structurally but not all our

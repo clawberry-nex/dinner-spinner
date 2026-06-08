@@ -1,16 +1,18 @@
-// Regenerate every app icon from the single source of truth: app/icon.svg
-// (the V2 spinner-wheel logo, also mirrored at public/icons/logo-mark.svg).
+// Regenerate every app icon from two sources:
+//   • app/icon.svg              — the simplified favicon glyph (legible at 16px)
+//   • public/icons/logo-mark.svg — the detailed V2 spinner-wheel logo
 //
 //   npx tsx scripts/gen-icons.mjs      (or: node scripts/gen-icons.mjs)
 //
 // Outputs:
-//   public/icons/icon-{192,512}.png            — PWA "any": orange logo, transparent
-//   public/icons/icon-maskable-{192,512}.png   — PWA "maskable": logo on --bg, safe-zone padded
-//   public/icons/apple-touch-icon.png          — 180px, logo on --bg (iOS adds its own mask)
-//   app/favicon.ico                            — 16/32/48 multi-res, transparent
+//   app/favicon.ico                            — 16/32/48, from app/icon.svg (simple)
+//   public/icons/icon-{192,512}.png            — PWA "any": full wheel, transparent
+//   public/icons/icon-maskable-{192,512}.png   — PWA "maskable": full wheel on --bg, padded
+//   public/icons/apple-touch-icon.png          — 180px, full wheel on --bg
 //
-// Re-run after editing app/icon.svg. Keep the manifest (app/manifest.webmanifest)
-// and the metadata.icons block (app/layout.tsx) in sync with these filenames.
+// The browser tab uses app/icon.svg (+ favicon.ico) → the simple glyph; the PWA
+// manifest / iOS home screen use the public/icons PNGs → the detailed wheel.
+// Re-run after editing either source.
 
 import sharp from "sharp";
 import { readFile, writeFile } from "node:fs/promises";
@@ -18,27 +20,27 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SVG = join(root, "app/icon.svg");
+const FAVICON_SVG = join(root, "app/icon.svg");
+const WHEEL_SVG = join(root, "public/icons/logo-mark.svg");
 const ICONS = join(root, "public/icons");
 
 const BG = { r: 0x15, g: 0x11, b: 0x0e, alpha: 1 }; // --bg / theme_color (warm near-black)
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 
-const svg = await readFile(SVG);
-// Rasterize one high-res master (2048px), then downscale per output for crispness.
-const master = await sharp(svg, { density: 192 })
-  .resize(2048, 2048, { fit: "contain", background: TRANSPARENT })
-  .png()
-  .toBuffer();
+const rasterize = async (path) =>
+  sharp(await readFile(path), { density: 192 })
+    .resize(2048, 2048, { fit: "contain", background: TRANSPARENT })
+    .png()
+    .toBuffer();
 
+// --- PWA / home-screen icons: the detailed wheel ---
+const wheel = await rasterize(WHEEL_SVG);
 const plain = (size) =>
-  sharp(master).resize(size, size, { fit: "contain", background: TRANSPARENT }).png().toBuffer();
-
-// Logo centered on an opaque background, scaled to `scale` of the frame so the
-// platform mask (maskable / iOS) can't clip it.
+  sharp(wheel).resize(size, size, { fit: "contain", background: TRANSPARENT }).png().toBuffer();
+// Wheel centered on an opaque background, scaled so the platform mask can't clip it.
 const padded = async (size, scale, bg) => {
   const inner = Math.round(size * scale);
-  const logo = await sharp(master)
+  const logo = await sharp(wheel)
     .resize(inner, inner, { fit: "contain", background: TRANSPARENT })
     .png()
     .toBuffer();
@@ -47,6 +49,17 @@ const padded = async (size, scale, bg) => {
     .png()
     .toBuffer();
 };
+
+await writeFile(join(ICONS, "icon-192.png"), await plain(192));
+await writeFile(join(ICONS, "icon-512.png"), await plain(512));
+await writeFile(join(ICONS, "icon-maskable-192.png"), await padded(192, 0.72, BG));
+await writeFile(join(ICONS, "icon-maskable-512.png"), await padded(512, 0.72, BG));
+await writeFile(join(ICONS, "apple-touch-icon.png"), await padded(180, 0.82, BG));
+
+// --- favicon: the simple glyph (its own opaque tile) ---
+const fav = await rasterize(FAVICON_SVG);
+const favFrame = (size) =>
+  sharp(fav).resize(size, size, { fit: "contain", background: TRANSPARENT }).png().toBuffer();
 
 // Minimal ICO encoder embedding PNG frames (PNG-in-ICO, supported since Vista).
 function buildIco(frames) {
@@ -71,13 +84,7 @@ function buildIco(frames) {
   return Buffer.concat([header, dir, ...frames.map((f) => f.buf)]);
 }
 
-await writeFile(join(ICONS, "icon-192.png"), await plain(192));
-await writeFile(join(ICONS, "icon-512.png"), await plain(512));
-await writeFile(join(ICONS, "icon-maskable-192.png"), await padded(192, 0.72, BG));
-await writeFile(join(ICONS, "icon-maskable-512.png"), await padded(512, 0.72, BG));
-await writeFile(join(ICONS, "apple-touch-icon.png"), await padded(180, 0.82, BG));
-
-const icoFrames = await Promise.all([16, 32, 48].map(async (size) => ({ size, buf: await plain(size) })));
+const icoFrames = await Promise.all([16, 32, 48].map(async (size) => ({ size, buf: await favFrame(size) })));
 await writeFile(join(root, "app/favicon.ico"), buildIco(icoFrames));
 
-console.log("icons regenerated from app/icon.svg");
+console.log("icons regenerated — favicon from app/icon.svg, PWA from logo-mark.svg");

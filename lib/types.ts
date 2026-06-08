@@ -32,7 +32,12 @@ export type Ingredient = z.infer<typeof IngredientSchema>;
 // "the dough" → flour+water+yeast). `ingredients` holds 0-based indices into
 // the dish's `ingredients` array.
 export const MethodRefSchema = z.object({
-  phrase: z.string().trim().min(1).max(80),
+  // A phrase is an exact substring of a method step; a step that enumerates
+  // several ingredients ("the lime leaves, shallots, lemongrass and galangal")
+  // legitimately runs long, so keep generous headroom. Over-length or otherwise
+  // malformed refs are dropped at ingest (see lib/ingest/sanitize.ts) rather
+  // than failing the whole dish.
+  phrase: z.string().trim().min(1).max(160),
   // Cap per-phrase fan-out: a phrase referencing >20 distinct ingredients
   // would be incoherent. Independent of the dish's total ingredient count.
   ingredients: z.array(z.number().int().nonnegative()).min(1).max(20),
