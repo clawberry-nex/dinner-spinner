@@ -34,7 +34,7 @@ export const themeScript = `
     var old=localStorage.getItem('ds_dark');
     if(old==='1'){s='dark';localStorage.setItem('ds_theme','dark');}
     else if(old==='0'){s='light';localStorage.setItem('ds_theme','light');}
-    else{s='system';}
+    else{s='dark';}
     if(old!==null)localStorage.removeItem('ds_dark');
   }
   var prefersDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -47,8 +47,8 @@ function applyMode(mode: EffectiveMode) {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [setting, setSetting] = useState<ThemeSetting>("system");
-  const [effective, setEffective] = useState<EffectiveMode>("light");
+  const [setting, setSetting] = useState<ThemeSetting>("dark");
+  const [effective, setEffective] = useState<EffectiveMode>("dark");
 
   useEffect(() => {
     const stored = readThemeSetting(localStorage);

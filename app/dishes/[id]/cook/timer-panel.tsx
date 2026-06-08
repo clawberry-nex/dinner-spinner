@@ -1,43 +1,95 @@
 "use client";
 
+import { Icon } from "@/app/_components/icon";
 import { formatRemaining, type TimerApi } from "./use-timers";
 
-export default function TimerPanel({ api }: { api: TimerApi }) {
+// Cook-mode running-timer dock. Driven entirely by the existing useTimers API
+// (timers / dismiss / now + formatRemaining) — only the presentation is V2.
+//
+// Two placements:
+//   "float" — mobile: a fixed dock floating above the bottom footer, always
+//             visible regardless of step-text scroll.
+//   "rail"  — desktop: rendered inline at the bottom of the sticky ingredient
+//             rail (under the "Timers" eyebrow), per the prototype.
+export default function TimerPanel({
+  api,
+  variant = "float",
+}: {
+  api: TimerApi;
+  variant?: "float" | "rail";
+}) {
   if (api.timers.length === 0) return null;
-  return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+
+  const cards = (
+    <div className="flex flex-col gap-[9px]">
       {api.timers.map((t) => {
         const { text, done } = formatRemaining(t, api.now);
         return (
           <div
             key={t.id}
-            className={`pointer-events-auto flex items-center gap-3 rounded-lg border px-3 py-2 shadow-lg transition-colors ${
+            className={[
+              "flex items-center gap-3 rounded-[var(--radius-md)] border px-[14px] py-[11px]",
               done
-                ? "animate-pulse border-red-500 bg-red-500 text-white"
-                : "border-emerald-600 bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100"
-            }`}
+                ? "border-rose bg-rose-tint"
+                : variant === "rail"
+                  ? "border-line bg-surface-2"
+                  : "border-line bg-surface shadow-[var(--shadow-card)]",
+            ].join(" ")}
+            style={done ? { animation: "ds-flash 0.9s ease infinite" } : undefined}
+            role={done ? "alert" : undefined}
           >
-            <div className="flex flex-col">
-              <span className="text-[10px] uppercase tracking-wide opacity-80">
-                {done ? "done" : t.label}
-              </span>
-              <span className="font-mono text-lg leading-tight">{text}</span>
+            <Icon
+              name={done ? "bell" : "timer"}
+              size={20}
+              style={{ color: done ? "var(--rose)" : "var(--accent-2)" }}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12.5px] font-semibold text-text">
+                {done ? "Time’s up!" : t.label}
+              </div>
+              <div
+                className="tnum leading-[1.1]"
+                style={{
+                  fontFamily: "var(--font-serif)",
+                  fontSize: 21,
+                  color: done ? "var(--rose)" : "var(--text)",
+                }}
+              >
+                {text}
+              </div>
             </div>
             <button
               type="button"
               onClick={() => api.dismiss(t.id)}
-              aria-label="Dismiss timer"
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold ${
-                done
-                  ? "bg-white/20 hover:bg-white/30"
-                  : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-              }`}
+              aria-label={done ? "Dismiss timer" : "Cancel timer"}
+              className="shrink-0 rounded-pill bg-surface-2 px-3 py-[7px] text-[12.5px] font-medium text-text-dim transition-colors hover:bg-surface-3"
+              style={{ fontFamily: "var(--font-sans)" }}
             >
-              ✕
+              {done ? "Dismiss" : "Cancel"}
             </button>
           </div>
         );
       })}
+    </div>
+  );
+
+  if (variant === "rail") {
+    return (
+      <div className="border-t border-line p-[16px_18px]">
+        <div className="mb-[10px] px-[2px] text-[11px] font-semibold uppercase tracking-[0.18em] text-text-faint">
+          Timers
+        </div>
+        {cards}
+      </div>
+    );
+  }
+
+  // Mobile floating dock — pinned above the footer, scroll-independent.
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-[64px] z-[90] flex justify-center px-[18px]">
+      <div className="pointer-events-auto max-h-[40vh] w-full max-w-[440px] overflow-y-auto">
+        {cards}
+      </div>
     </div>
   );
 }

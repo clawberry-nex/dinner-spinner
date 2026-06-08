@@ -1,13 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
+import { Spectral, Schibsted_Grotesk, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider, themeScript } from "./_components/theme-provider";
 import { RootShell } from "./_components/root-shell";
 import { Pwa } from "./_components/pwa";
 import { auth } from "@/lib/auth";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
-const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", display: "swap" });
+const schibsted = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-schibsted", display: "swap" });
+const spectral = Spectral({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-spectral",
+  display: "swap",
+});
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains", display: "swap" });
 
 export const metadata: Metadata = {
@@ -29,10 +34,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F5EFE3" },
-    { media: "(prefers-color-scheme: dark)", color: "#14110C" },
-  ],
+  // Dark-first identity — the app defaults to the warm dark palette regardless
+  // of OS preference, so the browser chrome should match.
+  themeColor: "#15110E",
   // viewport-fit=cover lets the app extend under the iOS home indicator
   // and the Android gesture nav; env(safe-area-inset-bottom) on the
   // TabBar keeps the tappable content above them.
@@ -49,11 +53,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const isSignedIn = !!(session?.user as { id?: string } | undefined)?.id;
 
   return (
-    <html lang="en" className={`${inter.variable} ${fraunces.variable} ${jetbrains.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${schibsted.variable} ${spectral.variable} ${jetbrains.variable}`}
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="h-[100dvh] overflow-hidden bg-bg text-ink">
+      <body className="h-[100dvh] overflow-hidden bg-bg text-text">
         <ThemeProvider>
           <RootShell isSignedIn={isSignedIn}>{children}</RootShell>
           <Pwa />

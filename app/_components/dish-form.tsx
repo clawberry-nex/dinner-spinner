@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import type { Dish, DishInput, Ingredient, MethodRef } from "@/lib/types";
 import { PANTRY_DEFAULTS, STANDARD_INGREDIENTS, STANDARD_UNITS } from "@/lib/vocabulary";
 import { moveItem } from "@/lib/reorder";
-import { Button } from "./ui";
+import { Button, DishArt } from "./ui";
+import { Icon } from "./icon";
 
 // ---------------------------------------------------------------------------
 // Types & helpers
@@ -445,196 +447,270 @@ export default function DishForm({
   }
 
   // ------------------------------------------------------------------
+  // Derived (presentational)
+  // ------------------------------------------------------------------
+
+  const currentTags = draft.tagsInput
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const filledIngredientCount = draft.ingredients.filter((i) => i.name.trim()).length;
+
+  // ------------------------------------------------------------------
   // Render
   // ------------------------------------------------------------------
 
   return (
-    <form
-      onSubmit={save}
-      className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
-    >
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Title *</span>
-        <input
-          required
-          value={draft.title}
-          onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-          className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
+    <form onSubmit={save} className="flex flex-col gap-5 pb-2">
+      {/* live preview */}
+      <div className="flex items-center gap-[14px] rounded-[var(--radius-lg)] border border-line bg-surface p-[13px] shadow-[var(--shadow-card)]">
+        <DishArt
+          dish={{ emoji: draft.emoji || null, accent: draft.accent || null, imageUrl: draft.imageUrl || null }}
+          size={56}
+          corner="var(--radius-md)"
+          emojiSize={28}
         />
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Subtitle</span>
-        <input
-          value={draft.subtitle}
-          onChange={(e) => setDraft({ ...draft, subtitle: e.target.value })}
-          className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
-        />
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">
-          Tags (comma-separated)
-        </span>
-        <input
-          value={draft.tagsInput}
-          onChange={(e) =>
-            setDraft({ ...draft, tagsInput: e.target.value })
-          }
-          placeholder="vegetarian, bbq, Finn likes this"
-          className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
-        />
-        {tagSuggestions.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {tagSuggestions.map((t) => (
+        <div className="min-w-0 flex-1">
+          <div
+            className={[
+              "truncate text-[17px] font-semibold leading-[1.15]",
+              draft.title ? "text-text" : "text-text-faint",
+            ].join(" ")}
+            style={{ fontFamily: "var(--font-serif)" }}
+          >
+            {draft.title || "Untitled recipe"}
+          </div>
+          <div className="mt-[3px] text-[12.5px] text-text-faint">
+            {draft.baseServings || "0"} servings
+            {currentTags.length ? ` · ${currentTags.length} tag${currentTags.length > 1 ? "s" : ""}` : ""}
+            {filledIngredientCount ? ` · ${filledIngredientCount} ingredient${filledIngredientCount > 1 ? "s" : ""}` : ""}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Basics ── */}
+      <Section title="Basics">
+        <Field label="Title" required>
+          <input
+            required
+            value={draft.title}
+            onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+            placeholder="Green chili chicken curry"
+            className={inputCls}
+          />
+        </Field>
+
+        <Field label="Subtitle">
+          <input
+            value={draft.subtitle}
+            onChange={(e) => setDraft({ ...draft, subtitle: e.target.value })}
+            placeholder="Thai-style, weeknight-fast"
+            className={inputCls}
+          />
+        </Field>
+
+        <Field label="Base servings" hint="servings the quantities are written for">
+          <input
+            type="number"
+            min={1}
+            value={draft.baseServings}
+            onChange={(e) => setDraft({ ...draft, baseServings: e.target.value })}
+            className={`${inputCls} tnum w-28`}
+          />
+        </Field>
+
+        <Field label="Tags" hint="comma-separated">
+          <input
+            value={draft.tagsInput}
+            onChange={(e) => setDraft({ ...draft, tagsInput: e.target.value })}
+            placeholder="vegetarian, bbq, Finn likes this"
+            className={inputCls}
+          />
+          {tagSuggestions.length > 0 && (
+            <div className="mt-[10px] flex flex-wrap gap-[6px]">
+              {tagSuggestions
+                .filter((t) => !currentTags.includes(t))
+                .map((t) => (
+                  <button
+                    type="button"
+                    key={t}
+                    onClick={() => addTag(t)}
+                    className="inline-flex items-center rounded-pill border border-line bg-transparent px-[10px] py-[4px] text-[11.5px] font-medium text-text-dim transition-colors hover:border-line-2 hover:text-text"
+                    style={{ fontFamily: "var(--font-sans)" }}
+                  >
+                    + {t}
+                  </button>
+                ))}
+            </div>
+          )}
+        </Field>
+
+        {/* favourite + public toggle cards */}
+        <div className="mt-[18px] flex gap-[10px]">
+          <ToggleCard
+            on={draft.favorite}
+            onClick={() => setDraft({ ...draft, favorite: !draft.favorite })}
+            icon="heart"
+            iconFillWhenOn
+            label="Favourite"
+            sub={draft.favorite ? "surfaced more" : "off"}
+          />
+          <ToggleCard
+            on={draft.public}
+            onClick={() => setDraft({ ...draft, public: !draft.public })}
+            icon="link"
+            label="Public"
+            sub={draft.public ? "shareable by link" : "only you"}
+          />
+        </div>
+      </Section>
+
+      {/* ── Photo ── */}
+      <Section title="Photo">
+        <div className="rounded-[var(--radius-lg)] border border-line bg-surface p-[14px] shadow-[var(--shadow-card)]">
+          <div className="flex items-center gap-[13px]">
+            <div className="relative shrink-0">
+              <DishArt
+                dish={{ emoji: draft.emoji || null, accent: draft.accent || null, imageUrl: draft.imageUrl || null }}
+                size={52}
+                corner="var(--radius-md)"
+                emojiSize={26}
+              />
+              {generatingImage && (
+                <div
+                  className="absolute inset-0 grid place-items-center rounded-[var(--radius-md)]"
+                  style={{ background: "rgba(15,11,8,0.6)" }}
+                >
+                  <span className="spin inline-block h-[18px] w-[18px] rounded-full border-[2.5px] border-white/30 border-t-white" />
+                </div>
+              )}
+            </div>
+            <p className="min-w-0 flex-1 text-[12.5px] leading-[1.45] text-text-dim">
+              {!draft.id
+                ? "Save the dish first, then you can generate a photo."
+                : generatingImage
+                  ? "Generating a new photo from your recipe…"
+                  : draft.imageUrl
+                    ? "Looks good — regenerate for a different take, paste a URL below, or keep it."
+                    : "Generate a photo with AI from the title and ingredients, or paste a URL below."}
+            </p>
+            <span
+              title={
+                draft.id
+                  ? "Generate AI photo for this dish"
+                  : "Save the dish first, then generate"
+              }
+            >
               <button
                 type="button"
-                key={t}
-                onClick={() => addTag(t)}
-                className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                disabled={!draft.id || generatingImage}
+                onClick={generateImage}
+                className="inline-flex shrink-0 items-center justify-center gap-[6px] rounded-pill border border-line bg-surface-2 px-[13px] py-[8px] text-[12.5px] font-semibold text-text transition-colors hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ minWidth: 104, fontFamily: "var(--font-sans)" }}
               >
-                + {t}
+                {generatingImage ? (
+                  <>
+                    <span className="spin inline-block h-[13px] w-[13px] rounded-full border-2 border-accent-line border-t-accent-2" />
+                    Generating…
+                  </>
+                ) : (
+                  <>
+                    <Icon name="sparkle" size={13} />
+                    {draft.imageUrl ? "Regenerate" : "Generate"}
+                  </>
+                )}
               </button>
-            ))}
+            </span>
           </div>
-        )}
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Base servings</span>
-        <input
-          type="number"
-          min={1}
-          value={draft.baseServings}
-          onChange={(e) =>
-            setDraft({ ...draft, baseServings: e.target.value })
-          }
-          className="w-24 rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
-        />
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Image URL</span>
-        <div className="flex gap-2">
-          <input
-            type="url"
-            placeholder="https://…"
-            value={draft.imageUrl}
-            onChange={(e) =>
-              setDraft({ ...draft, imageUrl: e.target.value })
-            }
-            className="flex-1 rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <span
-            title={
-              draft.id
-                ? "Generate AI photo for this dish"
-                : "Save the dish first, then generate"
-            }
-          >
-            <Button
-              variant="ghost"
-              size="sm"
-              type="button"
-              disabled={!draft.id || generatingImage}
-              onClick={generateImage}
-            >
-              {generatingImage ? "Generating…" : "Generate"}
-            </Button>
-          </span>
-        </div>
-        {imageMsg && (
-          <span className="text-sm text-warn">{imageMsg}</span>
-        )}
-        {draft.imageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={draft.imageUrl}
-            alt="preview"
-            className="mt-2 h-32 w-auto rounded border border-zinc-200 object-cover dark:border-zinc-800"
-          />
-        )}
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">
-          Image description{" "}
-          <span className="text-xs font-normal text-zinc-500">
-            (used as the image-gen prompt; not shown publicly)
-          </span>
-        </span>
-        <textarea
-          value={draft.imageDescription}
-          onChange={(e) =>
-            setDraft({ ...draft, imageDescription: e.target.value })
-          }
-          rows={3}
-          placeholder="e.g. a square of golden-brown spiced mince topped with a glossy yellow egg custard, two bay leaves on top"
-          className="rounded border border-zinc-300 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-sm font-medium">
-        Emoji
-        <input
-          type="text"
-          value={draft.emoji}
-          onChange={(e) => setDraft({ ...draft, emoji: e.target.value })}
-          maxLength={8}
-          placeholder="🍲"
-          className="w-24 rounded-md border border-zinc-300 bg-white px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-sm font-medium">
-        Accent
-        <input
-          type="text"
-          value={draft.accent}
-          onChange={(e) => setDraft({ ...draft, accent: e.target.value })}
-          maxLength={60}
-          placeholder="oklch(70% 0.14 40)"
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-base dark:border-zinc-700 dark:bg-zinc-900"
-        />
-      </label>
-      <label className="flex items-center gap-2 text-sm font-medium">
-        <input
-          type="checkbox"
-          className="h-4 w-4"
-          checked={draft.favorite}
-          onChange={(e) =>
-            setDraft({ ...draft, favorite: e.target.checked })
-          }
-        />
-        ★ favourite
-      </label>
-      <label className="flex items-center gap-2 text-sm font-medium">
-        <input
-          type="checkbox"
-          className="h-4 w-4"
-          checked={draft.public}
-          onChange={(e) => setDraft({ ...draft, public: e.target.checked })}
-        />
-        Show on my public profile
-        <span className="text-xs font-normal text-zinc-500">
-          (uncheck to keep private — only you can see it)
-        </span>
-      </label>
 
-      <div>
-        <span className="text-sm font-medium">Ingredients</span>
-        <p className="mb-2 text-xs text-zinc-500">
-          <span className="font-medium">name</span> is the bare purchasable
-          thing (&ldquo;green chili&rdquo;, &ldquo;tomato&rdquo;).{" "}
-          <span className="font-medium">descriptor</span> is
-          size/quality that matters at the store (small, medium, large).{" "}
-          <span className="font-medium">prep</span> is cut/cook prep
-          (&ldquo;thinly sliced&rdquo;) &mdash; dropped from the shopping
-          list. Tick <span className="font-medium">pantry</span> for
-          things you always have in stock (water, salt, pepper,
-          olive oil) &mdash; they&rsquo;re shown on the dish but never
-          added to the shopping list.
-        </p>
-        <div className="mt-1 flex flex-col gap-3">
+          {/* image URL input */}
+          <div className="mt-[12px]">
+            <FieldLabel>Image URL</FieldLabel>
+            <input
+              type="url"
+              placeholder="https://…"
+              value={draft.imageUrl}
+              onChange={(e) => setDraft({ ...draft, imageUrl: e.target.value })}
+              className={`${inputCls} mt-[7px]`}
+            />
+          </div>
+
+          {imageMsg && (
+            <div className="mt-[8px] flex items-center gap-[6px] text-[12.5px] text-rose">
+              <Icon name="bell" size={13} />
+              {imageMsg}
+            </div>
+          )}
+
+          {/* image description (gen prompt) */}
+          <div className="mt-[12px]">
+            <FieldLabel hint="used as the image-gen prompt; not shown publicly">
+              Image description
+            </FieldLabel>
+            <textarea
+              value={draft.imageDescription}
+              onChange={(e) => setDraft({ ...draft, imageDescription: e.target.value })}
+              rows={3}
+              placeholder="e.g. a square of golden-brown spiced mince topped with a glossy yellow egg custard, two bay leaves on top"
+              className={`${textareaCls} mt-[7px]`}
+            />
+          </div>
+        </div>
+
+        {/* appearance: emoji + accent */}
+        <div className="mt-[14px] grid grid-cols-2 gap-[10px]">
+          <div>
+            <FieldLabel hint="placeholder glyph">Emoji</FieldLabel>
+            <input
+              type="text"
+              value={draft.emoji}
+              onChange={(e) => setDraft({ ...draft, emoji: e.target.value })}
+              maxLength={8}
+              placeholder="🍲"
+              className={`${inputCls} mt-[7px]`}
+            />
+          </div>
+          <div>
+            <FieldLabel hint="placeholder colour">Accent</FieldLabel>
+            <input
+              type="text"
+              value={draft.accent}
+              onChange={(e) => setDraft({ ...draft, accent: e.target.value })}
+              maxLength={60}
+              placeholder="oklch(70% 0.14 40)"
+              className={`${inputCls} mt-[7px]`}
+            />
+          </div>
+        </div>
+      </Section>
+
+      {/* ── Ingredients ── */}
+      <Section
+        title="Ingredients"
+        count={draft.ingredients.length}
+        note={
+          <>
+            <span className="font-semibold text-text-dim">name</span> is the bare purchasable
+            thing (&ldquo;green chili&rdquo;, &ldquo;tomato&rdquo;).{" "}
+            <span className="font-semibold text-text-dim">size</span> is the size/quality that
+            matters at the store (small, medium, large).{" "}
+            <span className="font-semibold text-text-dim">prep</span> is cut/cook prep
+            (&ldquo;thinly sliced&rdquo;) &mdash; dropped from the shopping list. Tick{" "}
+            <span className="font-semibold text-text-dim">pantry</span> for things you always
+            have in stock (water, salt, pepper, olive oil) &mdash; shown on the dish but never
+            added to the shopping list.
+          </>
+        }
+      >
+        <div className="flex flex-col gap-[10px]">
           {draft.ingredients.map((ing, i) => {
             const isDragSource = dragIndex === i;
             const isDropTarget =
-              dropTargetIndex === i &&
-              dragIndex !== null &&
-              dragIndex !== i;
+              dropTargetIndex === i && dragIndex !== null && dragIndex !== i;
+            const showPin =
+              ing.pantry &&
+              ing.name.trim() &&
+              !pantryDefaultsSet.has(ing.name.trim().toLowerCase());
             return (
               <div
                 key={i}
@@ -663,13 +739,16 @@ export default function DishForm({
                   resetDragState();
                 }}
                 onDragEnd={resetDragState}
-                className={`rounded border p-2 transition-colors ${
+                className={[
+                  "rounded-[var(--radius-md)] border bg-surface p-[11px_12px] shadow-[var(--shadow-card)] transition-colors",
                   isDropTarget
-                    ? "border-emerald-500 ring-2 ring-emerald-500/30"
-                    : "border-zinc-200 dark:border-zinc-800"
-                } ${isDragSource ? "opacity-60" : ""}`}
+                    ? "border-accent ring-2 ring-accent-line"
+                    : "border-line",
+                  isDragSource ? "opacity-60" : "",
+                ].join(" ")}
               >
-                <div className="flex flex-wrap items-center gap-2">
+                {/* row 1: handle · qty · unit · name · remove */}
+                <div className="flex items-center gap-[7px]">
                   <button
                     type="button"
                     aria-label="drag to reorder ingredient"
@@ -682,41 +761,29 @@ export default function DishForm({
                         setHandleArmedIndex(null);
                       }
                     }}
-                    className="flex h-9 w-6 shrink-0 cursor-grab items-center justify-center text-zinc-400 select-none hover:text-zinc-600 active:cursor-grabbing dark:hover:text-zinc-200"
+                    className="grid h-9 w-[18px] shrink-0 cursor-grab place-items-center text-text-faint transition-colors select-none hover:text-text-dim active:cursor-grabbing"
                   >
-                    ⋮⋮
+                    <span className="text-[15px] leading-none tracking-[-2px]">⋮⋮</span>
                   </button>
                   <input
                     type="number"
                     step="any"
                     inputMode="decimal"
-                    placeholder="qty"
+                    placeholder="600"
                     value={ing.quantity}
-                    onChange={(e) =>
-                      updateIngredient(i, { quantity: e.target.value })
-                    }
-                    className="w-16 rounded border border-zinc-300 px-2 py-1.5 text-base dark:border-zinc-700 dark:bg-zinc-900"
+                    onChange={(e) => updateIngredient(i, { quantity: e.target.value })}
+                    className={`${inputSmCls} tnum w-[52px] text-center`}
                   />
                   <input
                     list="dish-form-standard-units"
-                    placeholder="unit"
+                    placeholder="g"
                     value={ing.unit}
-                    onChange={(e) =>
-                      updateIngredient(i, { unit: e.target.value })
-                    }
-                    className="w-20 rounded border border-zinc-300 px-2 py-1.5 text-base dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  <input
-                    placeholder="size"
-                    value={ing.descriptor}
-                    onChange={(e) =>
-                      updateIngredient(i, { descriptor: e.target.value })
-                    }
-                    className="w-20 rounded border border-zinc-300 px-2 py-1.5 text-base dark:border-zinc-700 dark:bg-zinc-900"
+                    onChange={(e) => updateIngredient(i, { unit: e.target.value })}
+                    className={`${inputSmCls} w-[58px] text-center`}
                   />
                   <input
                     list="dish-form-ingredient-names"
-                    placeholder="name"
+                    placeholder="ingredient"
                     value={ing.name}
                     onChange={(e) => {
                       const name = e.target.value;
@@ -726,192 +793,200 @@ export default function DishForm({
                       }
                       updateIngredient(i, patch);
                     }}
-                    className="min-w-[10rem] flex-1 rounded border border-zinc-300 px-2 py-1.5 text-base dark:border-zinc-700 dark:bg-zinc-900"
+                    className={`${inputSmCls} min-w-0 flex-1 font-semibold`}
                   />
+                  <button
+                    type="button"
+                    onClick={() => removeIngredient(i)}
+                    className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[var(--radius-sm)] text-text-faint transition-colors hover:bg-rose-tint hover:text-rose"
+                    aria-label="remove ingredient"
+                    title="Remove"
+                  >
+                    <Icon name="close" size={16} />
+                  </button>
+                </div>
+
+                {/* row 2: descriptor · prep · section */}
+                <div className="mt-[8px] flex flex-wrap gap-[7px]">
+                  <input
+                    placeholder="size / quality (e.g. large)"
+                    value={ing.descriptor}
+                    onChange={(e) => updateIngredient(i, { descriptor: e.target.value })}
+                    className={`${inputSmCls} min-w-[8rem] flex-1 text-text-dim`}
+                  />
+                  <input
+                    placeholder="prep (e.g. thinly sliced)"
+                    value={ing.preparation}
+                    onChange={(e) => updateIngredient(i, { preparation: e.target.value })}
+                    className={`${inputSmCls} min-w-[8rem] flex-1 text-text-dim`}
+                  />
+                  <input
+                    placeholder="section (Dough…)"
+                    value={ing.section}
+                    onChange={(e) => updateIngredient(i, { section: e.target.value })}
+                    className={`${inputSmCls} w-[8rem] text-text-dim`}
+                  />
+                </div>
+
+                {/* row 3: flag chips + pin + reorder buttons */}
+                <div className="mt-[9px] flex flex-wrap items-center gap-[7px]">
+                  <FlagChip
+                    on={ing.pantry}
+                    onClick={() => updateIngredient(i, { pantry: !ing.pantry })}
+                  >
+                    pantry
+                  </FlagChip>
+                  <FlagChip
+                    on={ing.fixed}
+                    onClick={() => updateIngredient(i, { fixed: !ing.fixed })}
+                    title="Quantity stays the same regardless of servings (e.g. 1 bay leaf)"
+                  >
+                    fixed
+                  </FlagChip>
+                  <FlagChip
+                    on={ing.optional}
+                    onClick={() => updateIngredient(i, { optional: !ing.optional })}
+                    title="Optional ingredient — excluded from the shopping list unless the user opts in"
+                  >
+                    optional
+                  </FlagChip>
+                  {showPin && (
+                    <button
+                      type="button"
+                      onClick={() => addPantryDefault(ing.name)}
+                      className="inline-flex items-center gap-[4px] text-[11px] font-semibold text-sage hover:underline"
+                      title={`Add "${ing.name.trim()}" to pantry defaults so it auto-flags next time`}
+                    >
+                      <Icon name="pin" size={12} />
+                      pin to defaults
+                    </button>
+                  )}
+                  <div className="flex-1" />
                   <button
                     type="button"
                     onClick={() => reorderIngredient(i, i - 1)}
                     disabled={i === 0}
-                    className="flex h-9 w-8 shrink-0 items-center justify-center rounded border border-zinc-200 text-sm disabled:opacity-30 dark:border-zinc-800"
+                    className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[var(--radius-sm)] text-text-faint transition-colors hover:bg-surface-2 disabled:opacity-30 disabled:hover:bg-transparent"
                     aria-label="move ingredient up"
                     title="Move up"
                   >
-                    ↑
+                    <Icon name="chevU" size={15} />
                   </button>
                   <button
                     type="button"
                     onClick={() => reorderIngredient(i, i + 1)}
                     disabled={i === draft.ingredients.length - 1}
-                    className="flex h-9 w-8 shrink-0 items-center justify-center rounded border border-zinc-200 text-sm disabled:opacity-30 dark:border-zinc-800"
+                    className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[var(--radius-sm)] text-text-faint transition-colors hover:bg-surface-2 disabled:opacity-30 disabled:hover:bg-transparent"
                     aria-label="move ingredient down"
                     title="Move down"
                   >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeIngredient(i)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-zinc-200 text-lg text-red-600 hover:bg-red-50 dark:border-zinc-800 dark:hover:bg-red-950"
-                    aria-label="remove ingredient"
-                  >
-                    ×
+                    <Icon name="chevD" size={15} />
                   </button>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <input
-                    placeholder="prep (thinly sliced…)"
-                    value={ing.preparation}
-                    onChange={(e) =>
-                      updateIngredient(i, { preparation: e.target.value })
-                    }
-                    className="min-w-[10rem] flex-1 rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  <input
-                    placeholder="section (Dough…)"
-                    value={ing.section}
-                    onChange={(e) =>
-                      updateIngredient(i, { section: e.target.value })
-                    }
-                    className="w-32 rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  <label className="flex shrink-0 items-center gap-1.5 py-1 text-xs text-zinc-500 select-none">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={ing.pantry}
-                      onChange={(e) =>
-                        updateIngredient(i, { pantry: e.target.checked })
-                      }
-                    />
-                    pantry
-                  </label>
-                  {ing.pantry &&
-                    ing.name.trim() &&
-                    !pantryDefaultsSet.has(
-                      ing.name.trim().toLowerCase(),
-                    ) && (
-                      <button
-                        type="button"
-                        onClick={() => addPantryDefault(ing.name)}
-                        className="shrink-0 text-xs text-emerald-600 hover:underline"
-                        title={`Add "${ing.name.trim()}" to pantry defaults so it auto-flags next time`}
-                      >
-                        pin to defaults
-                      </button>
-                    )}
-                  <label
-                    className="flex shrink-0 items-center gap-1.5 py-1 text-xs text-zinc-500 select-none"
-                    title="Quantity stays the same regardless of servings (e.g. 1 bay leaf)"
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={ing.fixed}
-                      onChange={(e) =>
-                        updateIngredient(i, { fixed: e.target.checked })
-                      }
-                    />
-                    fixed
-                  </label>
-                  <label
-                    className="flex shrink-0 items-center gap-1.5 py-1 text-xs text-zinc-500 select-none"
-                    title="Optional ingredient — excluded from the shopping list unless the user opts in"
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={ing.optional}
-                      onChange={(e) =>
-                        updateIngredient(i, { optional: e.target.checked })
-                      }
-                    />
-                    optional
-                  </label>
-                </div>
+
+                {/* row 4: alternatives */}
                 <input
                   placeholder="alternatives (comma-separated, e.g. 'olive oil, ghee')"
                   value={ing.alternativesInput}
                   onChange={(e) =>
-                    updateIngredient(i, {
-                      alternativesInput: e.target.value,
-                    })
+                    updateIngredient(i, { alternativesInput: e.target.value })
                   }
-                  className="mt-2 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  className={`${inputSmCls} mt-[8px] w-full text-text-dim`}
                 />
               </div>
             );
           })}
-          <div className="flex flex-wrap items-center gap-3">
+        </div>
+
+        <div className="mt-[10px] flex flex-wrap items-center gap-[10px]">
+          <Button variant="ghost" type="button" size="sm" onClick={addIngredient}>
+            <Icon name="plus" size={15} />
+            Add ingredient
+          </Button>
+          {pinnableFromDraft.length > 0 && (
             <button
               type="button"
-              onClick={addIngredient}
-              className="text-sm text-emerald-600 hover:underline"
+              onClick={pinAllFlagged}
+              className="inline-flex items-center gap-[6px] rounded-pill border border-sage/50 px-[11px] py-[6px] text-[12px] font-semibold text-sage transition-colors hover:bg-sage-tint"
+              title={`Add to pantry defaults: ${pinnableFromDraft.join(", ")}`}
             >
-              + add ingredient
+              <Icon name="pin" size={13} />
+              pin {pinnableFromDraft.length} pantry item
+              {pinnableFromDraft.length === 1 ? "" : "s"} to defaults
             </button>
-            {pinnableFromDraft.length > 0 && (
-              <button
-                type="button"
-                onClick={pinAllFlagged}
-                className="rounded-md border border-emerald-600 px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
-                title={`Add to pantry defaults: ${pinnableFromDraft.join(", ")}`}
-              >
-                pin {pinnableFromDraft.length} pantry item
-                {pinnableFromDraft.length === 1 ? "" : "s"} to defaults
-              </button>
-            )}
-          </div>
+          )}
         </div>
-      </div>
+      </Section>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Recipe (markdown)</span>
+      {/* ── Method ── */}
+      <Section title="Method" note="Markdown numbered steps. Use ## headers for recipe sections.">
         <textarea
           rows={8}
           value={draft.recipe}
           onChange={(e) => setDraft({ ...draft, recipe: e.target.value })}
-          className="rounded border border-zinc-300 px-3 py-1.5 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          placeholder={"1. Heat the oil…\n2. Add the onions…"}
+          className={`${textareaCls} font-mono text-[13px] leading-[1.6]`}
         />
-      </label>
+      </Section>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium">Notes</span>
-        <span className="text-xs text-zinc-500">
-          Persistent scratch pad. Shown as a yellow sticky note above
-          the ingredients on the dish page. Use for things like
-          &ldquo;Finn won&rsquo;t eat this if there are mushrooms&rdquo;
-          or &ldquo;usually 1.5× the chili&rdquo;.
-        </span>
+      {/* ── Notes ── */}
+      <Section
+        title="Notes"
+        note={
+          <>
+            Persistent scratch pad. Shown as a sticky note above the ingredients on the dish
+            page. Use for things like &ldquo;Finn won&rsquo;t eat this if there are
+            mushrooms&rdquo; or &ldquo;usually 1.5× the chili&rdquo;.
+          </>
+        }
+      >
         <textarea
           rows={3}
           maxLength={5000}
           value={draft.notes}
           onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-          className="rounded border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          placeholder="Finn won't eat this if there are mushrooms"
+          className={textareaCls}
         />
-      </label>
+      </Section>
 
-      <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-70"
-        >
-          {saving ? "Saving…" : draft.id != null ? "Update" : "Create"}
-        </button>
-        {(draft.id != null || onCanceled) && (
-          <button
-            type="button"
-            onClick={() => {
-              setDraft(EMPTY_DRAFT);
-              onCanceled?.();
-            }}
-            className="text-sm text-zinc-500 hover:underline"
-          >
-            Cancel edit
-          </button>
-        )}
-        {msg && <span className="text-sm">{msg}</span>}
+      {/* ── Save bar ── */}
+      <div className="sticky bottom-0 z-[2] -mx-[1px] mt-1 flex items-center justify-between gap-4 border-t border-line bg-bg/95 py-[14px] backdrop-blur supports-[backdrop-filter]:bg-bg/80">
+        <span className="flex items-center gap-[7px] text-[12.5px] text-text-faint">
+          {!draft.title.trim() ? (
+            <>
+              <Icon name="close" size={14} />A title is required to save.
+            </>
+          ) : msg ? (
+            <>
+              <Icon name="check" size={14} style={{ color: "var(--sage)" }} />
+              <span className="text-text-dim">{msg}</span>
+            </>
+          ) : (
+            <>
+              <Icon name="sparkle" size={14} />
+              Structured so scaling &amp; shopping just work
+            </>
+          )}
+        </span>
+        <div className="flex items-center gap-[12px]">
+          {(draft.id != null || onCanceled) && (
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(EMPTY_DRAFT);
+                onCanceled?.();
+              }}
+              className="text-[13px] font-medium text-text-faint transition-colors hover:text-text-dim"
+            >
+              Cancel
+            </button>
+          )}
+          <Button variant="primary" type="submit" disabled={saving || !draft.title.trim()}>
+            <Icon name="check" size={18} style={{ color: "var(--accent-ink)" }} />
+            {saving ? "Saving…" : draft.id != null ? "Save changes" : "Save dish"}
+          </Button>
+        </div>
       </div>
 
       <datalist id="dish-form-standard-units">
@@ -925,5 +1000,159 @@ export default function DishForm({
         ))}
       </datalist>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Presentational helpers (V2 tokens)
+// ---------------------------------------------------------------------------
+
+// Shared input/textarea styling: raised surface-2 fill, hairline border, accent
+// focus ring, cream text. Matches the prototype's `inputStyle` and the
+// dish-view cook-log textarea.
+const inputCls =
+  "w-full min-w-0 rounded-[var(--radius-md)] border border-line bg-surface-2 px-[13px] py-[11px] text-[14.5px] text-text placeholder:text-text-faint transition-colors focus:border-accent-line focus:outline-none";
+const inputSmCls =
+  "rounded-[var(--radius-sm)] border border-line bg-surface-2 px-[10px] py-[8px] text-[13.5px] text-text placeholder:text-text-faint transition-colors focus:border-accent-line focus:outline-none";
+const textareaCls =
+  "w-full resize-y rounded-[var(--radius-md)] border border-line bg-surface-2 px-[13px] py-[11px] text-[14px] text-text placeholder:text-text-faint transition-colors focus:border-accent-line focus:outline-none";
+
+function Section({
+  title,
+  note,
+  count,
+  children,
+}: {
+  title: string;
+  note?: ReactNode;
+  count?: number;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <div
+        className="mb-[4px] text-[11px] font-semibold uppercase tracking-[0.18em] text-accent"
+        style={{ fontFamily: "var(--font-sans)" }}
+      >
+        {title}
+        {count != null && <span className="text-text-faint"> · {count}</span>}
+      </div>
+      {note && (
+        <p className="mb-[12px] text-[12px] leading-[1.45] text-text-faint">{note}</p>
+      )}
+      <div className={note ? "" : "mt-[12px]"}>{children}</div>
+    </section>
+  );
+}
+
+function FieldLabel({ children, hint }: { children?: ReactNode; hint?: string }) {
+  return (
+    <div
+      className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-faint"
+      style={{ fontFamily: "var(--font-sans)" }}
+    >
+      {children}
+      {hint && (
+        <span className="ml-[6px] font-normal normal-case tracking-normal text-text-faint/80">
+          {hint}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  required,
+  hint,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-[16px] first:mt-0">
+      <div className="mb-[7px]">
+        <FieldLabel hint={hint}>
+          {label}
+          {required && <span className="text-accent"> *</span>}
+        </FieldLabel>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ToggleCard({
+  on,
+  onClick,
+  icon,
+  iconFillWhenOn,
+  label,
+  sub,
+}: {
+  on: boolean;
+  onClick: () => void;
+  icon: "heart" | "link";
+  iconFillWhenOn?: boolean;
+  label: string;
+  sub: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "flex flex-1 items-center gap-[10px] rounded-[var(--radius-md)] border p-[11px_13px] text-left transition-colors",
+        on ? "border-accent-line bg-accent-tint" : "border-line bg-surface-2",
+      ].join(" ")}
+    >
+      <Icon
+        name={icon}
+        size={18}
+        fill={iconFillWhenOn && on}
+        style={{ color: on ? "var(--accent-2)" : "var(--text-faint)" }}
+      />
+      <div>
+        <div
+          className={["text-[13.5px] font-semibold", on ? "text-accent-2" : "text-text"].join(" ")}
+          style={{ fontFamily: "var(--font-sans)" }}
+        >
+          {label}
+        </div>
+        <div className="text-[11px] text-text-faint">{sub}</div>
+      </div>
+    </button>
+  );
+}
+
+function FlagChip({
+  on,
+  onClick,
+  title,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  title?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={[
+        "inline-flex items-center rounded-pill border px-[9px] py-[4px] text-[11px] font-medium transition-colors",
+        on
+          ? "border-accent bg-accent text-accent-ink"
+          : "border-line bg-transparent text-text-dim hover:border-line-2 hover:text-text",
+      ].join(" ")}
+      style={{ fontFamily: "var(--font-sans)" }}
+    >
+      {children}
+    </button>
   );
 }

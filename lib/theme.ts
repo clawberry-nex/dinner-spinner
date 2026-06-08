@@ -15,7 +15,8 @@ function isSetting(v: unknown): v is ThemeSetting {
 }
 
 export function readThemeSetting(storage: StorageLike): ThemeSetting {
-  let setting: ThemeSetting = "system";
+  // Dark-first: an absent/invalid key means "first run" → dark.
+  let setting: ThemeSetting = "dark";
   const raw = storage.getItem(KEY);
   if (isSetting(raw)) {
     setting = raw;
@@ -37,11 +38,9 @@ export function writeThemeSetting(
   storage: StorageLike,
   setting: ThemeSetting,
 ): void {
-  if (setting === "system") {
-    storage.removeItem(KEY);
-  } else {
-    storage.setItem(KEY, setting);
-  }
+  // Store all three settings explicitly. An absent key means "first run" and
+  // resolves to the dark-first default in readThemeSetting.
+  storage.setItem(KEY, setting);
 }
 
 export function resolveEffective(
