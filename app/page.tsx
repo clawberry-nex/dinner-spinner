@@ -332,10 +332,11 @@ function Filmstrip({
   const FRAME_H = CARDH + 14;
 
   return (
+    <div className="relative" style={{ margin: "10px 0 0" }}>
     <div
       ref={wrapRef}
       className="relative overflow-hidden"
-      style={{ height: phase === "result" ? CARDH + 22 : CARDH + 30, margin: "10px 0 0" }}
+      style={{ height: phase === "result" ? CARDH + 22 : CARDH + 30 }}
     >
       {/* depth band behind the reel */}
       <div
@@ -407,27 +408,30 @@ function Filmstrip({
         }}
       />
 
-      {/* center focus frame — hugs the card with an even inset */}
-      <div
-        key={`frame-${phase}-${spinSeed}`}
+      {/* (edge fades above close out the reel viewport) */}
+      </div>
+
+      {/* Center focus frame — an inline SVG drawn OUTSIDE the overflow:hidden
+          reel. The crisp ring uses SVG stroke rasterization instead of a CSS
+          box-border (mobile GPUs shattered the border into pieces while the reel
+          translated underneath); living outside the reel also means its
+          clip/compositing can't touch the frame and the pointer ticks are never
+          clipped. */}
+      <svg
         className="pointer-events-none absolute left-1/2 top-1/2 z-[4] -translate-x-1/2 -translate-y-1/2"
+        width={FRAME_W}
+        height={FRAME_H + 16}
+        viewBox={`0 0 ${FRAME_W} ${FRAME_H + 16}`}
+        fill="none"
         style={{
-          width: FRAME_W,
-          height: FRAME_H,
-          borderRadius: 15,
-          border: "2px solid var(--accent)",
+          overflow: "visible",
           animation: phase === "result" ? "ds-framepop .55s cubic-bezier(.2,.8,.2,1)" : "none",
         }}
       >
-        <div
-          className="absolute left-1/2 top-[-7px]"
-          style={{ transform: "translateX(-50%) rotate(45deg)", width: 11, height: 11, background: "var(--accent)", borderRadius: 2 }}
-        />
-        <div
-          className="absolute bottom-[-7px] left-1/2"
-          style={{ transform: "translateX(-50%) rotate(45deg)", width: 11, height: 11, background: "var(--accent)", borderRadius: 2 }}
-        />
-      </div>
+        <rect x={1} y={8} width={FRAME_W - 2} height={FRAME_H} rx={14} ry={14} stroke="var(--accent)" strokeWidth={2} />
+        <rect x={FRAME_W / 2 - 5.5} y={2.5} width={11} height={11} rx={2} fill="var(--accent)" transform={`rotate(45 ${FRAME_W / 2} 8)`} />
+        <rect x={FRAME_W / 2 - 5.5} y={8 + FRAME_H - 5.5} width={11} height={11} rx={2} fill="var(--accent)" transform={`rotate(45 ${FRAME_W / 2} ${8 + FRAME_H})`} />
+      </svg>
     </div>
   );
 }
