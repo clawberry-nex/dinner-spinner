@@ -151,9 +151,12 @@ body {
 /* "time's up" timer flash — pulses opacity (never to 0, so a frozen clock can
    never hide the dock) for the finished-timer rose card in cook mode. */
 @keyframes ds-flash    { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
-/* focus-frame settle pop for the Decide filmstrip — keeps the centering
-   translate so it doesn't jump off-axis mid-animation. */
-@keyframes ds-framepop { 0% { transform: translate(-50%,-50%) scale(1); } 45% { transform: translate(-50%,-50%) scale(1.05); } 100% { transform: translate(-50%,-50%) scale(1); } }
+/* focus-frame settle pop for the Decide filmstrip — SCALE ONLY. The frame is
+   centered by a flex overlay (not top:50%+translate), so the transform must
+   stay free of any centering translate: a percentage translate here re-resolved
+   the frame's position while the pop ran and jumped it half its own height up
+   for ~0.55s before snapping back — the "broken stroke" flash on spin→result. */
+@keyframes ds-framepop { 0% { transform: scale(1); } 45% { transform: scale(1.05); } 100% { transform: scale(1); } }
 /* modal/dock entrance — transform-only (visible end-state is the base). */
 @keyframes ds-modalin { from { transform: scale(0.965); } to { transform: none; } }
 /* batch-import: photo-tag shimmer (continuous loading sweep; never hides

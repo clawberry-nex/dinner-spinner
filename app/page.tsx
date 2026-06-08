@@ -411,27 +411,34 @@ function Filmstrip({
       {/* (edge fades above close out the reel viewport) */}
       </div>
 
-      {/* Center focus frame — an inline SVG drawn OUTSIDE the overflow:hidden
-          reel. The crisp ring uses SVG stroke rasterization instead of a CSS
-          box-border (mobile GPUs shattered the border into pieces while the reel
-          translated underneath); living outside the reel also means its
-          clip/compositing can't touch the frame and the pointer ticks are never
-          clipped. */}
-      <svg
-        className="pointer-events-none absolute left-1/2 top-1/2 z-[4] -translate-x-1/2 -translate-y-1/2"
-        width={FRAME_W}
-        height={FRAME_H + 16}
-        viewBox={`0 0 ${FRAME_W} ${FRAME_H + 16}`}
-        fill="none"
-        style={{
-          overflow: "visible",
-          animation: phase === "result" ? "ds-framepop .55s cubic-bezier(.2,.8,.2,1)" : "none",
-        }}
-      >
-        <rect x={1} y={8} width={FRAME_W - 2} height={FRAME_H} rx={14} ry={14} stroke="var(--accent)" strokeWidth={2} />
-        <rect x={FRAME_W / 2 - 5.5} y={2.5} width={11} height={11} rx={2} fill="var(--accent)" transform={`rotate(45 ${FRAME_W / 2} 8)`} />
-        <rect x={FRAME_W / 2 - 5.5} y={8 + FRAME_H - 5.5} width={11} height={11} rx={2} fill="var(--accent)" transform={`rotate(45 ${FRAME_W / 2} ${8 + FRAME_H})`} />
-      </svg>
+      {/* Center focus frame — an inline SVG over the reel, centered by a flex
+          overlay rather than top:50%+translate. That percentage-centering fought
+          the settle pop: while ds-framepop animated `transform`, the frame's
+          `top:50%` re-resolved and the whole frame jumped ~half its own height
+          up for the animation's ~0.55s, then snapped back — the orange-stroke
+          "break up, then resolve" flash on spin→result. Flex centering keeps the
+          transform free for a pure-scale pop, so position and animation can't
+          conflict. The overlay shares the reel viewport's exact box (its sibling
+          above), so the frame stays locked on the centered card through the
+          reflow; sitting outside the overflow:hidden wrap keeps the ticks and the
+          1.05 pop from being clipped. SVG stroke (not a CSS border) also dodges
+          the mobile-GPU border-shatter. */}
+      <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center">
+        <svg
+          width={FRAME_W}
+          height={FRAME_H + 16}
+          viewBox={`0 0 ${FRAME_W} ${FRAME_H + 16}`}
+          fill="none"
+          style={{
+            overflow: "visible",
+            animation: phase === "result" ? "ds-framepop .55s cubic-bezier(.2,.8,.2,1)" : "none",
+          }}
+        >
+          <rect x={1} y={8} width={FRAME_W - 2} height={FRAME_H} rx={14} ry={14} stroke="var(--accent)" strokeWidth={2} />
+          <rect x={FRAME_W / 2 - 5.5} y={2.5} width={11} height={11} rx={2} fill="var(--accent)" transform={`rotate(45 ${FRAME_W / 2} 8)`} />
+          <rect x={FRAME_W / 2 - 5.5} y={8 + FRAME_H - 5.5} width={11} height={11} rx={2} fill="var(--accent)" transform={`rotate(45 ${FRAME_W / 2} ${8 + FRAME_H})`} />
+        </svg>
+      </div>
     </div>
   );
 }
