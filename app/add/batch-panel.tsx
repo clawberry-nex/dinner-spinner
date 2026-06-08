@@ -9,13 +9,15 @@
 // as a full-screen mobile sheet. <ImportDock> is the persistent
 // "X of Y importing" pill you can return to.
 //
-// The engine behind this is SIMULATED — see batch-import.tsx. Nothing
-// here ever writes to the real library.
+// The engine behind this is the real pipeline — see batch-import.tsx
+// (useImportEngine) and /api/import. Recipes are detected, parsed, created,
+// and photographed for real.
 //
 // Re-expressed from the V2 prototype (batch-import-ui.jsx) in React +
 // Tailwind + TypeScript using the V2 tokens.
 // ============================================================
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../_components/icon";
 import {
@@ -85,8 +87,8 @@ function BiStatusDot({ status }: { status: RecipeStatus }) {
 function BiPhotoTag({ r, onRetryPhoto }: { r: ImportRecipe; onRetryPhoto: () => void }) {
   if (r.status !== "imported") return null;
   if (r.photo === "done") {
-    // SIMULATION: there is no real dish/image. Show a resolved accent tile
-    // with the title's emoji to stand in for the generated photo.
+    // Lightweight emoji tile placeholder — the dish carries the real generated
+    // photo; the title links through to it.
     const { emoji } = makeImportedDish(r.title);
     return (
       <span
@@ -142,14 +144,23 @@ function BiRow({
     <div className="flex items-center gap-3 rounded-[var(--radius-sm)] px-3 py-[10px] transition-colors [&_+_&]:border-t [&_+_&]:border-line hover:bg-surface-2">
       <BiStatusDot status={r.status} />
       <div className="min-w-0 flex-1">
-        <div
-          className={[
-            "truncate text-[14.5px] font-semibold",
-            r.status === "failed" ? "text-text-dim" : "text-text",
-          ].join(" ")}
-        >
-          {r.title}
-        </div>
+        {r.status === "imported" && r.dishId ? (
+          <Link
+            href={`/dishes/${r.dishId}`}
+            className="block truncate text-[14.5px] font-semibold text-text transition-colors hover:text-accent-2"
+          >
+            {r.title}
+          </Link>
+        ) : (
+          <div
+            className={[
+              "truncate text-[14.5px] font-semibold",
+              r.status === "failed" ? "text-text-dim" : "text-text",
+            ].join(" ")}
+          >
+            {r.title}
+          </div>
+        )}
         <div className="mt-[1px] text-[11.5px] text-text-faint">
           {r.status === "imported" &&
             (r.photo === "pending"
@@ -240,12 +251,6 @@ export function BatchPanel({
           <b className="text-text">.json</b> — or paste text with several recipes. I&apos;ll find
           each one; you confirm once and they all import.
         </p>
-
-        {/* preview note */}
-        <div className="mt-3 flex items-center gap-2 rounded-[var(--radius-sm)] border border-accent-line bg-accent-tint px-3 py-2 text-[12px] text-accent-2">
-          <Icon name="sparkle" size={14} style={{ flexShrink: 0 }} />
-          <span>Preview — batch importing isn&apos;t wired up yet. Nothing is saved.</span>
-        </div>
 
         {/* dropzone */}
         <button

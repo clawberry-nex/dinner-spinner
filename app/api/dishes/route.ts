@@ -1,10 +1,7 @@
-import { after } from "next/server";
 import { sql } from "@/lib/db";
 import { DishInputSchema, rowToDish } from "@/lib/types";
 import { resolveUserId } from "@/lib/auth-helpers";
-import { applyPantryDefaults } from "@/lib/pantry";
-import { sanitizeMethodRefs } from "@/lib/recipe";
-import { generateAndStoreImage } from "@/lib/dish-image";
+import { createDishForUser } from "@/lib/dish-create";
 
 export async function GET(req: Request) {
   const userId = await resolveUserId(req);
@@ -57,47 +54,6 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const ingredients = await applyPantryDefaults(parsed.data.ingredients, userId);
-  const d = {
-    ...parsed.data,
-    ingredients,
-    methodRefs: sanitizeMethodRefs(parsed.data.methodRefs, ingredients.length),
-  };
-  const rows = await sql`
-    INSERT INTO dishes (
-      user_id, title, subtitle, recipe, tags, ingredients, base_servings,
-      favorite, image_url, emoji, accent, notes, image_description, public, method_refs
-    )
-    VALUES (
-      ${userId},
-      ${d.title},
-      ${d.subtitle ?? null},
-      ${d.recipe ?? null},
-      ${d.tags},
-      ${JSON.stringify(d.ingredients)}::jsonb,
-      ${d.baseServings},
-      ${d.favorite ?? false},
-      ${d.imageUrl ?? null},
-      ${d.emoji ?? null},
-      ${d.accent ?? null},
-      ${d.notes ?? null},
-      ${d.imageDescription ?? null},
-      ${d.public ?? true},
-      ${d.methodRefs == null ? null : JSON.stringify(d.methodRefs)}::jsonb
-    )
-    RETURNING *
-  `;
-  const dish = rowToDish(rows[0]);
-
-  if (dish.imageUrl == null) {
-    after(async () => {
-      try {
-        await generateAndStoreImage(dish, userId);
-      } catch (err) {
-        console.warn(`auto image-gen failed for dish ${dish.id}:`, err);
-      }
-    });
-  }
-
+  const dish = await createDishForUser(parsed.data, userId);
   return Response.json(dish, { status: 201 });
 }

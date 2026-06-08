@@ -1,121 +1,20 @@
 "use client";
 
 // ============================================================
-// batch-import.tsx — the parse + SIMULATED engine for "Batch import".
+// batch-import.tsx — the REAL batch-import engine.
 //
-// PREVIEW / SIMULATION. This is a UI preview of the bulk-import flow.
-// The parser (`parseImportText`) is REAL — it reads pasted/loaded text
-// and pulls recipe titles out of it. Everything past "Analyze" is a
-// client-side simulation driven by timers: no recipe is ever created,
-// no photo is generated, and crucially NO `/api/dishes` or `/api/ingest`
-// call is made. Nothing is written to the real library.
-//
-// TODO: wire to the real batch import pipeline — roadmap QNGIkXIN62Sc
-// (this is a UI preview / simulation)
-//
-// Re-expressed from the V2 prototype (batch-import.jsx) in TypeScript.
+// useImportEngine drives the same ImportEngine interface the UI
+// (batch-panel.tsx) consumes, but instead of a setTimeout simulation it POSTs
+// to /api/import and polls /api/import/jobs/[id]. That GET advances a
+// server-side state machine ONE bounded step per poll (detect the recipes →
+// parse each via claude-agent → create the dish → Gemini image batch). State
+// lives in the import_jobs row, so the import survives navigation and resumes
+// when you reopen /add. Real dishes are created; photos generate in the
+// background. See roadmap QNGIkXIN62Sc.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from "react";
-
-// ---------- parsing: pull recipe titles out of pasted/loaded text ----------
-
-const MAX_TITLES = 60;
-
-function biDedupe(list: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (let t of list) {
-    t = (t || "").replace(/\s+/g, " ").trim();
-    if (!t) continue;
-    const key = t.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(t);
-    if (out.length >= MAX_TITLES) break;
-  }
-  return out;
-}
-
-/**
- * REAL parser. Pull a list of recipe titles out of arbitrary text:
- * JSON arrays / `{recipes|dishes|items}`, markdown `#/##/###` headings,
- * numbered `1.`/`1)` lists, blank-line blocks, bullet lists, or a
- * per-line fallback. Deduped and capped at 60.
- */
-export function parseImportText(input: string): string[] {
-  const text = (input || "").trim();
-  if (!text) return [];
-
-  // 1) JSON — array of strings/objects, or { recipes: [...] }
-  try {
-    const j = JSON.parse(text) as unknown;
-    let arr: unknown[];
-    if (Array.isArray(j)) {
-      arr = j;
-    } else if (j && typeof j === "object") {
-      const obj = j as Record<string, unknown>;
-      arr = (obj.recipes as unknown[]) || (obj.dishes as unknown[]) || (obj.items as unknown[]) || [];
-    } else {
-      arr = [];
-    }
-    const titles = arr
-      .map((x) => {
-        if (typeof x === "string") return x;
-        if (x && typeof x === "object") {
-          const o = x as Record<string, unknown>;
-          return (o.title as string) || (o.name as string) || "";
-        }
-        return "";
-      })
-      .filter(Boolean) as string[];
-    if (titles.length) return biDedupe(titles);
-  } catch {
-    /* not json */
-  }
-
-  const lines = text.split(/\r?\n/);
-
-  // 2) markdown headings (#, ##, ###)
-  let titles: string[] = [];
-  for (const ln of lines) {
-    const m = ln.match(/^\s{0,3}#{1,3}\s+(.+?)\s*#*$/);
-    if (m) titles.push(m[1]);
-  }
-  if (titles.length >= 2) return biDedupe(titles);
-
-  // 3) numbered list — "1. Title" / "1) Title"
-  titles = [];
-  for (const ln of lines) {
-    const m = ln.match(/^\s*\d+[.)]\s+(.+)$/);
-    if (m) titles.push(m[1].replace(/\s*[-–—:].*$/, ""));
-  }
-  if (titles.length >= 2) return biDedupe(titles);
-
-  // 4) blank-line-separated blocks → first line of each
-  const blocks = text
-    .split(/\n\s*\n/)
-    .map((b) => b.trim())
-    .filter(Boolean);
-  if (blocks.length >= 2) {
-    return biDedupe(blocks.map((b) => b.split(/\r?\n/)[0].replace(/^[#\-*•\d.)\s]+/, "")));
-  }
-
-  // 5) bullet list — "- Title" / "* Title"
-  titles = [];
-  for (const ln of lines) {
-    const m = ln.match(/^\s*[-*•]\s+(.+)$/);
-    if (m) titles.push(m[1]);
-  }
-  if (titles.length >= 2) return biDedupe(titles);
-
-  // 6) fallback — each non-empty line is a recipe
-  const nonEmpty = lines.map((l) => l.trim()).filter(Boolean);
-  if (nonEmpty.length >= 2 && nonEmpty.length <= MAX_TITLES) {
-    return biDedupe(nonEmpty.map((l) => l.replace(/^[#\-*•\d.)\s]+/, "")));
-  }
-  return biDedupe(nonEmpty.slice(0, 1));
-}
+import type { ImportProgress } from "@/lib/import/types";
 
 // ---------- a believable emoji for a found title (display only) ----------
 
@@ -127,24 +26,15 @@ export function biHash(s: string): number {
   return Math.abs(h);
 }
 
-/**
- * SIMULATION-ONLY: a display emoji for a found title. The prototype's
- * `makeImportedDish` fabricated a whole dish object here; we only need
- * the emoji for the "found" list, so this stays purely presentational and
- * never produces anything that touches the real library.
- */
+/** A stable display emoji for a recipe title — used in the found list and as a
+ *  placeholder photo tile. Purely presentational; the dish carries the real
+ *  generated photo. */
 export function makeImportedDish(title: string): { emoji: string } {
   const h = biHash(title);
   return { emoji: BI_EMOJI[h % BI_EMOJI.length] };
 }
 
-// ---------- the engine: state + SIMULATED background driver ----------
-
-const BI_ANALYZE_MS = 2200;
-const BI_STAGGER_MS = 850; // gap between starting each import
-const BI_IMPORT_MS = 650; // time to "create" one dish
-const BI_PHOTO_MIN = 1500;
-const BI_PHOTO_VAR = 2600; // photo arrives a little later
+// ---------- the UI's view of an import ----------
 
 export type PhotoState = "pending" | "done" | "failed";
 export type RecipeStatus = "pending" | "working" | "imported" | "failed";
@@ -153,10 +43,8 @@ export type ImportRecipe = {
   title: string;
   status: RecipeStatus;
   photo: PhotoState;
-  // Deterministic-per-recipe random rolls so a re-render doesn't reroll
-  // whether a given recipe fails. Matches the prototype.
-  failRoll: number;
-  photoRoll: number;
+  /** dishes.id once the recipe has been imported (lets the row link to it). */
+  dishId: number | null;
 };
 
 export type JobStatus = "idle" | "analyzing" | "found" | "empty" | "importing" | "done";
@@ -180,162 +68,228 @@ export type ImportEngine = {
   reset: () => void;
 };
 
-/**
- * SIMULATED batch-import engine. Mirrors the prototype's `useImportEngine`
- * state machine with setTimeout-driven progress. It NEVER calls a real
- * API and NEVER mutates the real dish library — `runOne` flips a recipe's
- * status to "imported" and lets a "photo" resolve a beat later, all in
- * local state only.
- *
- * TODO: wire to the real batch import pipeline — roadmap QNGIkXIN62Sc
- * (this is a UI preview / simulation)
- */
+const POLL_MS = 1800;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// Map the server state-machine status onto the UI's job phase. `imaging`
+// becomes "done" — the dishes are all created (imported); photos are still
+// arriving, which the done-state copy + the photo sub-status already convey.
+function mapStatus(s: ImportProgress["status"]): JobStatus {
+  switch (s) {
+    case "detecting":
+      return "analyzing";
+    case "detected":
+      return "found";
+    case "parsing":
+      return "importing";
+    case "imaging":
+      return "done";
+    case "done":
+      return "done";
+    case "failed":
+      return "empty";
+  }
+}
+
 export function useImportEngine(toast?: (msg: string) => void): ImportEngine {
   const [job, setJob] = useState<ImportJob | null>(null);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const jobRef = useRef<ImportJob | null>(null);
+  const importIdRef = useRef<string | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastedDone = useRef(false);
 
-  const push = useCallback((t: ReturnType<typeof setTimeout>) => {
-    timers.current.push(t);
-    return t;
-  }, []);
-  const clearTimers = useCallback(() => {
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-  }, []);
-  useEffect(() => () => clearTimers(), [clearTimers]);
+  useEffect(() => {
+    jobRef.current = job;
+  }, [job]);
 
-  const patch = useCallback((i: number, p: Partial<ImportRecipe>) => {
+  const clearPoll = useCallback(() => {
+    if (pollTimer.current) {
+      clearTimeout(pollTimer.current);
+      pollTimer.current = null;
+    }
+  }, []);
+  useEffect(() => () => clearPoll(), [clearPoll]);
+
+  const patchRecipe = useCallback((i: number, p: Partial<ImportRecipe>) => {
     setJob((j) =>
       j ? { ...j, recipes: j.recipes.map((r, k) => (k === i ? { ...r, ...p } : r)) } : j,
     );
   }, []);
 
-  const analyze: ImportEngine["analyze"] = useCallback(
-    ({ text, fileName, source }) => {
-      clearTimers();
-      setJob({ status: "analyzing", source, fileName: fileName || "", text, recipes: [] });
-      push(
-        setTimeout(() => {
-          const titles = parseImportText(text);
-          const recipes: ImportRecipe[] = titles.map((title) => ({
-            title,
-            status: "pending",
-            photo: "pending",
-            failRoll: Math.random(),
-            photoRoll: Math.random(),
-          }));
-          setJob((j) => (j ? { ...j, status: recipes.length ? "found" : "empty", recipes } : j));
-        }, BI_ANALYZE_MS),
-      );
+  const applyProgress = useCallback(
+    (prog: ImportProgress) => {
+      setJob((j) => {
+        const base: ImportJob =
+          j ?? { status: "idle", source: "paste", fileName: "", text: "", recipes: [] };
+        const recipes: ImportRecipe[] = prog.recipes.map((r) => ({
+          title: r.title,
+          status: r.status,
+          photo: r.photo,
+          dishId: r.dishId,
+        }));
+        // One-shot "Imported X of N" toast the moment every dish has landed.
+        if ((prog.status === "imaging" || prog.status === "done") && !toastedDone.current) {
+          toastedDone.current = true;
+          const imported = recipes.filter((r) => r.status === "imported").length;
+          toast?.(`Imported ${imported} of ${recipes.length}`);
+        }
+        if (prog.status === "failed") toast?.(prog.error || "Couldn’t read that document.");
+        return { ...base, status: mapStatus(prog.status), recipes };
+      });
     },
-    [clearTimers, push],
+    [toast],
   );
 
-  // import a single recipe (SIMULATED): flip status, then its photo
-  // arrives later. No dish is created; nothing leaves local state.
-  const runOne = useCallback(
-    (i: number, isRetry: boolean) => {
-      patch(i, { status: "working" });
-      push(
-        setTimeout(
-          () => {
-            setJob((j) => {
-              if (!j) return j;
-              const r = j.recipes[i];
-              const fail = !isRetry && r.failRoll < 0.06;
-              if (fail) {
-                return {
-                  ...j,
-                  recipes: j.recipes.map((x, k) => (k === i ? { ...x, status: "failed" } : x)),
-                };
-              }
-              return {
-                ...j,
-                recipes: j.recipes.map((x, k) =>
-                  k === i ? { ...x, status: "imported", photo: "pending" } : x,
-                ),
-              };
-            });
-            // photo, a little later, independently fallible (SIMULATED)
-            push(
-              setTimeout(
-                () => {
-                  setJob((j) => {
-                    if (!j) return j;
-                    const r = j.recipes[i];
-                    if (r.status !== "imported") return j;
-                    const photoFail = !isRetry && r.photoRoll < 0.13;
-                    return {
-                      ...j,
-                      recipes: j.recipes.map((x, k) =>
-                        k === i ? { ...x, photo: photoFail ? "failed" : "done" } : x,
-                      ),
-                    };
-                  });
-                },
-                BI_PHOTO_MIN + Math.random() * BI_PHOTO_VAR,
-              ),
-            );
-          },
-          isRetry ? 600 : BI_IMPORT_MS,
-        ),
+  const pollOnce = useCallback(
+    async (importId: string) => {
+      if (importIdRef.current !== importId) return;
+      let prog: ImportProgress | null = null;
+      let httpOk = false;
+      try {
+        const res = await fetch(`/api/import/jobs/${importId}`);
+        httpOk = res.ok;
+        if (res.ok) prog = (await res.json()) as ImportProgress;
+      } catch {
+        /* transient network error */
+      }
+      if (importIdRef.current !== importId) return;
+      if (!prog) {
+        // Keep trying — a little slower so a flaky network/server doesn't spin.
+        pollTimer.current = setTimeout(() => pollOnce(importId), httpOk ? POLL_MS : 2800);
+        return;
+      }
+      applyProgress(prog);
+      const photosPending = prog.recipes.some(
+        (r) => r.status === "imported" && r.photo === "pending",
       );
+      const keep =
+        prog.status === "detecting" ||
+        prog.status === "parsing" ||
+        prog.status === "imaging" ||
+        (prog.status === "done" && photosPending);
+      if (keep) pollTimer.current = setTimeout(() => pollOnce(importId), POLL_MS);
+      // detected → stop until confirm(); done(no photos)/failed → stop
     },
-    [patch, push],
+    [applyProgress],
+  );
+
+  const startPolling = useCallback(
+    (importId: string, delay = POLL_MS) => {
+      clearPoll();
+      pollTimer.current = setTimeout(() => pollOnce(importId), delay);
+    },
+    [clearPoll, pollOnce],
+  );
+
+  const analyze: ImportEngine["analyze"] = useCallback(
+    ({ text, fileName, source }) => {
+      clearPoll();
+      toastedDone.current = false;
+      importIdRef.current = null;
+      setJob({ status: "analyzing", source, fileName: fileName || "", text, recipes: [] });
+      (async () => {
+        try {
+          const res = await fetch("/api/import", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text, fileName: fileName || undefined }),
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok || !data?.importId) {
+            toast?.(data?.error?.message || "Couldn’t start the import.");
+            setJob((j) => (j ? { ...j, status: "empty" } : j));
+            return;
+          }
+          importIdRef.current = data.importId as string;
+          startPolling(data.importId, 600);
+        } catch {
+          toast?.("Couldn’t reach the server.");
+          setJob((j) => (j ? { ...j, status: "empty" } : j));
+        }
+      })();
+    },
+    [clearPoll, startPolling, toast],
   );
 
   const confirm: ImportEngine["confirm"] = useCallback(() => {
-    setJob((j) => {
-      if (!j) return j;
-      j.recipes.forEach((r, i) => {
-        if (r.status === "pending") push(setTimeout(() => runOne(i, false), 250 + i * BI_STAGGER_MS));
-      });
-      return { ...j, status: "importing", startedAt: Date.now() };
-    });
-  }, [push, runOne]);
+    const importId = importIdRef.current;
+    if (!importId) return;
+    setJob((j) => (j ? { ...j, status: "importing", startedAt: Date.now() } : j));
+    fetch(`/api/import/${importId}/confirm`, { method: "POST" })
+      .catch(() => {})
+      .finally(() => startPolling(importId, 500));
+  }, [startPolling]);
 
   const retry: ImportEngine["retry"] = useCallback(
     (i) => {
+      const importId = importIdRef.current;
+      if (!importId) return;
       setJob((j) => (j ? { ...j, status: "importing" } : j));
-      runOne(i, true);
+      patchRecipe(i, { status: "working" });
+      fetch(`/api/import/${importId}/retry`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ index: i }),
+      })
+        .catch(() => {})
+        .finally(() => startPolling(importId, 500));
     },
-    [runOne],
+    [patchRecipe, startPolling],
   );
 
-  const retryPhoto: ImportEngine["retryPhoto"] = useCallback((i) => {
-    setJob((j) =>
-      j ? { ...j, recipes: j.recipes.map((x, k) => (k === i ? { ...x, photo: "done" } : x)) } : j,
-    );
-  }, []);
+  // A failed/absent photo can be regenerated in place via the normal async
+  // image-regen endpoint (the same one the dish edit page uses), then polled.
+  const retryPhoto: ImportEngine["retryPhoto"] = useCallback(
+    (i) => {
+      const dishId = jobRef.current?.recipes[i]?.dishId;
+      if (!dishId) return;
+      patchRecipe(i, { photo: "pending" });
+      (async () => {
+        try {
+          const res = await fetch(`/api/dishes/${dishId}/image`, { method: "POST" });
+          const data = await res.json().catch(() => null);
+          if (!res.ok || !data?.jobId) {
+            patchRecipe(i, { photo: "failed" });
+            return;
+          }
+          for (let n = 0; n < 45; n++) {
+            await sleep(2000);
+            if (jobRef.current?.recipes[i]?.dishId !== dishId) return; // dismissed/changed
+            const jr = await fetch(`/api/dishes/${dishId}/image/jobs/${data.jobId}`);
+            if (!jr.ok) continue;
+            const st = await jr.json();
+            if (st.status === "done") {
+              patchRecipe(i, { photo: "done" });
+              return;
+            }
+            if (st.status === "failed") {
+              patchRecipe(i, { photo: "failed" });
+              return;
+            }
+          }
+          patchRecipe(i, { photo: "failed" });
+        } catch {
+          patchRecipe(i, { photo: "failed" });
+        }
+      })();
+    },
+    [patchRecipe],
+  );
 
   const dismiss: ImportEngine["dismiss"] = useCallback(() => {
-    clearTimers();
+    clearPoll();
+    importIdRef.current = null;
     setJob(null);
-  }, [clearTimers]);
+  }, [clearPoll]);
 
   const reset: ImportEngine["reset"] = useCallback(() => {
-    clearTimers();
+    clearPoll();
+    importIdRef.current = null;
+    toastedDone.current = false;
     setJob((j) =>
       j ? { status: "idle", source: "paste", fileName: "", text: "", recipes: [] } : j,
     );
-  }, [clearTimers]);
-
-  // completion watcher — when nothing is pending/working, the import is
-  // settled. Flip to "done" + toast on a deferred tick rather than
-  // synchronously in the effect body (avoids cascading renders); a guard in
-  // the updater makes the transition idempotent if the effect re-runs first.
-  useEffect(() => {
-    if (!job || job.status !== "importing") return;
-    const busy = job.recipes.some((r) => r.status === "pending" || r.status === "working");
-    if (busy) return;
-    const total = job.recipes.length;
-    const ok = job.recipes.filter((r) => r.status === "imported").length;
-    const t = setTimeout(() => {
-      setJob((j) => (j && j.status === "importing" ? { ...j, status: "done" } : j));
-      toast?.(`Imported ${ok} of ${total}`);
-    }, 0);
-    return () => clearTimeout(t);
-  }, [job, toast]);
+  }, [clearPoll]);
 
   return { job, analyze, confirm, retry, retryPhoto, dismiss, reset };
 }
