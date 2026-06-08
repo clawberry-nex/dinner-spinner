@@ -19,6 +19,12 @@ const SPIN_MS = 2650;
 export default function SpinnerPage() {
   const router = useRouter();
   const [dishes, setDishes] = useState<Dish[]>([]);
+  // True until the first /api/dishes fetch settles. Without it the page
+  // renders the empty-kitchen state (dishes=[] on SSR + until the client
+  // fetch lands) and then snaps to the reel — a jarring flash. We show a
+  // skeleton reel instead, and only fall through to EmptyPool once we've
+  // actually confirmed the pool is empty.
+  const [loading, setLoading] = useState(true);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -45,10 +51,18 @@ export default function SpinnerPage() {
 
   const load = async (): Promise<Dish[]> => {
     const qs = selected.length ? `?tags=${encodeURIComponent(selected.join(","))}` : "";
-    const res = await fetch(`/api/dishes${qs}`);
-    const data: Dish[] = await res.json();
-    setDishes(data);
-    return data;
+    try {
+      const res = await fetch(`/api/dishes${qs}`);
+      const data: Dish[] = await res.json();
+      setDishes(data);
+      return data;
+    } catch {
+      return [];
+    } finally {
+      // Clears the skeleton after the first fetch (and stays cleared — later
+      // filter re-fetches keep the reel visible rather than flashing back).
+      setLoading(false);
+    }
   };
 
   // `load` is stable enough for this effect; re-creating it on every render
@@ -114,14 +128,20 @@ export default function SpinnerPage() {
             </h1>
             {phase !== "result" && (
               <div className="mt-2 text-[13.5px] text-text-dim lg:text-[15px]">
-                {poolSize} {poolSize === 1 ? "dish" : "dishes"} in the running
-                {narrowed && " · narrowed"}
+                {loading ? (
+                  "Gathering your dishes…"
+                ) : (
+                  <>
+                    {poolSize} {poolSize === 1 ? "dish" : "dishes"} in the running
+                    {narrowed && " · narrowed"}
+                  </>
+                )}
               </div>
             )}
           </div>
 
           {/* Inline tag-chip rail (the real /api/tags filter + persistence). */}
-          {phase !== "result" && allTags.length > 0 && (
+          {phase !== "result" && !loading && allTags.length > 0 && (
             <div className="-mx-1 mt-4 flex gap-[6px] overflow-x-auto px-1 pb-1 no-scrollbar lg:flex-wrap lg:overflow-visible">
               {allTags.slice(0, 14).map((t) => {
                 const on = selected.includes(t);
@@ -146,7 +166,9 @@ export default function SpinnerPage() {
             </div>
           )}
 
-          {poolSize === 0 ? (
+          {loading ? (
+            <LoadingStage />
+          ) : poolSize === 0 ? (
             <EmptyPool
               narrowed={narrowed}
               onClear={() => { reset(); setSelected([]); }}
@@ -225,6 +247,111 @@ export default function SpinnerPage() {
             </>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// Loading stage — a skeleton of the filmstrip shown while the first
+// /api/dishes fetch is in flight. It mirrors the Filmstrip's geometry
+// (depth band, a centered card scaled up between dimmed neighbours, edge
+// fades, the dimmed focus frame) so when real cards arrive they resolve
+// into the same layout with no jump — and the page never flashes the
+// empty-kitchen state first. Measures its own width like the Filmstrip so
+// the card box matches the wide/narrow breakpoint.
+// ---------------------------------------------------------------
+function LoadingStage() {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [w, setW] = useState(380);
+  useEffect(() => {
+    const measure = () => { if (ref.current) setW(ref.current.offsetWidth); };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  const wide = w >= 720;
+  const CARD = wide ? 176 : 132;
+  const CARDH = wide ? 222 : 168;
+  const GAP = wide ? 22 : 16;
+  const FRAME_W = CARD + 14;
+  const FRAME_H = CARDH + 14;
+
+  return (
+    <div className="mt-6 flex flex-col lg:mt-10 lg:min-h-[46vh] lg:justify-center">
+      <div ref={ref} className="relative" style={{ margin: "10px 0 0" }}>
+        <div className="relative overflow-hidden" style={{ height: CARDH + 30 }}>
+          {/* depth band */}
+          <div
+            className="pointer-events-none absolute left-0 right-0 top-1/2 z-0 -translate-y-1/2"
+            style={{
+              height: CARDH + 24,
+              background: "radial-gradient(70% 120% at 50% 50%, var(--surface) 0%, transparent 72%)",
+              opacity: 0.6,
+            }}
+          />
+          {/* placeholder cards: centre scaled up, neighbours dimmed — matches the reel */}
+          <div
+            className="absolute left-1/2 top-1/2 z-[1] flex -translate-x-1/2 -translate-y-1/2"
+            style={{ gap: GAP }}
+          >
+            {[-2, -1, 0, 1, 2].map((s) => {
+              const center = s === 0;
+              return (
+                <div
+                  key={s}
+                  className="relative shrink-0 overflow-hidden rounded-[12px] border border-line-2"
+                  style={{
+                    width: CARD,
+                    height: CARDH,
+                    transform: center ? "scale(1.02)" : "scale(0.88)",
+                    opacity: center ? 1 : 0.5,
+                    background: "var(--surface-2)",
+                  }}
+                >
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background:
+                        "linear-gradient(100deg, transparent 25%, rgba(255,255,255,0.07) 50%, transparent 75%)",
+                      backgroundSize: "220% 100%",
+                      animation: "ds-shimmer 1.5s linear infinite",
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          {/* edge fades */}
+          <div
+            className="pointer-events-none absolute inset-0 z-[3]"
+            style={{
+              background:
+                "linear-gradient(90deg, var(--bg) 0%, transparent 20%, transparent 80%, var(--bg) 100%)",
+            }}
+          />
+        </div>
+        {/* dimmed focus frame, centred like the live one */}
+        <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center">
+          <svg
+            width={FRAME_W}
+            height={FRAME_H + 16}
+            viewBox={`0 0 ${FRAME_W} ${FRAME_H + 16}`}
+            fill="none"
+            style={{ overflow: "visible", opacity: 0.55 }}
+          >
+            <rect x={1} y={8} width={FRAME_W - 2} height={FRAME_H} rx={14} ry={14} stroke="var(--accent)" strokeWidth={2} />
+            <rect x={FRAME_W / 2 - 5.5} y={2.5} width={11} height={11} rx={2} fill="var(--accent)" transform={`rotate(45 ${FRAME_W / 2} 8)`} />
+            <rect x={FRAME_W / 2 - 5.5} y={8 + FRAME_H - 5.5} width={11} height={11} rx={2} fill="var(--accent)" transform={`rotate(45 ${FRAME_W / 2} ${8 + FRAME_H})`} />
+          </svg>
+        </div>
+      </div>
+      {/* placeholder for the spin button, holding the layout height */}
+      <div className="mt-7 flex justify-center lg:mt-10">
+        <div
+          className="h-14 w-full max-w-md rounded-pill lg:h-[58px] lg:w-[260px]"
+          style={{ background: "var(--surface-2)", opacity: 0.5 }}
+        />
       </div>
     </div>
   );
