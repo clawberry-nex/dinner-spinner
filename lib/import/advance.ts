@@ -27,6 +27,12 @@ const GOOGLE_IMAGE_MODEL = "gemini-3-pro-image-preview";
 const PARSE_CONCURRENCY = 3; // parse jobs in flight at once
 const IMAGE_BATCH_MAX = 200; // Gemini inline-batch ceiling (Blob/DB cost, not a Gemini limit)
 const IMAGE_APPLY_SLICE = 12; // image uploads applied per step (~each ≤300ms)
+// The browser polls this import every couple of seconds, but a Gemini batch
+// takes minutes — so we must NOT poll Gemini on every client poll (that floods
+// it with requests and earns 503s). Throttle the Gemini poll to once per
+// interval regardless of client cadence, and bound the total wait.
+const IMAGE_POLL_INTERVAL_MS = 15_000;
+const IMAGE_MAX_ATTEMPTS = 80; // ~20 min of polling, then give up (dishes stay imageless)
 
 function token(): string {
   // Routes guard NEX_API_TOKEN presence before calling advance; assert here.
@@ -300,15 +306,28 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
   }
 
   // Subsequent steps: poll unapplied batches; apply succeeded results in a slice.
+  const now = Date.now();
   let applied = 0;
   for (const batch of row.image_batches) {
     if (batch.applied) continue;
     if (applied >= IMAGE_APPLY_SLICE) break;
+    // Throttle: hit Gemini at most once per interval, no matter how fast the
+    // browser polls this endpoint — otherwise a minutes-long batch gets a poll
+    // every ~2s and Gemini answers with 503s.
+    if (batch.polledAt && now - batch.polledAt < IMAGE_POLL_INTERVAL_MS) continue;
+    batch.polledAt = now;
+    batch.attempts = (batch.attempts ?? 0) + 1;
+    // Bound the wait — give up on a batch that never resolves so the import
+    // can finish (its dishes stay imageless, regenerable from the dish).
+    if (batch.attempts > IMAGE_MAX_ATTEMPTS) {
+      batch.applied = true;
+      continue;
+    }
     let polled;
     try {
       polled = await pollBatch(apiKey, batch.name);
     } catch {
-      continue; // transient — retry next poll
+      continue; // transient (e.g. Gemini 503) — retry after the throttle interval
     }
     batch.state = polled.state;
     if (polled.state !== "BATCH_STATE_SUCCEEDED" || !polled.results) continue;
@@ -346,8 +365,16 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
     if (!stillPending) batch.applied = true;
   }
 
+  // If every batch is settled (applied or given up) but some dishes never got
+  // an image, finish them imageless rather than spin forever.
+  const allBatchesSettled = row.image_batches.every((b) => b.applied);
+  if (allBatchesSettled) {
+    for (const c of row.chunks) {
+      if (c.status === "created" && (c.image ?? "pending") === "pending") c.image = "failed";
+    }
+  }
   if (
-    row.image_batches.every((b) => b.applied) ||
+    allBatchesSettled ||
     !row.chunks.some((c) => c.status === "created" && (c.image ?? "pending") === "pending")
   ) {
     row.status = "done";

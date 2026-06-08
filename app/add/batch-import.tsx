@@ -72,6 +72,9 @@ export type ImportEngine = {
 };
 
 const POLL_MS = 1800;
+// The imaging phase waits on a minutes-long Gemini batch, so poll gently there
+// (the server also throttles its own Gemini calls — this just trims Vercel hits).
+const IMAGE_PHASE_POLL_MS = 6000;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // Map the server state-machine status onto the UI's job phase. `imaging`
@@ -170,7 +173,11 @@ export function useImportEngine(toast?: (msg: string) => void): ImportEngine {
         prog.status === "parsing" ||
         prog.status === "imaging" ||
         (prog.status === "done" && photosPending);
-      if (keep) pollTimer.current = setTimeout(() => pollOnce(importId), POLL_MS);
+      if (keep) {
+        // detect/parse move fast; the imaging wait is gentle.
+        const slow = prog.status === "imaging" || (prog.status === "done" && photosPending);
+        pollTimer.current = setTimeout(() => pollOnce(importId), slow ? IMAGE_PHASE_POLL_MS : POLL_MS);
+      }
       // detected → stop until confirm(); done(no photos)/failed → stop
     },
     [applyProgress],
