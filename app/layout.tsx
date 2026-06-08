@@ -25,10 +25,10 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
   },
   icons: {
-    icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-    ],
+    // The browser-tab favicon comes from the file-convention app/icon.svg +
+    // app/favicon.ico — the simplified glyph that stays legible at 16px. The
+    // detailed spinner wheel lives in the PWA manifest (icon-192/512) and the
+    // apple-touch icon below, where there's room for it.
     apple: "/icons/apple-touch-icon.png",
   },
 };
