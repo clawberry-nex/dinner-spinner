@@ -219,13 +219,45 @@ export class GoogleProvider implements ImageProvider {
   }
 }
 
+// Tries each provider in order, falling through to the next on ANY error. This
+// is what keeps image generation alive when the primary (Gemini) is rate-limited
+// or returns 503 "experiencing high demand" — it transparently retries on
+// Replicate. One attempt per provider per image, so it never floods.
+export class FallbackProvider implements ImageProvider {
+  private readonly providers: ImageProvider[];
+  constructor(providers: ImageProvider[]) {
+    this.providers = providers;
+  }
+  async generate(prompt: string): Promise<{ bytes: Uint8Array; mime: string }> {
+    let lastErr: unknown = new Error(NOT_CONFIGURED);
+    for (const p of this.providers) {
+      try {
+        return await p.generate(prompt);
+      } catch (err) {
+        lastErr = err;
+        console.warn(
+          `image provider ${p.constructor.name} failed, trying next:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error(NOT_CONFIGURED);
+  }
+}
+
 export function getProvider(): ImageProvider {
+  // Build the chain in preference order; FallbackProvider tries each until one
+  // succeeds. Gemini first (best quality), Replicate as the resilient fallback.
+  const providers: ImageProvider[] = [];
   const geminiKey = process.env.GEMINI_API_KEY;
-  if (geminiKey) return new GoogleProvider(geminiKey);
+  if (geminiKey) providers.push(new GoogleProvider(geminiKey));
   const replicateToken = process.env.REPLICATE_API_TOKEN;
-  if (replicateToken) return new ReplicateProvider(replicateToken);
+  if (replicateToken) providers.push(new ReplicateProvider(replicateToken));
   const url = process.env.IMAGE_GEN_URL;
   const token = process.env.IMAGE_GEN_TOKEN;
-  if (url && token) return new HttpProvider(url, token);
-  return new StubProvider();
+  if (url && token) providers.push(new HttpProvider(url, token));
+
+  if (providers.length === 0) return new StubProvider();
+  if (providers.length === 1) return providers[0];
+  return new FallbackProvider(providers);
 }
