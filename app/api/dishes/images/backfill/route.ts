@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { sql } from "@/lib/db";
 import { rowToDish } from "@/lib/types";
-import { resolveUserId } from "@/lib/auth-helpers";
+import { resolveUserId, isSeedOwner } from "@/lib/auth-helpers";
 import { buildImagePrompt } from "@/lib/image-prompt";
 import { getProvider } from "@/lib/image-provider";
 import { uploadDishImage } from "@/lib/image-storage";
@@ -10,7 +10,11 @@ const CONCURRENCY = 4;
 
 type BulkBody = { overwrite?: boolean };
 
-async function generateForDishId(dishId: number, userId: string): Promise<void> {
+async function generateForDishId(
+  dishId: number,
+  userId: string,
+  premium: boolean,
+): Promise<void> {
   const rows = await sql`
     SELECT * FROM dishes WHERE id = ${dishId} AND user_id = ${userId}
   `;
@@ -21,7 +25,7 @@ async function generateForDishId(dishId: number, userId: string): Promise<void> 
     subtitle: dish.subtitle,
     imageDescription: dish.imageDescription,
   });
-  const { bytes, mime } = await getProvider().generate(prompt);
+  const { bytes, mime } = await getProvider({ premium }).generate(prompt);
   const imageUrl = await uploadDishImage(dishId, bytes, mime);
   await sql`
     UPDATE dishes
@@ -57,6 +61,7 @@ async function runWithConcurrency<T, R>(
 export async function POST(req: NextRequest) {
   const userId = await resolveUserId(req);
   if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const premium = await isSeedOwner(userId);
 
   let body: BulkBody = {};
   try {
@@ -72,7 +77,7 @@ export async function POST(req: NextRequest) {
   const ids = idRows.map((r) => Number(r.id));
 
   const settled = await runWithConcurrency(ids, CONCURRENCY, (dishId) =>
-    generateForDishId(dishId, userId),
+    generateForDishId(dishId, userId, premium),
   );
   const failed: Array<{ dishId: number; error: string }> = [];
   let ok = 0;
