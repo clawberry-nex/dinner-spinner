@@ -356,7 +356,10 @@ function Filmstrip({
           gap: GAP,
           transform: `translateX(${idleX}px)`,
           marginTop: -(CARDH / 2),
-          willChange: "transform, filter",
+          // Only hint transform persistently; the blur is applied imperatively
+          // for ~2s during a spin, so a permanent filter layer just invites
+          // compositing artifacts on the focus frame above it.
+          willChange: "transform",
         }}
       >
         {reel.map((d, i) => {
@@ -417,6 +420,12 @@ function Filmstrip({
           height: FRAME_H,
           borderRadius: 15,
           border: "2px solid var(--accent)",
+          // Promote to its own compositing layer so the crisp border never
+          // shares a GPU layer with the blurred, fast-translating track behind
+          // it — without this, mobile GPUs render the border in broken pieces
+          // mid-spin. (Centering stays on the Tailwind -translate-x/y classes;
+          // will-change alone promotes the layer without overriding them.)
+          willChange: "transform",
           animation: phase === "result" ? "ds-framepop .55s cubic-bezier(.2,.8,.2,1)" : "none",
         }}
       >
