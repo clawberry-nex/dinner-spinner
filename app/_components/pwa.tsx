@@ -92,7 +92,7 @@ export function Pwa() {
 
   return (
     <div
-      className="fixed inset-x-3 bottom-3 z-40 mx-auto max-w-md rounded-md border border-rule bg-paper p-3 text-[13px] text-ink shadow-lg sm:bottom-4"
+      className="fixed inset-x-3 bottom-3 z-40 mx-auto max-w-md rounded-md border border-line bg-surface p-3 text-[13px] text-text shadow-lg sm:bottom-4"
       role="dialog"
       aria-label="Install Dinner Spinner"
     >
@@ -100,7 +100,7 @@ export function Pwa() {
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <div className="font-medium">Install Dinner Spinner</div>
-            <div className="text-ink-3 text-[12px]">Add to your home screen for one-tap access.</div>
+            <div className="text-text-faint text-[12px]">Add to your home screen for one-tap access.</div>
           </div>
           <button
             type="button"
@@ -113,7 +113,7 @@ export function Pwa() {
             type="button"
             onClick={dismiss}
             aria-label="Dismiss install prompt"
-            className="rounded-pill border border-rule px-2 py-[6px] text-[12px] text-ink-2 hover:border-ink-3"
+            className="rounded-pill border border-line px-2 py-[6px] text-[12px] text-text-dim hover:border-text-faint"
           >
             ×
           </button>
@@ -122,7 +122,7 @@ export function Pwa() {
         <div className="flex items-start gap-3">
           <div className="flex-1">
             <div className="font-medium">Add to Home Screen</div>
-            <div className="text-ink-3 text-[12px]">
+            <div className="text-text-faint text-[12px]">
               Tap <span aria-hidden>⬆︎</span> Share, then &ldquo;Add to Home Screen&rdquo;.
             </div>
           </div>
@@ -130,7 +130,7 @@ export function Pwa() {
             type="button"
             onClick={dismiss}
             aria-label="Dismiss install prompt"
-            className="rounded-pill border border-rule px-2 py-[6px] text-[12px] text-ink-2 hover:border-ink-3"
+            className="rounded-pill border border-line px-2 py-[6px] text-[12px] text-text-dim hover:border-text-faint"
           >
             ×
           </button>

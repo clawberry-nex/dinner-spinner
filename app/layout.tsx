@@ -61,7 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="h-[100dvh] overflow-hidden bg-bg text-ink">
+      <body className="h-[100dvh] overflow-hidden bg-bg text-text">
         <ThemeProvider>
           <RootShell isSignedIn={isSignedIn}>{children}</RootShell>
           <Pwa />

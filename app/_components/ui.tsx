@@ -12,7 +12,7 @@ export function Chip({ active, onClick, children, size = "md" }: ChipProps) {
     pads,
     active
       ? "border-accent bg-accent text-accent-ink"
-      : "border-rule bg-transparent text-ink-2 hover:border-ink-3",
+      : "border-line bg-transparent text-text-dim hover:border-text-faint",
   ].join(" ");
   return (
     <button type="button" onClick={onClick} className={cls} style={{ letterSpacing: 0.2 }}>
@@ -23,7 +23,7 @@ export function Chip({ active, onClick, children, size = "md" }: ChipProps) {
 
 export function Badge({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded-sm bg-bg-alt px-[6px] py-[2px] text-[9px] font-semibold uppercase tracking-[0.1em] text-ink-3">
+    <span className="rounded-sm bg-bg-deep px-[6px] py-[2px] text-[9px] font-semibold uppercase tracking-[0.1em] text-text-faint">
       {children}
     </span>
   );
@@ -68,9 +68,9 @@ export function Button({ variant = "primary", size = "md", onClick, type = "butt
   }[size];
   const variants = {
     primary: "bg-accent text-accent-ink border border-accent",
-    ghost:   "bg-transparent text-ink border border-rule hover:border-ink-3",
-    ink:     "bg-ink text-paper border border-ink",
-    link:    "bg-transparent text-ink-2 border-0 underline-offset-4 hover:underline",
+    ghost:   "bg-transparent text-text border border-line hover:border-text-faint",
+    ink:     "bg-text text-surface border border-text",
+    link:    "bg-transparent text-text-dim border-0 underline-offset-4 hover:underline",
   }[variant];
   return (
     <button
@@ -92,7 +92,7 @@ export function StepperButton({ kind, onClick, ariaLabel }: { kind: "plus" | "mi
       type="button"
       onClick={onClick}
       aria-label={ariaLabel}
-      className="grid h-9 w-9 place-items-center rounded-pill border border-rule bg-bg text-ink hover:border-ink-3"
+      className="grid h-9 w-9 place-items-center rounded-pill border border-line bg-bg text-text hover:border-text-faint"
     >
       <Icon name={kind} size={16} />
     </button>
@@ -242,7 +242,7 @@ export function useToast() {
     window.setTimeout(() => setMsg(null), 2000);
   }, []);
   const el = msg ? (
-    <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-pill bg-ink px-4 py-[10px] text-[13px] font-medium text-paper shadow-[0_8px_24px_rgba(0,0,0,0.2)]">
+    <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-pill bg-text px-4 py-[10px] text-[13px] font-medium text-surface shadow-[0_8px_24px_rgba(0,0,0,0.2)]">
       {msg}
     </div>
   ) : null;

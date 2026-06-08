@@ -103,19 +103,6 @@
   --color-rose-tint:   var(--rose-tint);
   --color-blue:        var(--blue);
 
-  /* — backward-compat aliases (old token names → new values).
-     Lets pre-V2 surfaces keep rendering during the incremental rollout;
-     dropped in the finalize phase once every surface is migrated. — */
-  --color-paper:      var(--surface);
-  --color-bg-alt:     var(--bg-deep);
-  --color-ink:        var(--text);
-  --color-ink-2:      var(--text-dim);
-  --color-ink-3:      var(--text-faint);
-  --color-rule:       var(--line);
-  --color-rule-soft:  var(--line-2);
-  --color-warn:       var(--rose);
-  --color-good:       var(--sage);
-
   /* — radii — */
   --radius-xs:   var(--r-xs);
   --radius-sm:   var(--r-sm);
