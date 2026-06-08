@@ -358,7 +358,7 @@ export default function CookView({
           type="button"
           onClick={exit}
           aria-label="Exit cooking"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-[var(--radius-md)] border border-line bg-surface text-text transition-colors hover:bg-surface-2 lg:w-auto lg:gap-2 lg:px-[14px]"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-line bg-surface text-text transition-colors hover:bg-surface-2 lg:w-auto lg:gap-2 lg:px-[14px]"
         >
           <Icon name="close" size={19} />
           <span className="hidden text-[13px] font-medium lg:inline" style={{ fontFamily: "var(--font-sans)" }}>
