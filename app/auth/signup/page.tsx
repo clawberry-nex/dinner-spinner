@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import { AuthShell, GoogleButton, authInputCls, AuthError } from "../auth-shell";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -42,25 +43,35 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="mx-auto mt-16 flex w-full max-w-sm flex-col gap-6 rounded-lg border border-zinc-200 bg-paper p-6 shadow-sm dark:border-zinc-800">
-      <h1 className="text-center text-xl font-semibold">Create your account</h1>
-      <form onSubmit={onSubmit} className="flex flex-col gap-3">
+    <AuthShell
+      heading="Request access"
+      copy="Dinner Spinner is invite-only while it's small. If your email's on the list, you'll be dropped straight in."
+    >
+      <GoogleButton onClick={() => signIn("google", { callbackUrl: "/" })} />
+
+      <div className="my-5 flex items-center gap-3">
+        <span className="h-px flex-1 bg-line" />
+        <span className="text-[12px] text-text-faint">or</span>
+        <span className="h-px flex-1 bg-line" />
+      </div>
+
+      <form onSubmit={onSubmit} className="flex flex-col gap-[11px]">
         <input
           type="text"
           placeholder="Your name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           autoComplete="name"
-          className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+          className={authInputCls}
         />
         <input
           type="email"
           required
-          placeholder="Email"
+          placeholder="you@email.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
-          className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+          className={authInputCls}
         />
         <input
           type="password"
@@ -70,24 +81,40 @@ export default function SignUpPage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="new-password"
-          className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+          className={authInputCls}
         />
+        {msg && <AuthError>{msg}</AuthError>}
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-md bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-70"
+          className="mt-[5px] inline-flex h-[52px] items-center justify-center gap-[10px] rounded-[var(--radius-md)] border border-accent bg-accent text-[15.5px] font-semibold text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-60"
+          style={{ letterSpacing: 0.2 }}
         >
-          {submitting ? "Creating…" : "Create account"}
+          {submitting ? (
+            <>
+              <span className="spin inline-block h-[16px] w-[16px] rounded-full border-2 border-accent-ink/30 border-t-accent-ink" />
+              One moment…
+            </>
+          ) : (
+            "Create account"
+          )}
         </button>
-        {msg && <p className="text-sm text-red-600">{msg}</p>}
       </form>
-      <p className="text-center text-sm">
+
+      <p className="mt-[18px] text-center text-[13.5px] text-text-dim">
         Already have an account?{" "}
-        <Link href="/auth/signin" className="text-emerald-600 hover:underline">
+        <Link
+          href="/auth/signin"
+          className="font-semibold text-accent-2 hover:underline"
+        >
           Sign in
         </Link>
       </p>
-    </div>
+      <p className="mx-auto mt-[10px] max-w-[280px] text-center text-[12px] leading-[1.5] text-text-faint">
+        Dinner Spinner is invite-only while it&rsquo;s small. If your email&rsquo;s
+        on the list, you&rsquo;ll be dropped straight in.
+      </p>
+    </AuthShell>
   );
 }
 
