@@ -32,6 +32,11 @@ export interface ImageBatch {
   state: string;
   /** true once every result for this batch has been applied (or marked failed). */
   applied: boolean;
+  /** epoch ms of the last Gemini poll — throttles polling independently of the
+   *  client's (much faster) poll cadence so we don't hammer Gemini. */
+  polledAt?: number;
+  /** number of Gemini polls so far — bounds how long we wait for a batch. */
+  attempts?: number;
 }
 
 /** The import_jobs DB row (chunks/image_batches are jsonb, auto-parsed by neon). */
