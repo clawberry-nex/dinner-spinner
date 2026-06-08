@@ -136,3 +136,31 @@ CREATE TABLE IF NOT EXISTS image_jobs (
 );
 CREATE INDEX IF NOT EXISTS image_jobs_dish_id_idx ON image_jobs (dish_id);
 CREATE INDEX IF NOT EXISTS image_jobs_created_at_idx ON image_jobs (created_at);
+
+-- Batch recipe import jobs (2026-06). POST /api/import inserts a 'detecting'
+-- row and starts a claude-agent "detect" job that splits the uploaded/pasted
+-- text into N recipe chunks; GET /api/import/jobs/[id] advances the state
+-- machine ONE bounded step per poll (detect → parse each chunk via the
+-- single-ingest claude-agent path → create dish → Gemini image batch),
+-- persisting progress so the import survives navigation and resumes on return.
+--   status:        detecting → detected → parsing → imaging → done (+failed)
+--   chunks:        [{title, text, status, parseJobId, dishId, error}] per recipe
+--   image_batches: [{name, state, applied}] Gemini batch job(s)
+--   locked_until:  set while one poll advances, so two tabs can't double-advance
+-- Rows are opportunistically pruned (>1 day) on each POST — no cron.
+-- gen_random_uuid() comes from pgcrypto (enabled above).
+CREATE TABLE IF NOT EXISTS import_jobs (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status        text NOT NULL DEFAULT 'detecting',
+  detect_job_id text,
+  file_name     text,
+  chunks        jsonb NOT NULL DEFAULT '[]',
+  image_batches jsonb NOT NULL DEFAULT '[]',
+  error         text,
+  locked_until  timestamptz,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS import_jobs_user_id_idx ON import_jobs (user_id);
+CREATE INDEX IF NOT EXISTS import_jobs_created_at_idx ON import_jobs (created_at);

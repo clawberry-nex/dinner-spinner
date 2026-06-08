@@ -21,8 +21,8 @@ export default function AddPage() {
   const [batchOpen, setBatchOpen] = useState(false);
 
   const { show, el: toastEl } = useToast();
-  // SIMULATED batch-import engine (preview). See batch-import.tsx — nothing
-  // here writes to the real library.
+  // Real batch-import engine — POSTs /api/import and polls the job. See
+  // batch-import.tsx.
   const engine = useImportEngine(show);
 
   const openManualWith = (title: string) => {
@@ -69,7 +69,7 @@ export default function AddPage() {
               <>
                 <IngestInput />
 
-                {/* Batch import entry (PREVIEW). */}
+                {/* Batch import entry. */}
                 <button
                   type="button"
                   onClick={() => setBatchOpen(true)}
@@ -79,14 +79,9 @@ export default function AddPage() {
                     <Icon name="list" size={19} style={{ color: "var(--accent-2)" }} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="text-[14px] font-semibold text-text">Batch import</span>
-                      <span className="rounded-pill border border-accent-line bg-accent-tint px-[7px] py-[1px] text-[9.5px] font-bold uppercase tracking-[0.08em] text-accent-2">
-                        Preview
-                      </span>
-                    </span>
+                    <span className="text-[14px] font-semibold text-text">Batch import</span>
                     <span className="mt-[1px] block text-[12.5px] text-text-faint">
-                      Upload or paste a list — import many at once
+                      Upload or paste a document — import many recipes at once
                     </span>
                   </span>
                   <Icon name="chevR" size={17} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
