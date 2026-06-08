@@ -34,6 +34,25 @@ export interface BatchPollResult {
   results?: BatchInlinedResponse[];
 }
 
+/**
+ * Best-effort cancel of a batch so Gemini stops processing (and retrying) its
+ * pending requests. A submitted batch keeps being worked by Gemini regardless
+ * of whether we poll it — if we abandon one (sync took over, or we gave up) and
+ * the image model is busy, Gemini retries its pending requests indefinitely,
+ * which shows up as a 503 storm. Always cancel a batch we're done with.
+ */
+export async function cancelBatch(apiKey: string, name: string): Promise<void> {
+  try {
+    await fetch(`${BASE}/${name}:cancel`, {
+      method: "POST",
+      headers: { "x-goog-api-key": apiKey, "content-type": "application/json" },
+      body: "{}",
+    });
+  } catch {
+    /* best-effort — nothing to do if it fails */
+  }
+}
+
 export async function submitImageBatch(
   apiKey: string,
   model: string,

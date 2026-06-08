@@ -13,7 +13,7 @@ import { getPantryDefaults } from "@/lib/pantry";
 import { languageName } from "@/lib/languages";
 import { createDishForUser } from "@/lib/dish-create";
 import { generateAndStoreImage } from "@/lib/dish-image";
-import { submitImageBatch, pollBatch, type BatchRequest } from "@/lib/gemini-batch";
+import { submitImageBatch, pollBatch, cancelBatch, type BatchRequest } from "@/lib/gemini-batch";
 import { buildImagePrompt } from "@/lib/image-prompt";
 import { uploadDishImage } from "@/lib/image-storage";
 import { type ImportRow, type ImportChunk, type ImageBatch } from "./types";
@@ -294,8 +294,14 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
 
   // Small imports → fast synchronous per-dish generation (no Gemini batch). This
   // also recovers any ≤-threshold import that had already kicked off a slow
-  // batch — we generate directly and leave the stale batch unpolled.
+  // batch — cancel that batch first so Gemini stops retrying its pending images.
   if (pending.length <= IMAGE_SYNC_THRESHOLD) {
+    if (apiKey && row.image_batches.length) {
+      for (const b of row.image_batches) {
+        if (!b.applied) await cancelBatch(apiKey, b.name);
+      }
+      row.image_batches = [];
+    }
     return advanceImagingSync(row, pending);
   }
 
@@ -372,8 +378,10 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
     batch.polledAt = now;
     batch.attempts = (batch.attempts ?? 0) + 1;
     // Bound the wait — give up on a batch that never resolves so the import
-    // can finish (its dishes stay imageless, regenerable from the dish).
+    // can finish (its dishes stay imageless, regenerable from the dish). Cancel
+    // it so Gemini stops retrying its pending requests (a 503 storm otherwise).
     if (batch.attempts > IMAGE_MAX_ATTEMPTS) {
+      await cancelBatch(apiKey, batch.name);
       batch.applied = true;
       continue;
     }
