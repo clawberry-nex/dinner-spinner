@@ -261,18 +261,15 @@ export default function DishView({
               </div>
             )}
 
-            {/* visitor credit, pinned bottom-left of the hero */}
+            {/* visitor credit — mobile only, pinned to the hero's bottom-left.
+                On desktop it would collide with the title overlay's subtitle (same
+                corner), so desktop renders it in the overlay flow instead (below). */}
             {!isOwner && (ownerHandle || ownerName) && (
-              <div className="absolute bottom-[14px] left-[22px] z-[5] flex items-center gap-[7px] text-[12.5px] text-text-dim lg:left-[48px] lg:bottom-7">
-                <span>shared by</span>
-                {ownerHandle ? (
-                  <Link href={`/u/${ownerHandle}`} className="font-semibold text-accent-2 hover:underline">
-                    {ownerName?.trim() || `@${ownerHandle}`}
-                  </Link>
-                ) : (
-                  <span className="font-semibold text-accent-2">{ownerName}</span>
-                )}
-              </div>
+              <SharedBy
+                ownerHandle={ownerHandle}
+                ownerName={ownerName}
+                className="absolute bottom-[14px] left-[22px] z-[5] text-[12.5px] lg:hidden"
+              />
             )}
 
             {/* Desktop hero title overlay (sits in the bottom scrim). */}
@@ -299,6 +296,15 @@ export default function DishView({
                     <HeroPill icon="clock">{relTime(dish.lastCookedAt)}</HeroPill>
                     <HeroPill icon="user2">{dish.baseServings} servings</HeroPill>
                   </div>
+                )}
+                {/* visitor credit (desktop) — sits in the overlay flow below the
+                    subtitle, mirroring where the owner's pills go. */}
+                {!isOwner && (ownerHandle || ownerName) && (
+                  <SharedBy
+                    ownerHandle={ownerHandle}
+                    ownerName={ownerName}
+                    className="mt-[14px] text-[13px]"
+                  />
                 )}
               </div>
             </div>
@@ -560,6 +566,32 @@ function HeroPill({
       <Icon name={icon} size={13} fill={fill} style={{ color: iconColor ?? "rgba(255,255,255,0.82)" }} />
       {children}
     </span>
+  );
+}
+
+// "shared by <owner>" credit shown to visitors (non-owners). Rendered in two
+// places with different positioning: pinned to the hero on mobile, and in the
+// title-overlay flow on desktop (see DishView's hero).
+function SharedBy({
+  ownerHandle,
+  ownerName,
+  className,
+}: {
+  ownerHandle: string | null;
+  ownerName: string | null;
+  className?: string;
+}) {
+  return (
+    <div className={["flex items-center gap-[7px] text-text-dim", className ?? ""].join(" ")}>
+      <span>shared by</span>
+      {ownerHandle ? (
+        <Link href={`/u/${ownerHandle}`} className="font-semibold text-accent-2 hover:underline">
+          {ownerName?.trim() || `@${ownerHandle}`}
+        </Link>
+      ) : (
+        <span className="font-semibold text-accent-2">{ownerName}</span>
+      )}
+    </div>
   );
 }
 
