@@ -92,12 +92,16 @@ export async function POST(request: Request): Promise<Response> {
       image,
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
-      // Haiku. Empirically: with the anyOf-free tool schema (see
-      // lib/ingest/schema.ts) Haiku reliably calls submit_result with a
-      // well-formed methodRefs array and completes within claude-agent's
-      // 8-turn structured-output budget. Sonnet exhausted that budget on this
-      // heavier translate+methodRefs prompt (Reached maximum number of turns).
-      model: "haiku",
+      // Photo ingests run on Opus (claude-opus-4-8) for its high-resolution
+      // vision (up to a 2576px long edge — see lib/image-compress.ts): it reads
+      // small printed quantities (½, 175g) far more accurately than Haiku, which
+      // is what makes ingredient amounts come out right from a photo. Verified
+      // 4/4 valid structured outputs within claude-agent's 8-turn budget (Sonnet
+      // used to exhaust it). Text-only ingests have no OCR problem, so they stay
+      // on Haiku — ~30× cheaper (~$0.005 vs ~$0.15/photo) and equally reliable
+      // for the structured prompt. With the anyOf-free schema (lib/ingest/
+      // schema.ts) both models reliably call submit_result with a valid payload.
+      model: image ? "opus" : "haiku",
     });
     return Response.json({ jobId: job.jobId }, { status: 202 });
   } catch (err) {
