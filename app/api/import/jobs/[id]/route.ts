@@ -25,10 +25,12 @@ export async function GET(
   const { id } = await ctx.params;
   if (!UUID_RE.test(id)) return err("not_found", "Not found", 404);
 
-  // Acquire the advance lock (45s). If we get the row, advance one step. Two
-  // tabs polling at once can't both advance — the loser just reads state.
+  // Acquire the advance lock. If we get the row, advance one step. Two tabs
+  // polling at once can't both advance — the loser just reads state. The lock
+  // outlasts maxDuration (60s) so a step killed at the cap can't be double-run;
+  // a sync image step can take ~30-40s, well within it.
   const locked = await sql`
-    UPDATE import_jobs SET locked_until = now() + interval '45 seconds'
+    UPDATE import_jobs SET locked_until = now() + interval '75 seconds'
      WHERE id = ${id} AND user_id = ${userId}
        AND (locked_until IS NULL OR locked_until < now())
      RETURNING *
