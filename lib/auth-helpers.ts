@@ -111,6 +111,23 @@ export async function isSeedOwner(userId: string | null | undefined): Promise<bo
   return seedId != null && seedId === userId;
 }
 
+// True when userId may generate with the premium image model (Nano Banana Pro):
+// the seed owner always, plus any user whose email is in PREMIUM_IMAGE_EMAILS
+// (comma-separated, lowercased; `*` = everyone). Everyone else gets flux. An
+// empty/unset list means "seed owner only" — and short-circuits the DB lookup,
+// so the common case costs no extra query.
+export async function isPremiumImageUser(userId: string | null | undefined): Promise<boolean> {
+  if (!userId) return false;
+  if (await isSeedOwner(userId)) return true;
+  const list = parseAllowlist(process.env.PREMIUM_IMAGE_EMAILS);
+  if (list.mode === "deny-all") return false;
+  if (list.mode === "allow-all") return true;
+  const { sql } = await import("@/lib/db");
+  const rows = await sql`SELECT email FROM users WHERE id = ${userId} LIMIT 1`;
+  const email = (rows[0]?.email as string | undefined) ?? null;
+  return email != null && isEmailAllowed(email, list);
+}
+
 // Resolves the acting user_id for an incoming request. Returns null when
 // the request is unauthenticated. Two paths:
 //   1. Authorization: Bearer $API_TOKEN  -> seed owner's user_id.

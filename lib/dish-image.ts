@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "./db";
-import { isSeedOwner } from "./auth-helpers";
+import { isPremiumImageUser } from "./auth-helpers";
 import { buildImagePrompt } from "./image-prompt";
 import { getProvider } from "./image-provider";
 import { uploadDishImage } from "./image-storage";
@@ -23,9 +23,9 @@ export async function generateAndStoreImage(
     subtitle: dish.subtitle,
     imageDescription: dish.imageDescription,
   });
-  // Premium (Nano Banana Pro) generation is the seed owner's only — everyone
-  // else generates with the cheaper flux model.
-  const premium = await isSeedOwner(userId);
+  // Premium (Nano Banana Pro) generation is for the seed owner + anyone in
+  // PREMIUM_IMAGE_EMAILS — everyone else generates with the cheaper flux model.
+  const premium = await isPremiumImageUser(userId);
   const { bytes, mime } = await getProvider({ premium }).generate(prompt);
   const imageUrl = await uploadDishImage(dish.id, bytes, mime);
   await sql`
