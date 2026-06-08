@@ -1,11 +1,10 @@
-// Provider abstraction for AI image generation. The factory picks the
-// most specific provider it can configure from env, falling back to a
-// stub that surfaces a clear "not configured" error.
-//
-// Precedence: GEMINI_API_KEY → GoogleProvider (Nano Banana Pro direct),
-// else REPLICATE_API_TOKEN → ReplicateProvider (Vercel marketplace
-// integration auto-injects this), else IMAGE_GEN_URL + IMAGE_GEN_TOKEN
-// → generic HttpProvider, else StubProvider.
+// Provider abstraction for AI image generation. getProvider() builds an ordered
+// fallback chain from the configured env, wrapped in a FallbackProvider that
+// tries each in turn (so a primary outage transparently uses the next):
+//   Gemini direct → Replicate Nano Banana Pro → Replicate flux → HttpProvider.
+// The first two are the SAME model (Gemini 3 Pro Image) on different capacity,
+// so a direct-API rate-limit costs latency, not quality. With nothing
+// configured it returns a StubProvider with a clear "not configured" error.
 
 export interface ImageProvider {
   generate(prompt: string): Promise<{ bytes: Uint8Array; mime: string }>;
@@ -20,16 +19,17 @@ function stripMimeParams(value: string): string {
 const NOT_CONFIGURED =
   "image generation not configured: set GEMINI_API_KEY, or connect Replicate via Vercel (sets REPLICATE_API_TOKEN), or set IMAGE_GEN_URL and IMAGE_GEN_TOKEN";
 
-// Replicate's flux-1.1-pro — solid fallback if GEMINI_API_KEY isn't set.
-// flux-1.1-pro recognises specific regional dishes reasonably well and
-// follows long prompts; flux-schnell is the cheap alternative if cost
-// ever becomes a concern. To swap which Replicate model is used, change
-// this constant only.
-const REPLICATE_MODEL = "black-forest-labs/flux-1.1-pro";
+// Fallbacks on Replicate — separate capacity from the direct Gemini API.
+// nano-banana-pro is the SAME model as the direct call (Gemini 3 Pro Image), so
+// it's the FIRST fallback: a direct-API outage costs latency, not quality.
+// flux-1.1-pro is the fast last resort if even Replicate's Nano Banana Pro is
+// down. To swap models, change these constants only.
+const REPLICATE_NANO_BANANA_MODEL = "google/nano-banana-pro";
+const REPLICATE_FLUX_MODEL = "black-forest-labs/flux-1.1-pro";
 
-// Gemini's Nano Banana Pro (Gemini 3 Pro Image). Materially better than
-// Flux at named-dish recognition and long descriptive prompts. Slightly
-// slower (~22s vs ~7s on Flux) but quality justifies it.
+// Gemini's Nano Banana Pro (Gemini 3 Pro Image), called directly. Best quality
+// and cheapest path; but it's a preview model, so capacity-constrained (503s
+// under load) — which is exactly why the Replicate fallbacks above exist.
 const GOOGLE_IMAGE_MODEL = "gemini-3-pro-image-preview";
 
 export class StubProvider implements ImageProvider {
@@ -103,10 +103,18 @@ export class HttpProvider implements ImageProvider {
 export class ReplicateProvider implements ImageProvider {
   private readonly token: string;
   private readonly model: string;
+  private readonly inputDefaults: Record<string, unknown>;
 
-  constructor(token: string, model: string = REPLICATE_MODEL) {
+  constructor(
+    token: string,
+    model: string = REPLICATE_FLUX_MODEL,
+    // Static input fields merged with { prompt } per request. Differs per model
+    // (e.g. Nano Banana Pro wants resolution + jpg; flux wants webp).
+    inputDefaults: Record<string, unknown> = { aspect_ratio: "1:1", output_format: "webp" },
+  ) {
     this.token = token;
     this.model = model;
+    this.inputDefaults = inputDefaults;
   }
 
   async generate(prompt: string): Promise<{ bytes: Uint8Array; mime: string }> {
@@ -118,13 +126,7 @@ export class ReplicateProvider implements ImageProvider {
         "content-type": "application/json",
         prefer: "wait",
       },
-      body: JSON.stringify({
-        input: {
-          prompt,
-          aspect_ratio: "1:1",
-          output_format: "webp",
-        },
-      }),
+      body: JSON.stringify({ input: { prompt, ...this.inputDefaults } }),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
@@ -246,13 +248,31 @@ export class FallbackProvider implements ImageProvider {
 }
 
 export function getProvider(): ImageProvider {
-  // Build the chain in preference order; FallbackProvider tries each until one
-  // succeeds. Gemini first (best quality), Replicate as the resilient fallback.
+  // Preference order; FallbackProvider tries each until one succeeds:
+  //   1. Gemini direct        — best quality, cheapest, fastest when up
+  //   2. Replicate Nano Banana Pro — SAME model, separate capacity (keeps
+  //                              quality through a direct-API rate-limit/503)
+  //   3. Replicate flux-1.1-pro    — fast last resort
+  //   4. generic HttpProvider      — if a custom endpoint is configured
   const providers: ImageProvider[] = [];
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) providers.push(new GoogleProvider(geminiKey));
   const replicateToken = process.env.REPLICATE_API_TOKEN;
-  if (replicateToken) providers.push(new ReplicateProvider(replicateToken));
+  if (replicateToken) {
+    providers.push(
+      new ReplicateProvider(replicateToken, REPLICATE_NANO_BANANA_MODEL, {
+        aspect_ratio: "1:1",
+        output_format: "jpg",
+        resolution: "2K",
+      }),
+    );
+    providers.push(
+      new ReplicateProvider(replicateToken, REPLICATE_FLUX_MODEL, {
+        aspect_ratio: "1:1",
+        output_format: "webp",
+      }),
+    );
+  }
   const url = process.env.IMAGE_GEN_URL;
   const token = process.env.IMAGE_GEN_TOKEN;
   if (url && token) providers.push(new HttpProvider(url, token));
