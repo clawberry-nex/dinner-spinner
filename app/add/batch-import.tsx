@@ -61,6 +61,9 @@ export type ImportJob = {
 export type ImportEngine = {
   job: ImportJob | null;
   analyze: (args: { text: string; fileName?: string; source: "file" | "paste" }) => void;
+  /** Adopt an already-running import (by id) and resume polling it — used by
+   *  the shell to recover an in-flight import after a reload / navigation. */
+  resume: (importId: string) => void;
   confirm: () => void;
   retry: (i: number) => void;
   retryPhoto: (i: number) => void;
@@ -211,6 +214,18 @@ export function useImportEngine(toast?: (msg: string) => void): ImportEngine {
     [clearPoll, startPolling, toast],
   );
 
+  const resume: ImportEngine["resume"] = useCallback(
+    (importId) => {
+      if (importIdRef.current === importId) return; // already driving it
+      clearPoll();
+      importIdRef.current = importId;
+      // It's already running — don't re-fire the "Imported X of N" toast.
+      toastedDone.current = true;
+      startPolling(importId, 0); // poll immediately to populate + continue
+    },
+    [clearPoll, startPolling],
+  );
+
   const confirm: ImportEngine["confirm"] = useCallback(() => {
     const importId = importIdRef.current;
     if (!importId) return;
@@ -291,7 +306,7 @@ export function useImportEngine(toast?: (msg: string) => void): ImportEngine {
     );
   }, [clearPoll]);
 
-  return { job, analyze, confirm, retry, retryPhoto, dismiss, reset };
+  return { job, analyze, resume, confirm, retry, retryPhoto, dismiss, reset };
 }
 
 // ---------- derived counts ----------

@@ -4,10 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import DishForm from "@/app/_components/dish-form";
 import { Icon } from "@/app/_components/icon";
-import { useToast } from "@/app/_components/ui";
 import { IngestInput } from "./ingest-input";
-import { useImportEngine, biActive } from "./batch-import";
-import { BatchImportModal, BatchImportSheet, ImportDock } from "./batch-panel";
+import { useImport } from "@/app/_components/import-provider";
+import { BatchImportModal, BatchImportSheet } from "./batch-panel";
 
 type Mode = "ingest" | "manual";
 
@@ -18,17 +17,15 @@ export default function AddPage() {
   // batch import row choosing "add manually"). Keyed into <DishForm> so a new
   // seed remounts the form.
   const [seed, setSeed] = useState<{ title: string; key: number } | null>(null);
-  const [batchOpen, setBatchOpen] = useState(false);
 
-  const { show, el: toastEl } = useToast();
-  // Real batch-import engine — POSTs /api/import and polls the job. See
-  // batch-import.tsx.
-  const engine = useImportEngine(show);
+  // The batch-import engine lives in the app shell (ImportProvider) so a
+  // running import survives navigation; /add just drives the panel + reads it.
+  const { engine, panelOpen, openPanel, closePanel } = useImport();
 
   const openManualWith = (title: string) => {
     setSeed({ title, key: Date.now() });
     setMode("manual");
-    setBatchOpen(false);
+    closePanel();
   };
 
   return (
@@ -72,7 +69,7 @@ export default function AddPage() {
                 {/* Batch import entry. */}
                 <button
                   type="button"
-                  onClick={() => setBatchOpen(true)}
+                  onClick={openPanel}
                   className="mt-[18px] flex w-full items-center gap-3 rounded-[var(--radius-md)] border border-line bg-surface-2 px-[15px] py-[13px] text-left transition-colors hover:border-accent-line hover:bg-accent-tint"
                 >
                   <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[10px] bg-surface-3">
@@ -86,13 +83,6 @@ export default function AddPage() {
                   </span>
                   <Icon name="chevR" size={17} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
                 </button>
-
-                {/* Desktop: in-flow dock under the batch card. */}
-                {biActive(engine.job) && !batchOpen && (
-                  <div className="mt-3 hidden lg:block">
-                    <ImportDock engine={engine} onOpen={() => setBatchOpen(true)} variant="desktop" />
-                  </div>
-                )}
               </>
             ) : (
               <DishForm
@@ -103,38 +93,28 @@ export default function AddPage() {
             )}
           </div>
         </div>
-
-        {/* Mobile: floating dock, inset above the bottom nav. */}
-        {biActive(engine.job) && !batchOpen && (
-          <div
-            className="fixed inset-x-4 z-30 lg:hidden"
-            style={{ bottom: "calc(var(--nav-h) + 8px)" }}
-          >
-            <ImportDock engine={engine} onOpen={() => setBatchOpen(true)} variant="mobile" />
-          </div>
-        )}
       </div>
 
       {/* Batch panel: desktop modal (≥lg) · mobile sheet (<lg). Both render the
-          same <BatchPanel>; we mount the right wrapper per breakpoint. */}
+          same <BatchPanel>; we mount the right wrapper per breakpoint. The
+          engine + open state come from the shell-level ImportProvider, so the
+          import keeps running (and the dock stays visible) across navigation. */}
       <div className="hidden lg:contents">
         <BatchImportModal
-          open={batchOpen}
+          open={panelOpen}
           engine={engine}
-          onClose={() => setBatchOpen(false)}
+          onClose={closePanel}
           onAddManually={openManualWith}
         />
       </div>
       <div className="contents lg:hidden">
         <BatchImportSheet
-          open={batchOpen}
+          open={panelOpen}
           engine={engine}
-          onClose={() => setBatchOpen(false)}
+          onClose={closePanel}
           onAddManually={openManualWith}
         />
       </div>
-
-      {toastEl}
     </div>
   );
 }
