@@ -167,6 +167,16 @@ body {
 /* focus-frame settle pop for the Decide filmstrip — keeps the centering
    translate so it doesn't jump off-axis mid-animation. */
 @keyframes ds-framepop { 0% { transform: translate(-50%,-50%) scale(1); } 45% { transform: translate(-50%,-50%) scale(1.05); } 100% { transform: translate(-50%,-50%) scale(1); } }
+/* modal/dock entrance — transform-only (visible end-state is the base). */
+@keyframes ds-modalin { from { transform: scale(0.965); } to { transform: none; } }
+/* batch-import: photo-tag shimmer (continuous loading sweep; never hides
+   content — it's a placeholder tile, not an entrance) and the analyzing
+   document scan line. Both animate position only. */
+@keyframes ds-shimmer { from { background-position: 180% 0; } to { background-position: -80% 0; } }
+@keyframes ds-scan { 0% { top: -38%; } 100% { top: 100%; } }
+/* blink dot for the in-progress step / queued indicator. Pulses opacity
+   but never to 0, so a frozen clock can't make it vanish. */
+@keyframes ds-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 .rise   { animation: ds-rise calc(0.45s * var(--motion)) cubic-bezier(.2,.7,.2,1) both; }
 .pop    { animation: ds-pop  calc(0.4s  * var(--motion)) cubic-bezier(.2,.7,.2,1) both; }

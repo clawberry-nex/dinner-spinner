@@ -3,45 +3,169 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import DishForm from "@/app/_components/dish-form";
-import { AppHeader } from "@/app/_components/app-header";
-import { Button } from "@/app/_components/ui";
+import { Icon } from "@/app/_components/icon";
+import { useToast } from "@/app/_components/ui";
 import { IngestInput } from "./ingest-input";
+import { useImportEngine, biActive } from "./batch-import";
+import { BatchImportModal, BatchImportSheet, ImportDock } from "./batch-panel";
+
+type Mode = "ingest" | "manual";
 
 export default function AddPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<"ingest" | "manual">("ingest");
+  const [mode, setMode] = useState<Mode>("ingest");
+  // When the manual form is opened with a title pre-seeded (e.g. from a failed
+  // batch import row choosing "add manually"). Keyed into <DishForm> so a new
+  // seed remounts the form.
+  const [seed, setSeed] = useState<{ title: string; key: number } | null>(null);
+  const [batchOpen, setBatchOpen] = useState(false);
+
+  const { show, el: toastEl } = useToast();
+  // SIMULATED batch-import engine (preview). See batch-import.tsx — nothing
+  // here writes to the real library.
+  const engine = useImportEngine(show);
+
+  const openManualWith = (title: string) => {
+    setSeed({ title, key: Date.now() });
+    setMode("manual");
+    setBatchOpen(false);
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-bg">
-      <AppHeader title="Add recipe" />
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6">
-          {mode === "ingest" ? (
-            <>
-              <IngestInput />
-              <p className="text-center text-sm text-zinc-500">
-                Or{" "}
+      <div className="relative flex-1 overflow-y-auto overflow-x-hidden pb-24 lg:pb-10">
+        <div className="mx-auto flex w-full max-w-3xl flex-col px-5 pt-[var(--safe-top)] lg:px-10">
+          {/* Header section — no AppHeader; the shell owns the brand chrome. */}
+          <div className="mb-[10px] text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
+            Add a recipe
+          </div>
+          <h1
+            className="m-0 font-medium leading-[1.04] tracking-[-0.02em] text-text"
+            style={{ fontFamily: "var(--font-serif)", fontSize: "clamp(30px,6vw,42px)" }}
+          >
+            {mode === "ingest" ? "Paste, link, or snap it." : "Write it yourself"}
+          </h1>
+          <p className="mt-2 max-w-[52ch] text-[13.5px] leading-[1.5] text-text-dim lg:text-[15px]">
+            {mode === "ingest"
+              ? "Drop in recipe text, a URL, a description — or a photo of a cookbook page. Claude structures the whole thing and saves the dish."
+              : "Fill in the details by hand. Structured fields keep scaling, shopping, and diet detection working."}
+          </p>
+
+          {/* Mode toggle — segmented control. */}
+          <div className="mt-5 flex gap-1 rounded-[var(--radius-md)] border border-line bg-surface-2 p-1">
+            <SegButton active={mode === "ingest"} onClick={() => { setMode("ingest"); setSeed(null); }}>
+              <Icon name="sparkle" size={15} />
+              Magic ingest
+            </SegButton>
+            <SegButton active={mode === "manual"} onClick={() => setMode("manual")}>
+              <Icon name="edit" size={15} />
+              Write it myself
+            </SegButton>
+          </div>
+
+          {/* Body. */}
+          <div className="mt-6">
+            {mode === "ingest" ? (
+              <>
+                <IngestInput />
+
+                {/* Batch import entry (PREVIEW). */}
                 <button
                   type="button"
-                  onClick={() => setMode("manual")}
-                  className="text-emerald-600 hover:underline"
+                  onClick={() => setBatchOpen(true)}
+                  className="mt-[18px] flex w-full items-center gap-3 rounded-[var(--radius-md)] border border-line bg-surface-2 px-[15px] py-[13px] text-left transition-colors hover:border-accent-line hover:bg-accent-tint"
                 >
-                  fill in manually
+                  <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[10px] bg-surface-3">
+                    <Icon name="list" size={19} style={{ color: "var(--accent-2)" }} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="text-[14px] font-semibold text-text">Batch import</span>
+                      <span className="rounded-pill border border-accent-line bg-accent-tint px-[7px] py-[1px] text-[9.5px] font-bold uppercase tracking-[0.08em] text-accent-2">
+                        Preview
+                      </span>
+                    </span>
+                    <span className="mt-[1px] block text-[12.5px] text-text-faint">
+                      Upload or paste a list — import many at once
+                    </span>
+                  </span>
+                  <Icon name="chevR" size={17} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
                 </button>
-              </p>
-            </>
-          ) : (
-            <>
-              <Button variant="ghost" size="sm" onClick={() => setMode("ingest")}>
-                ← Back to ingest
-              </Button>
+
+                {/* Desktop: in-flow dock under the batch card. */}
+                {biActive(engine.job) && !batchOpen && (
+                  <div className="mt-3 hidden lg:block">
+                    <ImportDock engine={engine} onOpen={() => setBatchOpen(true)} variant="desktop" />
+                  </div>
+                )}
+              </>
+            ) : (
               <DishForm
+                key={seed ? `seed-${seed.key}` : "manual"}
+                prefillDraft={seed ? { title: seed.title, baseServings: 4, tags: [], ingredients: [] } : undefined}
                 onSaved={(dish) => router.push(`/dishes/${dish.id}`)}
               />
-            </>
-          )}
+            )}
+          </div>
         </div>
+
+        {/* Mobile: floating dock, inset above the bottom nav. */}
+        {biActive(engine.job) && !batchOpen && (
+          <div
+            className="fixed inset-x-4 z-30 lg:hidden"
+            style={{ bottom: "calc(var(--nav-h) + 8px)" }}
+          >
+            <ImportDock engine={engine} onOpen={() => setBatchOpen(true)} variant="mobile" />
+          </div>
+        )}
       </div>
+
+      {/* Batch panel: desktop modal (≥lg) · mobile sheet (<lg). Both render the
+          same <BatchPanel>; we mount the right wrapper per breakpoint. */}
+      <div className="hidden lg:contents">
+        <BatchImportModal
+          open={batchOpen}
+          engine={engine}
+          onClose={() => setBatchOpen(false)}
+          onAddManually={openManualWith}
+        />
+      </div>
+      <div className="contents lg:hidden">
+        <BatchImportSheet
+          open={batchOpen}
+          engine={engine}
+          onClose={() => setBatchOpen(false)}
+          onAddManually={openManualWith}
+        />
+      </div>
+
+      {toastEl}
     </div>
+  );
+}
+
+function SegButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "flex flex-1 items-center justify-center gap-2 rounded-[var(--radius-sm)] px-3 py-[10px] text-[14px] font-semibold transition-colors",
+        active
+          ? "bg-surface text-accent-2 shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+          : "bg-transparent text-text-dim hover:text-text",
+      ].join(" ")}
+      style={{ fontFamily: "var(--font-sans)" }}
+    >
+      {children}
+    </button>
   );
 }

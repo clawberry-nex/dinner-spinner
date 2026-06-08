@@ -4,7 +4,28 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { compressImage, type CompressedImage } from "@/lib/image-compress";
 import type { Dish, DishInput } from "@/lib/types";
-import { Button } from "../_components/ui";
+import { Icon, type IconName } from "../_components/icon";
+
+// Ordered phases for the working-overlay timeline. These map the real
+// agent/client step ids (the keys of STEP_LABELS) to a friendly label +
+// icon so the immersive "Cooking up your recipe" screen can render a
+// checklist with the live step highlighted. The agent emits one
+// `currentStep` at a time (not an index), so we resolve its position in
+// this list to drive the done/now/upcoming states.
+const PHASES: { id: string; label: string; icon: IconName }[] = [
+  { id: "starting", label: "Reading your input", icon: "edit" },
+  { id: "analyzing_photo", label: "Looking at the photo", icon: "camera" },
+  { id: "writing_result", label: "Understanding the recipe", icon: "sparkle" },
+  { id: "working", label: "Structuring the recipe", icon: "list" },
+  { id: "saving", label: "Saving the dish", icon: "check" },
+  { id: "generating_image", label: "Generating a photo", icon: "camera" },
+];
+
+function phaseIndex(step: string | null | undefined): number {
+  if (!step) return 0;
+  const i = PHASES.findIndex((p) => p.id === step);
+  return i === -1 ? 3 /* unknown agent tool → bucket into "working" */ : i;
+}
 
 // Step identifiers. The first four (starting/analyzing_photo/writing_result/
 // working) come from claude-agent's runner — see src/jobs/runner.ts::stepForTool
@@ -340,101 +361,124 @@ export function IngestInput() {
   const canSubmit = (input.trim().length > 0 || file !== null) && !loading;
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      {loading && (
-        <IngestOverlay step={currentStep} elapsedSec={elapsedSec} />
-      )}
-      <p className="text-sm text-zinc-500">
-        Paste a recipe, a URL, or describe a dish in your own words. Optionally
-        attach a photo (a cookbook page, a recipe screenshot, an ingredient
-        list). Claude will parse it and save the dish; you&apos;ll land on the
-        dish page when it&apos;s ready.
-      </p>
+    <form onSubmit={submit}>
+      {loading && <IngestOverlay step={currentStep} elapsedSec={elapsedSec} />}
 
-      <textarea
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        rows={10}
-        placeholder="Paste a recipe, URL, or describe a dish…"
-        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-        disabled={loading}
-      />
-
-      <div className="space-y-2">
-        <label className="block text-sm font-medium">Attach photo (optional)</label>
-        <div className="flex flex-wrap gap-2">
-          <label className="cursor-pointer rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
-            📷 Take photo
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={onFile}
-              disabled={loading}
-              className="hidden"
-            />
-          </label>
-          <label className="cursor-pointer rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
-            🖼️ Choose from library
-            <input
-              type="file"
-              accept="image/*"
-              onChange={onFile}
-              disabled={loading}
-              className="hidden"
-            />
-          </label>
+      {/* Unified input card: textarea + photo footer. */}
+      <div className="overflow-hidden rounded-[var(--radius-lg)] border border-line bg-surface transition-colors focus-within:border-accent-line">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          rows={6}
+          placeholder={"Paste recipe text, drop a URL, or describe a dish — “a sticky miso aubergine for two”"}
+          className="block w-full resize-none border-0 bg-transparent px-4 py-[15px] text-[15px] leading-[1.5] text-text outline-none placeholder:text-text-faint"
+          style={{ fontFamily: "var(--font-sans)", minHeight: 120 }}
+          disabled={loading}
+        />
+        <div className="flex items-center gap-[10px] border-t border-line bg-surface-2 px-3 py-[10px]">
+          {compressedPreviewUrl ? (
+            <div className="flex min-w-0 flex-1 items-center gap-[9px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={compressedPreviewUrl}
+                alt="attached"
+                className="h-10 w-10 shrink-0 rounded-[var(--radius-sm)] border border-line object-cover"
+              />
+              <span className="min-w-0 flex-1 truncate text-[13px] text-text-dim">
+                {file?.name || "Photo attached"}
+              </span>
+              <button
+                type="button"
+                onClick={clearFile}
+                disabled={loading}
+                aria-label="Remove photo"
+                className="shrink-0 p-[6px] text-text-faint"
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+          ) : (
+            <>
+              <label className="flex cursor-pointer items-center gap-[7px] rounded-[var(--radius-sm)] border border-line bg-surface-3 px-3 py-2 text-[13px] font-semibold text-text">
+                <Icon name="camera" size={16} />
+                Add a photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={onFile}
+                  disabled={loading}
+                  className="hidden"
+                />
+              </label>
+              {/* Camera capture — separate hidden input so phones offer the camera. */}
+              <label className="flex cursor-pointer items-center gap-[7px] rounded-[var(--radius-sm)] border border-line bg-surface-3 px-3 py-2 text-[13px] font-semibold text-text sm:hidden">
+                <Icon name="camera" size={16} />
+                Camera
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={onFile}
+                  disabled={loading}
+                  className="hidden"
+                />
+              </label>
+              <span className="hidden flex-1 text-[12px] text-text-faint sm:block">
+                Camera or library · compressed first
+              </span>
+            </>
+          )}
         </div>
-        {compressedPreviewUrl && (
-          <div className="flex items-start gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={compressedPreviewUrl}
-              alt="attached"
-              className="max-h-48 rounded-md border border-zinc-300 dark:border-zinc-700"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={clearFile}
-              disabled={loading}
-            >
-              Remove
-            </Button>
-          </div>
-        )}
       </div>
 
-      <div className="flex items-center gap-3 pt-2">
-        <Button type="submit" disabled={!canSubmit}>
-          Add Recipe →
-        </Button>
+      <button
+        type="submit"
+        disabled={!canSubmit}
+        className="mt-4 flex h-[54px] w-full items-center justify-center gap-2 rounded-pill text-[16px] font-semibold transition-colors disabled:cursor-default"
+        style={{
+          fontFamily: "var(--font-sans)",
+          background: canSubmit ? "var(--accent)" : "var(--surface-2)",
+          color: canSubmit ? "var(--accent-ink)" : "var(--text-faint)",
+        }}
+      >
+        <Icon
+          name="sparkle"
+          size={20}
+          style={{ color: canSubmit ? "var(--accent-ink)" : "var(--text-faint)" }}
+        />
+        Ingest recipe
+      </button>
+      <div className="mt-[10px] text-center text-[12px] text-text-faint">
+        Takes about a minute — you can leave and come back.
       </div>
 
       {error && (
-        <div className="space-y-2 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-          <p>{error}</p>
+        <div className="mt-4 space-y-2 rounded-[var(--radius-md)] border border-rose bg-rose-tint p-3 text-[13.5px] text-text">
+          <p className="flex items-start gap-2">
+            <Icon name="close" size={16} style={{ color: "var(--rose)", flexShrink: 0, marginTop: 2 }} />
+            <span>{error}</span>
+          </p>
           {rawResponse && (
             <details>
-              <summary className="cursor-pointer text-xs underline">
+              <summary className="cursor-pointer text-[12px] text-text-dim underline">
                 Show raw response
               </summary>
-              <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap text-xs">
+              <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap text-[12px] text-text-dim">
                 {rawResponse}
               </pre>
             </details>
           )}
-          <div className="flex items-center gap-3 pt-1">
-            <Button
+          <div className="pt-1">
+            <button
               type="button"
-              size="sm"
-              variant="ghost"
               onClick={ingest}
               disabled={loading}
+              className="inline-flex items-center gap-[6px] rounded-pill bg-surface-2 px-4 py-2 text-[13px] font-semibold text-text-dim transition-colors hover:bg-surface-3 disabled:opacity-50"
+              style={{ fontFamily: "var(--font-sans)" }}
             >
+              <Icon name="reset" size={14} />
               Retry
-            </Button>
+            </button>
           </div>
         </div>
       )}
@@ -443,34 +487,147 @@ export function IngestInput() {
 }
 
 /**
- * Full-screen darkened overlay shown while a recipe is being ingested,
- * saved, and image-generated. Reads the current step + elapsed seconds and
- * renders a centered card with the step label, a spinner, and a counter.
- * Blocks pointer events on the form behind it via the backdrop.
+ * Full-screen immersive "Cooking up your recipe" overlay shown while a
+ * recipe is ingested, saved, and image-generated. Reads the real
+ * `currentStep` + elapsed seconds (preserved data contract) and renders the
+ * V2 ember progress ring, the current phase's icon + label, an elapsed
+ * counter, and a phase checklist. Blocks the form behind it.
  */
-function IngestOverlay({
-  step,
-  elapsedSec,
-}: {
-  step: string | null;
-  elapsedSec: number;
-}) {
+function IngestOverlay({ step, elapsedSec }: { step: string | null; elapsedSec: number }) {
+  const idx = phaseIndex(step);
+  const cur = PHASES[Math.min(idx, PHASES.length - 1)];
+  const label = labelForStep(step); // real label (handles unknown agent tools)
+  const slow = elapsedSec > 75;
+  const pct = Math.min(100, Math.round((idx / PHASES.length) * 100));
+  const R = 52;
+  const C = 2 * Math.PI * R;
+
   return (
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[80] flex flex-col overflow-hidden bg-bg-deep px-6"
     >
-      <div className="mx-4 w-full max-w-sm rounded-2xl bg-white p-8 shadow-2xl dark:bg-zinc-900">
-        <div className="flex flex-col items-center gap-4">
+      {/* ambient warmth */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 -top-[60px] -translate-x-1/2"
+        style={{
+          width: 360,
+          height: 360,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, var(--accent-tint), transparent 68%)",
+          animation: "ds-breathe 3.2s ease-in-out infinite",
+        }}
+      />
+
+      <div className="relative z-[1] flex flex-1 flex-col items-center justify-center">
+        {/* progress ring + ember */}
+        <div className="relative" style={{ width: 140, height: 140 }}>
+          <svg width="140" height="140" viewBox="0 0 140 140" style={{ transform: "rotate(-90deg)" }}>
+            <circle cx="70" cy="70" r={R} fill="none" stroke="var(--surface-3)" strokeWidth="3" />
+            <circle
+              cx="70"
+              cy="70"
+              r={R}
+              fill="none"
+              stroke="var(--accent)"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray={C}
+              strokeDashoffset={C * (1 - pct / 100)}
+              style={{ transition: "stroke-dashoffset .7s cubic-bezier(.3,.7,.3,1)" }}
+            />
+          </svg>
           <div
-            aria-hidden="true"
-            className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"
-          />
-          <p className="text-center text-lg font-medium text-zinc-900 dark:text-zinc-100">
-            {labelForStep(step)}
-          </p>
-          <p className="text-sm tabular-nums text-zinc-500">{elapsedSec}s</p>
+            className="absolute grid place-items-center"
+            style={{
+              inset: 30,
+              borderRadius: "50%",
+              background: "radial-gradient(circle at 42% 36%, var(--accent-2), var(--accent-deep))",
+              boxShadow: "0 0 38px -4px var(--accent-deep)",
+              animation: "ds-breathe 3.2s ease-in-out infinite",
+            }}
+          >
+            <div key={idx} style={{ animation: "ds-pop .4s ease" }}>
+              <Icon name={cur.icon} size={30} stroke={2} style={{ color: "var(--accent-ink)" }} />
+            </div>
+          </div>
+          <div
+            className="absolute left-1/2 -translate-x-1/2 rounded-pill border border-line bg-surface px-[10px] py-[2px] text-[12px] font-bold text-accent-2"
+            style={{ bottom: -2, fontVariantNumeric: "tabular-nums" }}
+          >
+            {pct}%
+          </div>
+        </div>
+
+        <div className="mt-[26px] text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">
+          Cooking up your recipe
+        </div>
+        <h2
+          key={idx}
+          className="m-0 mt-3 text-center font-medium tracking-[-0.01em] text-text"
+          style={{ fontFamily: "var(--font-serif)", fontSize: 25, minHeight: 32, animation: "ds-stepin .4s ease" }}
+        >
+          {label}…
+        </h2>
+        <div className="mt-[10px] text-[12.5px] text-text-faint" style={{ fontVariantNumeric: "tabular-nums" }}>
+          {elapsedSec}s elapsed
+        </div>
+        {slow && (
+          <div className="mt-2 max-w-[250px] text-center text-[12.5px] leading-[1.45] text-accent-2">
+            Taking a little longer than usual — hang tight, it&apos;s still working.
+          </div>
+        )}
+      </div>
+
+      {/* phase checklist — anchored lower */}
+      <div className="relative z-[1]" style={{ paddingBottom: "calc(var(--safe-top) + 6px)" }}>
+        <div className="mx-auto w-full max-w-md rounded-[var(--radius-lg)] border border-line bg-surface px-4 py-[6px] shadow-[var(--shadow-card)]">
+          {PHASES.map((p, i) => {
+            const isDone = i < idx;
+            const isNow = i === idx;
+            return (
+              <div key={p.id} className="relative flex items-center gap-3 py-2">
+                {i < PHASES.length - 1 && (
+                  <span
+                    className="absolute"
+                    style={{ left: 10, top: 30, width: 1.5, height: 14, background: isDone ? "var(--sage)" : "var(--line-2)" }}
+                  />
+                )}
+                <span
+                  className="grid shrink-0 place-items-center rounded-pill transition-all"
+                  style={{
+                    width: 21,
+                    height: 21,
+                    background: isDone ? "var(--sage)" : isNow ? "var(--accent)" : "var(--surface-3)",
+                    boxShadow: isNow ? "0 0 0 4px var(--accent-tint)" : "none",
+                  }}
+                >
+                  {isDone ? (
+                    <Icon name="check" size={12} style={{ color: "#10140E" }} />
+                  ) : isNow ? (
+                    <span
+                      className="rounded-pill"
+                      style={{ width: 6, height: 6, background: "var(--accent-ink)", animation: "ds-blink 1.1s ease-in-out infinite" }}
+                    />
+                  ) : (
+                    <span className="rounded-pill" style={{ width: 5, height: 5, background: "var(--text-faint)" }} />
+                  )}
+                </span>
+                <span
+                  className="flex-1 text-[13.5px] transition-colors"
+                  style={{
+                    fontWeight: isNow ? 600 : 500,
+                    color: isNow ? "var(--text)" : isDone ? "var(--text-dim)" : "var(--text-faint)",
+                  }}
+                >
+                  {p.label}
+                </span>
+                {isDone && <Icon name="check" size={14} style={{ color: "var(--sage)" }} />}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
