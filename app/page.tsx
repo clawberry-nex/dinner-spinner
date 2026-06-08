@@ -298,14 +298,21 @@ function Filmstrip({
     const startX = liveCenter - startIdx * STEP;
     track.style.transition = "none";
     track.style.transform = `translateX(${startX}px)`;
+    track.style.filter = "blur(0px)";
     void track.offsetWidth; // reflow
     requestAnimationFrame(() => {
-      track.style.transition = "transform 2.7s cubic-bezier(.08,.66,.1,1)";
+      track.style.transition = "transform 2.7s cubic-bezier(.08,.66,.1,1), filter 2.7s ease";
       track.style.transform = `translateX(${targetX}px)`;
+      // Motion blur swells then clears mid-spin so the reel reads as speed. Safe
+      // again now that the focus frame is its own flex-centered layer with a
+      // scale-only pop — the old frame break-up was its centering fighting its
+      // transform, never this blur.
+      track.style.filter = "blur(3px)";
     });
-    // No motion-blur on the reel: a `filter: blur` GPU layer behind the crisp
-    // focus frame made mobile GPUs render its border in broken pieces mid-spin.
-    // The deceleration + scaling + dimming already read as motion.
+    const clearBlur = window.setTimeout(() => {
+      if (trackRef.current) trackRef.current.style.filter = "blur(0px)";
+    }, 1800);
+    return () => window.clearTimeout(clearBlur);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spinSeed]);
 
@@ -356,7 +363,7 @@ function Filmstrip({
           gap: GAP,
           transform: `translateX(${idleX}px)`,
           marginTop: -(CARDH / 2),
-          willChange: "transform",
+          willChange: "transform, filter",
         }}
       >
         {reel.map((d, i) => {
