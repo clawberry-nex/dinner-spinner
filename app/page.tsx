@@ -298,15 +298,14 @@ function Filmstrip({
     const startX = liveCenter - startIdx * STEP;
     track.style.transition = "none";
     track.style.transform = `translateX(${startX}px)`;
-    track.style.filter = "blur(0px)";
     void track.offsetWidth; // reflow
     requestAnimationFrame(() => {
-      track.style.transition = "transform 2.7s cubic-bezier(.08,.66,.1,1), filter 2.7s ease";
+      track.style.transition = "transform 2.7s cubic-bezier(.08,.66,.1,1)";
       track.style.transform = `translateX(${targetX}px)`;
-      // Blur peaks mid-spin then clears.
-      track.style.filter = "blur(3px)";
-      window.setTimeout(() => { if (track) track.style.filter = "blur(0px)"; }, 1800);
     });
+    // No motion-blur on the reel: a `filter: blur` GPU layer behind the crisp
+    // focus frame made mobile GPUs render its border in broken pieces mid-spin.
+    // The deceleration + scaling + dimming already read as motion.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spinSeed]);
 
@@ -356,9 +355,6 @@ function Filmstrip({
           gap: GAP,
           transform: `translateX(${idleX}px)`,
           marginTop: -(CARDH / 2),
-          // Only hint transform persistently; the blur is applied imperatively
-          // for ~2s during a spin, so a permanent filter layer just invites
-          // compositing artifacts on the focus frame above it.
           willChange: "transform",
         }}
       >
@@ -420,12 +416,6 @@ function Filmstrip({
           height: FRAME_H,
           borderRadius: 15,
           border: "2px solid var(--accent)",
-          // Promote to its own compositing layer so the crisp border never
-          // shares a GPU layer with the blurred, fast-translating track behind
-          // it — without this, mobile GPUs render the border in broken pieces
-          // mid-spin. (Centering stays on the Tailwind -translate-x/y classes;
-          // will-change alone promotes the layer without overriding them.)
-          willChange: "transform",
           animation: phase === "result" ? "ds-framepop .55s cubic-bezier(.2,.8,.2,1)" : "none",
         }}
       >
