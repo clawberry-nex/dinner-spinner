@@ -40,7 +40,10 @@ const IMAGE_MAX_ATTEMPTS = 80; // ~20 min of polling, then give up (dishes stay 
 // (with its throttled polling above) is reserved for large imports where its
 // parallelism is worth the latency.
 const IMAGE_SYNC_THRESHOLD = 12; // ≤ this many pending dishes → sync per-dish
-const IMAGE_SYNC_SLICE = 2; // dishes generated per advance step in sync mode
+// One image per advance step. Worst case (direct Gemini 503 → Replicate Nano
+// Banana Pro ~33s) must stay under the route's 60s cap, and one-per-step means a
+// step that's killed at the cap only loses (and retries) a single dish.
+const IMAGE_SYNC_SLICE = 1;
 
 function token(): string {
   // Routes guard NEX_API_TOKEN presence before calling advance; assert here.
