@@ -2,6 +2,7 @@ import { resolveUserId } from "@/lib/auth-helpers";
 import { sql } from "@/lib/db";
 import { startClaudeAgentJob, ClaudeAgentError } from "@/lib/ingest/claude-agent";
 import { buildDetectPrompt, DETECT_JSON_SCHEMA } from "@/lib/import/detect";
+import { parseImportRow, rowToImportProgress } from "@/lib/import/types";
 
 // Just the detect-job kickoff (claude-agent runs the split off-Vercel); fast.
 export const maxDuration = 30;
@@ -15,6 +16,22 @@ const MAX_TEXT_CHARS = 200_000;
 
 function err(code: string, message: string, status: number) {
   return Response.json({ error: { code, message } }, { status });
+}
+
+// Discover the caller's most recent in-flight import so the client can resume
+// it on load (after a reload, or after navigating away before it finished).
+// Read-only — advancing happens on GET /api/import/jobs/[id].
+export async function GET(req: Request): Promise<Response> {
+  const userId = await resolveUserId(req);
+  if (!userId) return err("unauthorized", "Unauthorized", 401);
+  const rows = await sql`
+    SELECT * FROM import_jobs
+     WHERE user_id = ${userId} AND status NOT IN ('done', 'failed')
+     ORDER BY created_at DESC LIMIT 1
+  `;
+  if (rows.length === 0) return Response.json({ active: null });
+  const row = parseImportRow(rows[0]);
+  return Response.json({ active: { importId: row.id, progress: rowToImportProgress(row) } });
 }
 
 export async function POST(req: Request): Promise<Response> {

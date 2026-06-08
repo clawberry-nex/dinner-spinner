@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
+import { ImportProvider } from "./import-provider";
 
 export function RootShell({
   children,
@@ -32,7 +33,7 @@ export function RootShell({
 
   return (
     <AppShell planCount={planCount} hideTabs={!isSignedIn}>
-      {children}
+      <ImportProvider isSignedIn={isSignedIn}>{children}</ImportProvider>
     </AppShell>
   );
 }
