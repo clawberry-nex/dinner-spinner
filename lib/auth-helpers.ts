@@ -92,6 +92,25 @@ export async function assignAvailableHandle(
   throw new Error(`no available handle for base ${base}`);
 }
 
+// The seed owner's user_id — the user whose email is SEED_OWNER_EMAIL — or null
+// when unset or that user hasn't signed up yet. Used by the bearer-token auth
+// path and by the image pipeline to gate premium (Nano Banana Pro) generation.
+export async function getSeedOwnerUserId(): Promise<string | null> {
+  const seedEmail = (process.env.SEED_OWNER_EMAIL ?? "").trim().toLowerCase();
+  if (!seedEmail) return null;
+  const { sql } = await import("@/lib/db");
+  const rows = await sql`SELECT id FROM users WHERE email = ${seedEmail} LIMIT 1`;
+  return (rows[0]?.id as string | undefined) ?? null;
+}
+
+// True when userId is the seed owner. Non-owners get the cheaper image model
+// (flux) instead of Nano Banana Pro — see lib/image-provider.ts::getProvider.
+export async function isSeedOwner(userId: string | null | undefined): Promise<boolean> {
+  if (!userId) return false;
+  const seedId = await getSeedOwnerUserId();
+  return seedId != null && seedId === userId;
+}
+
 // Resolves the acting user_id for an incoming request. Returns null when
 // the request is unauthenticated. Two paths:
 //   1. Authorization: Bearer $API_TOKEN  -> seed owner's user_id.
@@ -101,11 +120,7 @@ export async function assignAvailableHandle(
 export async function resolveUserId(req: Request): Promise<string | null> {
   const bearer = bearerToken(req);
   if (bearer && process.env.API_TOKEN && constantTimeEqual(bearer, process.env.API_TOKEN)) {
-    const seedEmail = (process.env.SEED_OWNER_EMAIL ?? "").trim().toLowerCase();
-    if (!seedEmail) return null;
-    const { sql } = await import("@/lib/db");
-    const rows = await sql`SELECT id FROM users WHERE email = ${seedEmail} LIMIT 1`;
-    return (rows[0]?.id as string | undefined) ?? null;
+    return getSeedOwnerUserId();
   }
   // Lazy import to avoid a top-level cycle: lib/auth -> lib/auth-helpers -> lib/auth.
   const { auth } = await import("@/lib/auth");

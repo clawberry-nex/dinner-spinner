@@ -247,25 +247,33 @@ export class FallbackProvider implements ImageProvider {
   }
 }
 
-export function getProvider(): ImageProvider {
+// `premium` (default true) gates access to Nano Banana Pro (Gemini 3 Pro Image),
+// the high-quality but ~$0.15/image model. Only the seed owner generates with it;
+// every other user is `premium: false` and falls straight to flux-1.1-pro, which
+// is an order of magnitude cheaper. Flux is the shared last resort for everyone.
+export function getProvider(opts: { premium?: boolean } = {}): ImageProvider {
+  const { premium = true } = opts;
   // Preference order; FallbackProvider tries each until one succeeds:
-  //   1. Gemini direct        — best quality, cheapest, fastest when up
-  //   2. Replicate Nano Banana Pro — SAME model, separate capacity (keeps
-  //                              quality through a direct-API rate-limit/503)
-  //   3. Replicate flux-1.1-pro    — fast last resort
+  //   1. Gemini direct             — Nano Banana Pro; best quality (premium only)
+  //   2. Replicate Nano Banana Pro — SAME model, separate capacity   (premium only)
+  //   3. Replicate flux-1.1-pro    — fast, cheap; the ONLY model for non-premium
   //   4. generic HttpProvider      — if a custom endpoint is configured
   const providers: ImageProvider[] = [];
   const geminiKey = process.env.GEMINI_API_KEY;
-  if (geminiKey) providers.push(new GoogleProvider(geminiKey));
   const replicateToken = process.env.REPLICATE_API_TOKEN;
+  if (premium) {
+    if (geminiKey) providers.push(new GoogleProvider(geminiKey));
+    if (replicateToken) {
+      providers.push(
+        new ReplicateProvider(replicateToken, REPLICATE_NANO_BANANA_MODEL, {
+          aspect_ratio: "1:1",
+          output_format: "jpg",
+          resolution: "2K",
+        }),
+      );
+    }
+  }
   if (replicateToken) {
-    providers.push(
-      new ReplicateProvider(replicateToken, REPLICATE_NANO_BANANA_MODEL, {
-        aspect_ratio: "1:1",
-        output_format: "jpg",
-        resolution: "2K",
-      }),
-    );
     providers.push(
       new ReplicateProvider(replicateToken, REPLICATE_FLUX_MODEL, {
         aspect_ratio: "1:1",

@@ -13,6 +13,7 @@ import { getPantryDefaults } from "@/lib/pantry";
 import { languageName } from "@/lib/languages";
 import { createDishForUser } from "@/lib/dish-create";
 import { generateAndStoreImage } from "@/lib/dish-image";
+import { isSeedOwner } from "@/lib/auth-helpers";
 import { submitImageBatch, pollBatch, cancelBatch, type BatchRequest } from "@/lib/gemini-batch";
 import { buildImagePrompt } from "@/lib/image-prompt";
 import { uploadDishImage } from "@/lib/image-storage";
@@ -293,6 +294,19 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
   if (pending.length === 0) {
     row.status = "done";
     return saveRow(row);
+  }
+
+  // The Gemini batch is Nano Banana Pro — premium, seed-owner-only. Non-owners
+  // route every import (regardless of size) through the per-dish sync path, which
+  // uses the cheaper flux model. Cancel any batch already in flight first.
+  if (!(await isSeedOwner(row.user_id))) {
+    if (apiKey && row.image_batches.length) {
+      for (const b of row.image_batches) {
+        if (!b.applied) await cancelBatch(apiKey, b.name);
+      }
+      row.image_batches = [];
+    }
+    return advanceImagingSync(row, pending);
   }
 
   // Small imports → fast synchronous per-dish generation (no Gemini batch). This

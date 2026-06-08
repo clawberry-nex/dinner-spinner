@@ -5,6 +5,7 @@ beforeEach(() => {
   delete process.env.IMAGE_GEN_URL;
   delete process.env.IMAGE_GEN_TOKEN;
   delete process.env.REPLICATE_API_TOKEN;
+  delete process.env.GEMINI_API_KEY;
 });
 
 test("getProvider returns the stub when env is missing", async () => {
@@ -38,25 +39,51 @@ test("getProvider returns the http provider when both env vars are set", async (
   assert.ok(p instanceof HttpProvider, "should be HttpProvider");
 });
 
-test("getProvider returns the Replicate provider when REPLICATE_API_TOKEN is set", async () => {
+test("getProvider chains Nano Banana Pro + flux when REPLICATE_API_TOKEN is set", async () => {
   process.env.REPLICATE_API_TOKEN = "r8_secret_token";
-  const { getProvider, ReplicateProvider } = await import(
+  const { getProvider, FallbackProvider } = await import(
     `./image-provider.ts?cb=${Date.now() + 3}`
   );
+  // Premium (default): two Replicate providers (NBP then flux) → a fallback chain.
   const p = getProvider();
-  assert.ok(p instanceof ReplicateProvider, "should be ReplicateProvider");
+  assert.ok(p instanceof FallbackProvider, "premium should be a FallbackProvider");
 });
 
-test("Replicate takes precedence over the generic HTTP env vars", async () => {
+test("Replicate is chained ahead of the generic HTTP provider", async () => {
   process.env.REPLICATE_API_TOKEN = "r8_secret_token";
   process.env.IMAGE_GEN_URL = "https://example.test/img";
   process.env.IMAGE_GEN_TOKEN = "secret-token";
-  const { getProvider, ReplicateProvider } = await import(
+  const { getProvider, FallbackProvider } = await import(
     `./image-provider.ts?cb=${Date.now() + 4}`
   );
+  // Chain is [Replicate NBP, Replicate flux, Http] — Replicate is added first.
   const p = getProvider();
+  assert.ok(p instanceof FallbackProvider, "should be a FallbackProvider");
+});
+
+test("non-premium excludes Nano Banana Pro — flux only", async () => {
+  // Both the premium model keys are present...
+  process.env.GEMINI_API_KEY = "g_secret";
+  process.env.REPLICATE_API_TOKEN = "r8_secret_token";
+  const { getProvider, ReplicateProvider } = await import(
+    `./image-provider.ts?cb=${Date.now() + 5}`
+  );
+  // ...but a non-premium caller gets a single flux ReplicateProvider — no Gemini,
+  // no Replicate Nano Banana Pro, so not a chain.
+  const p = getProvider({ premium: false });
   assert.ok(
     p instanceof ReplicateProvider,
-    "Replicate should win over IMAGE_GEN_*",
+    "non-premium should be a single flux ReplicateProvider",
   );
+});
+
+test("premium includes Gemini Nano Banana Pro", async () => {
+  process.env.GEMINI_API_KEY = "g_secret";
+  process.env.REPLICATE_API_TOKEN = "r8_secret_token";
+  const { getProvider, FallbackProvider } = await import(
+    `./image-provider.ts?cb=${Date.now() + 6}`
+  );
+  // Gemini + Replicate NBP + flux → a fallback chain (Gemini is added first).
+  const p = getProvider();
+  assert.ok(p instanceof FallbackProvider, "premium should be a FallbackProvider");
 });
