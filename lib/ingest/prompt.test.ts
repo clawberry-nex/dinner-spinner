@@ -90,3 +90,39 @@ test("forbids inventing ingredients that are not in the input", () => {
     "should explicitly forbid inventing ingredients",
   );
 });
+
+// Systemic fidelity fixes surfaced by the langston import audit (2026-06-12).
+
+test("optional is only for explicitly-optional ingredients, NOT 'to taste' amounts", () => {
+  const p = buildIngestPrompt(FIXTURE);
+  assert.ok(/flexible quantity is not optional/i.test(p), "must say a flexible quantity is not optional");
+  // the old over-broad rule (to-taste ⇒ optional) must be gone
+  assert.ok(!/optional: true if the recipe says "optional", "to taste"/i.test(p));
+});
+
+test("enforces quantity & unit fidelity (no unit swaps, metric dual-units, decimal fractions)", () => {
+  const p = buildIngestPrompt(FIXTURE);
+  assert.ok(/keep the source.?s? unit/i.test(p), "must say keep the source's unit");
+  assert.ok(p.includes("2 lb stays 2 lb"), "must give the lb→kg counter-example");
+  assert.ok(p.includes("0.375"), "must show summing a compound amount");
+});
+
+test("forbids duplicating one shared amount across several items", () => {
+  const p = buildIngestPrompt(FIXTURE);
+  assert.ok(/one amount covers several/i.test(p));
+});
+
+test("does not invent a precise quantity/unit for vague sources", () => {
+  const p = buildIngestPrompt(FIXTURE);
+  assert.ok(/do not invent a precise/i.test(p));
+});
+
+test("ground-truth guard extends to sections that have no steps", () => {
+  const p = buildIngestPrompt(FIXTURE);
+  assert.ok(/per section too/i.test(p));
+});
+
+test("never folds the unit word into the ingredient name", () => {
+  const p = buildIngestPrompt(FIXTURE);
+  assert.ok(/fold the unit into the name/i.test(p));
+});
