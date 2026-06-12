@@ -22,7 +22,7 @@ import { type ImportRow, type ImportChunk, type ImageBatch } from "./types";
 
 const CLAUDE_AGENT_BASE_URL =
   process.env.CLAUDE_AGENT_URL ?? "https://nex.tail7f6b96.ts.net:10000";
-const GOOGLE_IMAGE_MODEL = "gemini-3-pro-image-preview";
+const BATCH_MODEL = "nano-banana-pro";
 
 // Bounds that keep one advance step well under Vercel's 60s function budget and
 // keep claude-agent / Gemini load polite. No hard recipe cap (by design) — these
@@ -303,7 +303,7 @@ async function advanceImagingSync(
 
 // ---------- imaging: Gemini batch (large imports) ----------
 async function advanceImaging(row: ImportRow): Promise<ImportRow> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const token = process.env.NEX_API_TOKEN;
   const pending = row.chunks.filter(
     (c) => c.status === "created" && (c.image ?? "pending") === "pending" && c.dishId != null,
   );
@@ -316,9 +316,9 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
   // Non-premium users route every import (regardless of size) through the per-dish
   // sync path, which uses the cheaper flux model. Cancel any batch in flight first.
   if (!(await isPremiumImageUser(row.user_id))) {
-    if (apiKey && row.image_batches.length) {
+    if (token && row.image_batches.length) {
       for (const b of row.image_batches) {
-        if (!b.applied) await cancelBatch(apiKey, b.name);
+        if (!b.applied) await cancelBatch(token, b.name);
       }
       row.image_batches = [];
     }
@@ -329,9 +329,9 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
   // also recovers any ≤-threshold import that had already kicked off a slow
   // batch — cancel that batch first so Gemini stops retrying its pending images.
   if (pending.length <= IMAGE_SYNC_THRESHOLD) {
-    if (apiKey && row.image_batches.length) {
+    if (token && row.image_batches.length) {
       for (const b of row.image_batches) {
-        if (!b.applied) await cancelBatch(apiKey, b.name);
+        if (!b.applied) await cancelBatch(token, b.name);
       }
       row.image_batches = [];
     }
@@ -341,7 +341,7 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
   // --- BATCH mode (large imports only) ---
   // No batch image key → finish imageless (each dish is regenerable later via
   // its image button). This is also the local-dev path (no key).
-  if (!apiKey) {
+  if (!token) {
     for (const c of pending) c.image = "failed";
     row.status = "done";
     return saveRow(row);
@@ -374,8 +374,8 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
       if (requests.length === 0) continue;
       try {
         const sub = await submitImageBatch(
-          apiKey,
-          GOOGLE_IMAGE_MODEL,
+          token,
+          BATCH_MODEL,
           `ds-import-${row.id.slice(0, 8)}-${i}`,
           requests,
         );
@@ -414,13 +414,13 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
     // can finish (its dishes stay imageless, regenerable from the dish). Cancel
     // it so Gemini stops retrying its pending requests (a 503 storm otherwise).
     if (batch.attempts > IMAGE_MAX_ATTEMPTS) {
-      await cancelBatch(apiKey, batch.name);
+      await cancelBatch(token, batch.name);
       batch.applied = true;
       continue;
     }
     let polled;
     try {
-      polled = await pollBatch(apiKey, batch.name);
+      polled = await pollBatch(token, batch.name);
     } catch {
       continue; // transient (e.g. Gemini 503) — retry after the throttle interval
     }

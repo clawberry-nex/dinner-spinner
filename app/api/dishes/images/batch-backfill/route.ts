@@ -11,7 +11,7 @@ import {
   type BatchPollResult,
 } from "@/lib/gemini-batch";
 
-const GOOGLE_IMAGE_MODEL = "gemini-3-pro-image-preview";
+const BATCH_MODEL = "nano-banana-pro";
 
 // Hard cap. The Gemini inline-batch payload limit is 20 MB; at ~1.5 KB per
 // prompt that's ~13k requests, but applying N results synchronously on
@@ -44,10 +44,10 @@ export async function POST(req: NextRequest) {
   const userId = await resolveUserId(req);
   if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const token = process.env.NEX_API_TOKEN;
+  if (!token) {
     return Response.json(
-      { error: "GEMINI_API_KEY not configured" },
+      { error: "NEX_API_TOKEN not configured" },
       { status: 503 },
     );
   }
@@ -89,8 +89,8 @@ export async function POST(req: NextRequest) {
   });
 
   const submitted = await submitImageBatch(
-    apiKey,
-    GOOGLE_IMAGE_MODEL,
+    token,
+    BATCH_MODEL,
     `dinner-spinner-${userId.slice(0, 8)}-${Date.now()}`,
     requests,
   );
@@ -118,26 +118,27 @@ export async function GET(req: NextRequest) {
   const userId = await resolveUserId(req);
   if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const token = process.env.NEX_API_TOKEN;
+  if (!token) {
     return Response.json(
-      { error: "GEMINI_API_KEY not configured" },
+      { error: "NEX_API_TOKEN not configured" },
       { status: 503 },
     );
   }
 
   const url = new URL(req.url);
   const jobName = url.searchParams.get("job");
-  if (!jobName || !jobName.startsWith("batches/")) {
+  // Nex batch job ids are opaque nanoids (no "batches/" prefix like Gemini used).
+  if (!jobName) {
     return Response.json(
-      { error: "missing or invalid ?job=<batches/...>" },
+      { error: "missing ?job=<id>" },
       { status: 400 },
     );
   }
 
   let polled: BatchPollResult;
   try {
-    polled = await pollBatch(apiKey, jobName);
+    polled = await pollBatch(token, jobName);
   } catch (err) {
     return Response.json(
       { error: err instanceof Error ? err.message : "poll failed" },
