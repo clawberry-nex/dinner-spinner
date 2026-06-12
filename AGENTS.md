@@ -101,6 +101,7 @@ always 404 regardless of visibility.
 | `API_TOKEN` | Bearer for `POST /api/dishes` from curl/scripts (resolves to seed owner). |
 | `TODOIST_API_TOKEN` | Optional seed-owner Todoist fallback. Other users set theirs via `/settings`. |
 | `TODOIST_PROJECT_NAME` | Optional seed-owner Todoist project fallback. |
+| `CRON_SECRET` | **Optional but recommended.** Bearer that authenticates the batch-import background-completion chain (`/api/import/advance-bg`) and the daily `vercel.json` cron sweep. Unset ⇒ background completion is off and imports only advance while the `/add` tab is open. `openssl rand -hex 32`. |
 
 `.env.example` ships the placeholder template; `.env*` is gitignored except for `.env.example`.
 
@@ -205,6 +206,8 @@ Why async — direct calls to `POST /api/v1/chat` from Vercel were hitting the 6
 
 **Translation**: the ingest prompt passes the user's `default_language` (from `users.default_language`; NULL = English) and instructs the model to write the `title`, `subtitle`, cooking method, and human-readable fields (`descriptor`, `preparation`) in that language. Ingredient `name` fields and `imageDescription` always stay canonical English (to keep aggregation and pantry matching language-neutral).
 
+**No fabrication**: the prompt's "GROUND TRUTH" block (`lib/ingest/prompt.ts`) forbids inventing content the input doesn't contain — omit `recipe` when there are no instructions, return empty `ingredients` when none are listed, and keep the title faithful (don't rename into a different dish). Added after a batch stress test where Haiku fabricated a full method + 18 ingredients from a title-only source.
+
 **Structured outputs from ingest** (`DISH_INPUT_JSON_SCHEMA`, `lib/ingest/schema.ts`):
 - `ingredients[].section` — recipe part (e.g. `"Dough"`, `"Filling"`). Display grouping; never splits the shopping list.
 - `methodRefs` — top-level array of `{phrase: string, ingredients: number[]}`. `phrase` is an exact substring of the written method text; `ingredients` are 0-based indices into the ingredients array. Powers cook-mode highlighting.
@@ -212,7 +215,20 @@ Why async — direct calls to `POST /api/v1/chat` from Vercel were hitting the 6
 
 **anyOf-free schema requirement (`stripNullFromAnyOf`)**: the `DISH_INPUT_JSON_SCHEMA` is post-processed by `stripNullFromAnyOf` (`lib/ingest/schema.ts`) before being sent to claude-agent. This removes the `{type:"null"}` branch from every `anyOf` in the schema. **This is required** because claude-agent reconstructs the schema via `json-schema-to-zod`, which does not support `anyOf` — it degrades `.nullable()` fields to `z.unknown()`. Without stripping, complex fields like `methodRefs` arrive as a JSON string instead of a real array, breaking the whole structured-output contract. Keep the ingest schema anyOf-free.
 
+**Literal-`\n` normalization (`normalizeEscapedWhitespace`)**: Haiku's structured output *nondeterministically* fills multiline string fields (notably `recipe`) with the two characters `\n` instead of a real newline; claude-agent passes it through verbatim. `lib/ingest/sanitize.ts::normalizeEscapedWhitespace` converts literal `\n`/`\r\n`/`\t` → real characters on `recipe`/`subtitle`/ingredient `preparation`/`descriptor`/`section`, called right after `coerceMethodRefs` in BOTH ingest paths (`app/api/ingest/jobs/[id]` and the batch importer's `createDishFromStructured`). Without it, `parseMethod` — which splits on real `\n` — renders a `## Section`-leading method as a single H2 heading with zero steps, so the dish shows **no method** at all. `parseMethod` (`lib/recipe.ts`) also tolerates literal `\n` as a render-side backstop for any already-stored rows.
+
 **Language setting**: users set their preferred recipe language in Settings → "Recipe language". API: `GET /PATCH /api/me/language`. DB column: `users.default_language` (VARCHAR, NULL = English).
+
+## Batch import (`/add`)
+
+A whole document of recipes (paste or `.txt`) imports via a resumable server-side state machine (one `import_jobs` row; engine in `lib/import/advance.ts`). Statuses: `detecting → detected → parsing → imaging → done` (`failed` on a fatal error). Each poll of `GET /api/import/jobs/[id]` runs **one bounded step** and persists, so the import survives navigation.
+
+- **Detect** (`POST /api/import`): claude-agent splits the document into `{title, text}` chunks via **Sonnet** (`buildDetectPrompt`, `DETECT_JSON_SCHEMA`); chunk text is copied verbatim so the per-chunk parse reuses the single-ingest contract.
+- **Parse + create**: each chunk → Haiku parse (`DISH_INPUT_JSON_SCHEMA`) → `coerceMethodRefs` + `normalizeEscapedWhitespace` → `createDishForUser(…, {autoImage:false})`. Up to `PARSE_CONCURRENCY` (3) parse jobs in flight.
+- **Imaging**:
+  - **Premium** (seed owner + `PREMIUM_IMAGE_EMAILS`): large imports (> `IMAGE_SYNC_THRESHOLD`=12) use the Nano Banana Pro **Gemini batch** API (parallel, polled+applied in slices); small imports use the sync path.
+  - **Non-premium**: always the **sync flux path**, generated **concurrently** — `IMAGE_SYNC_SLICE_FLUX`=6 images per step via `Promise.all` (flux is ~2–5s each), skipping any dish that already has an image. (`IMAGE_SYNC_SLICE_PREMIUM`=1 keeps slow Nano Banana Pro small-imports to one per step.)
+- **Background completion** (`CRON_SECRET`): on confirm — and again on resume — the server kicks `/api/import/advance-bg`, a `CRON_SECRET`-gated self-driving chain (does ~45s of work in `after()`, then hands off to a fresh invocation; capped at `MAX_HOPS`=60; stops on any terminal status) that advances the import to completion **even after the user closes the tab**. Browser polling still drives the live UI; the row's `locked_until` lock serializes the two so they never double-advance. A **daily** `vercel.json` cron (`GET /api/import/advance-bg`) sweeps any stale non-terminal import as a backstop — Hobby allows only daily crons, so the self-chain is the real-time mechanism. Unset `CRON_SECRET` ⇒ background completion is off and the import only advances while the `/add` tab is open (it will freeze mid-imaging if the tab closes). The route is reachable past the NextAuth proxy via its existing Bearer-token bypass.
 
 ## Non-obvious things
 

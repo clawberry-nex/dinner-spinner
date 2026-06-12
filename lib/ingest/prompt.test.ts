@@ -69,3 +69,24 @@ test("includes at least one standard ingredient name", () => {
   // STANDARD_INGREDIENTS contains "onion" — verify the auto-sync wiring.
   assert.ok(p.includes("onion"));
 });
+
+// Regression (batch-import stress test, 2026-06-11): Haiku fabricated whole
+// methods/ingredients when the source had none ("The Soup I Make Every January"
+// → invented "Easy Cabbage Soup" with 18 ingredients). The prompt must forbid
+// inventing a method or ingredients that aren't in the input.
+test("forbids inventing a method when the source has no instructions", () => {
+  const p = buildIngestPrompt(FIXTURE).toLowerCase();
+  assert.ok(p.includes("omit"), "should tell the model to OMIT recipe when absent");
+  assert.ok(
+    p.includes("never invent") || p.includes("do not invent") || p.includes("don't invent"),
+    "should explicitly forbid inventing steps",
+  );
+});
+
+test("forbids inventing ingredients that are not in the input", () => {
+  const p = buildIngestPrompt(FIXTURE).toLowerCase();
+  assert.ok(
+    /(never|do not|don't) invent ingredients/.test(p),
+    "should explicitly forbid inventing ingredients",
+  );
+});

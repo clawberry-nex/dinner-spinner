@@ -20,6 +20,20 @@ test("groups numbered steps under ## section headers", () => {
   assert.deepEqual(out[1].steps, ["Chop", "Fry"]);
 });
 
+// Regression (batch-import stress test, 2026-06-11): Haiku returned `recipe`
+// with LITERAL backslash-n instead of real newlines, so a `## Section`-leading
+// method collapsed into one heading with zero steps → rendered as "no method"
+// (e.g. "Christmas Duck + Potatoes"). parseMethod must tolerate literal \n.
+test("tolerates literal backslash-n (renders the same as real newlines)", () => {
+  const md = "## Main\\n1. Arrange the shelves\\n2. Layer the potatoes\\n## Sauce\\n1. Boil";
+  const out = parseMethod(md);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].title, "Main");
+  assert.deepEqual(out[0].steps, ["Arrange the shelves", "Layer the potatoes"]);
+  assert.equal(out[1].title, "Sauce");
+  assert.deepEqual(out[1].steps, ["Boil"]);
+});
+
 test("treats prose paragraphs as steps (no-header recipes get numbered)", () => {
   const md = "Heat the pan.\n\nAdd the onion.";
   const out = parseMethod(md);

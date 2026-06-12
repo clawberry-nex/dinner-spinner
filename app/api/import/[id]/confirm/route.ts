@@ -1,5 +1,7 @@
+import { after } from "next/server";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { sql } from "@/lib/db";
+import { kickBackgroundAdvance } from "@/lib/import/background";
 
 const UUID_RE = /^[0-9a-fA-F-]{36}$/;
 
@@ -24,7 +26,12 @@ export async function POST(
      WHERE id = ${id} AND user_id = ${userId} AND status = 'detected'
      RETURNING status
   `;
-  if (upd.length) return Response.json({ ok: true, status: "parsing" });
+  if (upd.length) {
+    // Drive parse→image to completion server-side so the import finishes even
+    // if the user closes the tab (browser polling still drives the live UI).
+    after(() => kickBackgroundAdvance(id));
+    return Response.json({ ok: true, status: "parsing" });
+  }
 
   // Not in 'detected' — already confirmed, or doesn't exist.
   const cur = await sql`SELECT status FROM import_jobs WHERE id = ${id} AND user_id = ${userId}`;

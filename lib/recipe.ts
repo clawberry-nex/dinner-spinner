@@ -27,7 +27,13 @@ export function parseMethod(md: string): RecipeSection[] {
     return current;
   };
 
-  for (const rawLine of md.split("\n")) {
+  // Tolerate LITERAL escape sequences (backslash-n / backslash-r-backslash-n):
+  // some ingested recipes were stored with "\n" as two characters instead of a
+  // real newline (a Haiku structured-output quirk — normally repaired at ingest
+  // by normalizeEscapedWhitespace, but this keeps the renderer robust for any
+  // already-stored rows that bypassed it).
+  const normalized = md.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n");
+  for (const rawLine of normalized.split("\n")) {
     const line = rawLine.trim();
     if (!line) continue;
 
