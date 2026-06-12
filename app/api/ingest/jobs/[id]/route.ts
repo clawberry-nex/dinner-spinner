@@ -1,6 +1,6 @@
 import { resolveUserId } from "@/lib/auth-helpers";
 import { DishInputSchema } from "@/lib/types";
-import { coerceMethodRefs } from "@/lib/ingest/sanitize";
+import { coerceMethodRefs, normalizeEscapedWhitespace } from "@/lib/ingest/sanitize";
 import {
   pollClaudeAgentJob,
   ClaudeAgentError,
@@ -55,6 +55,9 @@ export async function GET(
       // than failing the whole dish — cook mode falls back to string-matching for
       // any that are absent. (See lib/ingest/sanitize.ts.)
       coerceMethodRefs(result.structured);
+      // Repair Haiku's literal-"\n"-instead-of-newline quirk in text fields
+      // (recipe/subtitle/ingredient prep) so the method renders as steps.
+      normalizeEscapedWhitespace(result.structured);
 
       // Re-validate the structured payload against our canonical Zod schema.
       // claude-agent enforces JSON Schema structurally but not all our

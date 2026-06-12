@@ -1,8 +1,10 @@
+import { after } from "next/server";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { sql } from "@/lib/db";
 import { startClaudeAgentJob, ClaudeAgentError } from "@/lib/ingest/claude-agent";
 import { buildDetectPrompt, DETECT_JSON_SCHEMA } from "@/lib/import/detect";
 import { parseImportRow, rowToImportProgress } from "@/lib/import/types";
+import { isContinueStatus, kickBackgroundAdvance } from "@/lib/import/background";
 
 // Just the detect-job kickoff (claude-agent runs the split off-Vercel); fast.
 export const maxDuration = 30;
@@ -31,6 +33,9 @@ export async function GET(req: Request): Promise<Response> {
   `;
   if (rows.length === 0) return Response.json({ active: null });
   const row = parseImportRow(rows[0]);
+  // Re-establish the server-side completion chain in case it died (e.g. a
+  // function eviction) — harmless if one is already running (the lock serializes).
+  if (isContinueStatus(row.status)) after(() => kickBackgroundAdvance(row.id));
   return Response.json({ active: { importId: row.id, progress: rowToImportProgress(row) } });
 }
 

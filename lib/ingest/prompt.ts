@@ -26,6 +26,8 @@ ${inputBody}
 
 LANGUAGE: Write ALL human-readable text — title, subtitle, recipe steps, "## Section" headers, descriptor, preparation — in ${lang}. Translate from the source language if needed. Two EXCEPTIONS stay canonical English: ingredient \`name\` (use the standard English vocabulary below) and \`image_description\`.
 
+GROUND TRUTH — transcribe, do not author: use ONLY what the INPUT contains. NEVER invent ingredients, and NEVER invent, infer, or guess method steps. If the input has no cooking instructions, OMIT \`recipe\` entirely. If it lists no ingredients, return an empty ingredients array. Keep the title faithful to the source — do not rename the dish into a different one.
+
 Each ingredient is split into structured fields — never cram everything into \`name\`:
 - name: bare purchasable thing, singular and canonical, in English ("tomato" not "tomatoes", "chicken thigh" not "chicken legs", "green chili" not "green chilli"). Colour stays with name when it changes the product.
 - descriptor: size/quality that matters at the store ("small", "medium", "large", "ripe"). Never "fresh" — implied.
@@ -45,7 +47,7 @@ For "salt and black pepper to taste" emit two pantry:true rows with unit="to tas
 Top-level fields:
 - title: short dish name (in ${lang}).
 - subtitle: optional 1-line description if obvious (in ${lang}).
-- recipe: the method, only if the input had instructions, as Markdown in ${lang}. For multi-part recipes use "## Section Title" headers (e.g. "## Dough", "## Filling", "## Toppings"); under each, write numbered steps "1.", "2.", one step per line. Single-part recipes: numbered steps, no header.
+- recipe: the cooking method as Markdown in ${lang} — ONLY if the input actually contains instructions. If it has no steps (e.g. just a title or an ingredient list), OMIT this field; never invent steps. For multi-part recipes use "## Section Title" headers (e.g. "## Dough", "## Filling", "## Toppings"); under each, write numbered steps "1.", "2.", one step per line. Single-part recipes: numbered steps, no header.
 - methodRefs: for every place the method text refers to an ingredient — INCLUDING loose references like "the seeds", "the dough", "the spices", "the sauce" — add { "phrase": <exact substring copied from your recipe text>, "ingredients": [<0-based indices into the ingredients array>] }. Use the EXACT substring as it appears in the \`recipe\` method you just wrote (in ${lang}) — copy from your output, not from the source text. A phrase may map to several ingredients ("the dough" → flour, water, yeast). Only include references you are confident about.
 - baseServings: from the recipe, default 4.
 - tags: only obvious dietary/protein tags (vegetarian, vegan, chicken, beef, fish, pasta, rice, soup, curry, stir fry, salad, dessert, breakfast). No personal tags.

@@ -8,7 +8,7 @@ import {
 } from "@/lib/ingest/claude-agent";
 import { buildIngestPrompt } from "@/lib/ingest/prompt";
 import { DISH_INPUT_JSON_SCHEMA } from "@/lib/ingest/schema";
-import { coerceMethodRefs } from "@/lib/ingest/sanitize";
+import { coerceMethodRefs, normalizeEscapedWhitespace } from "@/lib/ingest/sanitize";
 import { DishInputSchema } from "@/lib/types";
 import { getPantryDefaults } from "@/lib/pantry";
 import { languageName } from "@/lib/languages";
@@ -42,10 +42,15 @@ const IMAGE_MAX_ATTEMPTS = 80; // ~20 min of polling, then give up (dishes stay 
 // (with its throttled polling above) is reserved for large imports where its
 // parallelism is worth the latency.
 const IMAGE_SYNC_THRESHOLD = 12; // ≤ this many pending dishes → sync per-dish
-// One image per advance step. Worst case (direct Gemini 503 → Replicate Nano
-// Banana Pro ~33s) must stay under the route's 60s cap, and one-per-step means a
-// step that's killed at the cap only loses (and retries) a single dish.
-const IMAGE_SYNC_SLICE = 1;
+// Images per advance step, generated CONCURRENTLY (Promise.all), sized to stay
+// under the route's 60s cap even in the worst case. Non-premium uses flux
+// (~2-5s/image), so a batch of several finishes well within budget and an
+// 80-recipe import completes in ~14 steps instead of ~80 (the stuck-at-"imaging"
+// bug). Premium small imports use Nano Banana Pro (~33s worst case w/ fallback),
+// so keep those to one per step. A step killed at the cap only loses (and
+// retries) its own slice.
+const IMAGE_SYNC_SLICE_FLUX = 6; // non-premium (flux)
+const IMAGE_SYNC_SLICE_PREMIUM = 1; // premium small import (Nano Banana Pro)
 
 function token(): string {
   // Routes guard NEX_API_TOKEN presence before calling advance; assert here.
@@ -228,6 +233,9 @@ async function createDishFromStructured(structured: unknown, userId: string): Pr
   // string, drop a non-array, and drop individually-malformed entries instead
   // of failing the whole dish (see lib/ingest/sanitize.ts).
   coerceMethodRefs(structured);
+  // Repair Haiku's literal-"\n"-instead-of-newline quirk in text fields
+  // (recipe/subtitle/ingredient prep) so the method renders as steps.
+  normalizeEscapedWhitespace(structured);
   const validated = DishInputSchema.safeParse(structured);
   if (!validated.success) throw new Error("parsed dish failed validation");
   // autoImage:false — the batch importer generates images via the Gemini batch.
@@ -241,37 +249,52 @@ async function targetLang(userId: string): Promise<string> {
 }
 
 // ---------- imaging: sync per-dish (small imports) ----------
-// Generate a small slice of images per step via the single-image path. Each is
-// one synchronous request (no batch, no polling) — fast and 503-storm-proof.
-async function advanceImagingSync(row: ImportRow, pending: ImportChunk[]): Promise<ImportRow> {
-  const slice = pending.slice(0, IMAGE_SYNC_SLICE);
+// Generate a slice of images per step via the single-image path (no batch, no
+// polling — fast and 503-storm-proof). The slice runs CONCURRENTLY so a large
+// non-premium import (flux) finishes in a handful of steps instead of one image
+// per poll. `premium` picks the slice size (premium = slow Nano Banana Pro → 1).
+async function advanceImagingSync(
+  row: ImportRow,
+  pending: ImportChunk[],
+  premium: boolean,
+): Promise<ImportRow> {
+  const sliceSize = premium ? IMAGE_SYNC_SLICE_PREMIUM : IMAGE_SYNC_SLICE_FLUX;
+  const slice = pending.slice(0, sliceSize);
   const ids = slice.map((c) => c.dishId as number);
   const dishRows = await sql`
-    SELECT id, title, subtitle, image_description
+    SELECT id, title, subtitle, image_description, image_url
       FROM dishes WHERE id = ANY(${ids}::int[]) AND user_id = ${row.user_id}
   `;
   const byId = new Map(dishRows.map((d) => [d.id as number, d]));
-  for (const chunk of slice) {
-    const d = byId.get(chunk.dishId as number);
-    if (!d) {
-      chunk.image = "failed";
-      continue;
-    }
-    try {
-      await generateAndStoreImage(
-        {
-          id: d.id as number,
-          title: d.title as string,
-          subtitle: (d.subtitle as string | null) ?? null,
-          imageDescription: (d.image_description as string | null) ?? null,
-        },
-        row.user_id,
-      );
-      chunk.image = "done";
-    } catch {
-      chunk.image = "failed"; // leave imageless — regenerable from the dish
-    }
-  }
+  await Promise.all(
+    slice.map(async (chunk) => {
+      const d = byId.get(chunk.dishId as number);
+      if (!d) {
+        chunk.image = "failed";
+        return;
+      }
+      // Already imaged (e.g. a resumed import whose chunk-state lagged the
+      // actual dish row) — don't pay to regenerate; just settle the chunk.
+      if ((d.image_url as string | null) ?? null) {
+        chunk.image = "done";
+        return;
+      }
+      try {
+        await generateAndStoreImage(
+          {
+            id: d.id as number,
+            title: d.title as string,
+            subtitle: (d.subtitle as string | null) ?? null,
+            imageDescription: (d.image_description as string | null) ?? null,
+          },
+          row.user_id,
+        );
+        chunk.image = "done";
+      } catch {
+        chunk.image = "failed"; // leave imageless — regenerable from the dish
+      }
+    }),
+  );
   if (!row.chunks.some((c) => c.status === "created" && (c.image ?? "pending") === "pending")) {
     row.status = "done";
   }
@@ -299,7 +322,7 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
       }
       row.image_batches = [];
     }
-    return advanceImagingSync(row, pending);
+    return advanceImagingSync(row, pending, false);
   }
 
   // Small imports → fast synchronous per-dish generation (no Gemini batch). This
@@ -312,7 +335,7 @@ async function advanceImaging(row: ImportRow): Promise<ImportRow> {
       }
       row.image_batches = [];
     }
-    return advanceImagingSync(row, pending);
+    return advanceImagingSync(row, pending, true);
   }
 
   // --- BATCH mode (large imports only) ---
