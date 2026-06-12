@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { compressImage, type CompressedImage } from "@/lib/image-compress";
 import type { Dish, DishInput } from "@/lib/types";
+import { buildSharePrefillFromSearch } from "@/lib/share-prefill";
 import { Icon, type IconName } from "../_components/icon";
 
 // Ordered phases for the working-overlay timeline. These map the real
@@ -149,7 +150,14 @@ export function IngestInput() {
   // resume within 10 min so a stale stash doesn't ambush them later.
   useEffect(() => {
     const pending = readStash();
-    if (!pending) return;
+    if (!pending) {
+      // No in-flight ingest to resume — if we arrived via the Android share
+      // target (/add?title=…&text=…&url=…), prefill the textarea. The user
+      // still taps "Ingest recipe" to run it.
+      const prefill = buildSharePrefillFromSearch(window.location.search);
+      if (prefill) setInput(prefill);
+      return;
+    }
     setLoading(true);
     setStartedAt(pending.startedAt);
     setElapsedSec(Math.floor((Date.now() - pending.startedAt) / 1000));
