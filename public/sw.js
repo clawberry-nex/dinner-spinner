@@ -9,7 +9,7 @@
 // Bump CACHE_VERSION whenever the precache list or strategy changes; the
 // activate handler purges old caches.
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const SHELL_CACHE = `dinner-spinner-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `dinner-spinner-runtime-${CACHE_VERSION}`;
 const STATIC_CACHE = `dinner-spinner-static-${CACHE_VERSION}`;
@@ -140,7 +140,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.startsWith("/icons/") || url.pathname === "/manifest.webmanifest") {
+  // Manifest: network-first so manifest changes (e.g. share_target) reach the
+  // browser/WebAPK promptly; fall back to cache only when offline. Serving this
+  // cache-first previously pinned a stale manifest that survived PWA reinstalls.
+  if (url.pathname === "/manifest.webmanifest") {
+    event.respondWith(networkFirst(request, SHELL_CACHE));
+    return;
+  }
+
+  if (url.pathname.startsWith("/icons/")) {
     event.respondWith(cacheFirst(request, SHELL_CACHE));
     return;
   }
