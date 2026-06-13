@@ -5,6 +5,7 @@ import {
   isRecipeUrl,
   findScrapeableUrl,
   extractRecipe,
+  extractIngredientGroups,
   assertPublicHttpUrl,
   scrapeRecipeUrl,
 } from "./scrape-url";
@@ -102,6 +103,40 @@ test("extractRecipe: pulls title, ingredients, method, and image from JSON-LD", 
   // It must NOT drag in page noise.
   assert.doesNotMatch(r.text, /this is noise/);
   assert.doesNotMatch(r.text, /Cart empty/);
+});
+
+test("extractIngredientGroups: pulls getrecipekit ingredient groups + headings", () => {
+  const groups = extractIngredientGroups(fixture);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].heading, "For Salsa Verde");
+  assert.equal(groups[0].items.length, 4);
+  assert.equal(groups[0].items[0], "10 tomatillos, husked, rinsed, and chopped");
+  assert.equal(groups[1].heading, "For Assembly");
+  assert.equal(groups[1].items.length, 2);
+  assert.match(groups[1].items.join("\n"), /2 cups shredded chicken/);
+});
+
+test("extractRecipe: keeps ingredient section headers (## …) when the page groups them", () => {
+  const r = extractRecipe(fixture, "https://masienda.com/blogs/learn/pastel-azteca");
+  assert.match(r.text, /## For Salsa Verde/);
+  assert.match(r.text, /## For Assembly/);
+  // groups stay in document order: salsa verde before assembly
+  assert.ok(r.text.indexOf("## For Salsa Verde") < r.text.indexOf("## For Assembly"));
+  // an assembly-only item sits under the assembly header, not salsa verde
+  assert.ok(r.text.indexOf("2 cups shredded chicken") > r.text.indexOf("## For Assembly"));
+});
+
+test("extractRecipe: no section headers for a single ungrouped ingredient list", () => {
+  const html = `<html><head></head><body>
+    <script type="application/ld+json">${JSON.stringify({
+      "@type": "Recipe",
+      name: "Quick Eggs",
+      recipeIngredient: ["2 eggs", "butter"],
+      recipeInstructions: ["Crack eggs.", "Fry in butter."],
+    })}</script></body></html>`;
+  const r = extractRecipe(html, "https://example.com/eggs");
+  assert.doesNotMatch(r.text, /##/);
+  assert.match(r.text, /2 eggs/);
 });
 
 test("extractRecipe: handles string-array instructions and a string image", () => {
