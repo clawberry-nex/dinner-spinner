@@ -12,6 +12,18 @@ import {
   type DietFilter,
   type DietFlags,
 } from "@/lib/diet";
+import {
+  availableSortOptions,
+  DEFAULT_SORT,
+  isSortKey,
+  sortDishes,
+  type SortKey,
+} from "@/lib/dish-sort";
+import { SortControl } from "../_components/sort-control";
+
+// The Library only ever shows the signed-in owner's own dishes, so all sorts
+// (incl. the cook-log ones) apply. Computed once.
+const SORT_OPTIONS = availableSortOptions(true);
 
 type Entry = { id: number; servings: number };
 type ViewMode = "grid" | "list";
@@ -44,9 +56,14 @@ export default function DishesPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("grid");
+  const [sort, setSort] = useState<SortKey>(DEFAULT_SORT);
 
   const activeCount = selected.length + dietFilters.length + (favOnly ? 1 : 0);
   const clearAll = () => { setFavOnly(false); setSelected([]); setDietFilters([]); };
+  const changeSort = (key: SortKey) => {
+    setSort(key);
+    try { localStorage.setItem("dishSort", key); } catch { /* ignore */ }
+  };
 
   useEffect(() => {
     fetch("/api/dishes").then((r) => r.json()).then((data: Dish[]) => { setDishes(data); setLoading(false); }).catch(() => setLoading(false));
@@ -57,6 +74,15 @@ export default function DishesPage() {
     try {
       const raw = localStorage.getItem("mealPlan");
       if (raw) setEntries(JSON.parse(raw) as Entry[]);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Hydrate the persisted sort after mount — shared "dishSort" key with the
+  // profile grid, so the sort choice is consistent across both pages.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("dishSort");
+      if (isSortKey(raw)) setSort(raw);
     } catch { /* ignore */ }
   }, []);
 
@@ -119,6 +145,9 @@ export default function DishesPage() {
     });
   }, [dishes, q, favOnly, selected, dietFilters, dietByDish]);
 
+  // Sort runs AFTER the filters, and feeds both the grid and list views.
+  const sorted = useMemo(() => sortDishes(filtered, sort), [filtered, sort]);
+
   const isInPlan = (d: Dish) => entries.some((en) => en.id === d.id);
 
   return (
@@ -141,7 +170,12 @@ export default function DishesPage() {
                 {filtered.length} of {dishes.length}
               </div>
             </div>
-            <ViewToggle view={view} onChange={setView} />
+            <div className="flex shrink-0 items-center gap-[8px]">
+              {dishes.length > 1 && (
+                <SortControl value={sort} options={SORT_OPTIONS} onChange={changeSort} />
+              )}
+              <ViewToggle view={view} onChange={setView} />
+            </div>
           </div>
 
           {/* Mobile search + filter trigger (desktop uses the rail below). */}
@@ -279,7 +313,7 @@ export default function DishesPage() {
                 />
               ) : view === "list" ? (
                 <div className="overflow-hidden rounded-[var(--radius-lg)] border border-line bg-surface shadow-[var(--shadow-card)]">
-                  {filtered.map((d) => (
+                  {sorted.map((d) => (
                     <DishRow
                       key={d.id}
                       dish={d}
@@ -292,7 +326,7 @@ export default function DishesPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-[13px] lg:grid-cols-[repeat(auto-fill,minmax(212px,1fr))] lg:gap-[22px]">
-                  {filtered.map((d) => (
+                  {sorted.map((d) => (
                     <DishCard
                       key={d.id}
                       dish={d}
