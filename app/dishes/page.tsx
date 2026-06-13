@@ -155,7 +155,7 @@ export default function DishesPage() {
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-24 lg:pb-10">
         <div className="mx-auto flex w-full max-w-6xl flex-col px-5 pt-[var(--safe-top)] lg:px-10">
           {/* Header section — no AppHeader; the shell owns the brand chrome. */}
-          <div className="flex items-end justify-between gap-4 lg:mt-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4 lg:mt-2">
             <div className="min-w-0">
               <div className="mb-[10px] text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
                 Library
@@ -170,7 +170,7 @@ export default function DishesPage() {
                 {filtered.length} of {dishes.length}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-[8px]">
+            <div className="flex shrink-0 items-center gap-[8px] self-end sm:self-auto">
               {dishes.length > 1 && (
                 <SortControl value={sort} options={SORT_OPTIONS} onChange={changeSort} />
               )}
