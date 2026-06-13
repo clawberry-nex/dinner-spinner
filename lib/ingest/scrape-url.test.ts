@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
   isRecipeUrl,
+  findScrapeableUrl,
   extractRecipe,
   assertPublicHttpUrl,
   scrapeRecipeUrl,
@@ -30,6 +31,55 @@ test("isRecipeUrl: false for prose, partial, or multi-token input", () => {
   assert.equal(isRecipeUrl("https://example.com/r\nplus a note"), false);
   assert.equal(isRecipeUrl(""), false);
   assert.equal(isRecipeUrl("ftp://example.com/r"), false);
+});
+
+// ---------------------------------------------------------------------------
+// findScrapeableUrl — a URL that dominates the input (bare URL, or the Android
+// share case of "title + url" / "title + snippet + url"), but NOT a full recipe
+// that merely contains a source link.
+// ---------------------------------------------------------------------------
+
+test("findScrapeableUrl: bare URL", () => {
+  assert.equal(
+    findScrapeableUrl("https://masienda.com/blogs/learn/pastel-azteca?srsltid=x"),
+    "https://masienda.com/blogs/learn/pastel-azteca?srsltid=x",
+  );
+});
+
+test("findScrapeableUrl: Android share — title + url on separate lines", () => {
+  const shared =
+    "Pastel Azteca en Salsa Verde (Mexican Lasagna) – Masienda\nhttps://masienda.com/blogs/learn/pastel-azteca?srsltid=abc";
+  assert.equal(
+    findScrapeableUrl(shared),
+    "https://masienda.com/blogs/learn/pastel-azteca?srsltid=abc",
+  );
+});
+
+test("findScrapeableUrl: share with a title + short snippet + url", () => {
+  const shared =
+    "Best Tomato Soup\nA cozy weeknight soup from our kitchen.\nhttps://example.com/recipes/tomato-soup";
+  assert.equal(findScrapeableUrl(shared), "https://example.com/recipes/tomato-soup");
+});
+
+test("findScrapeableUrl: strips trailing punctuation around an inline url", () => {
+  assert.equal(
+    findScrapeableUrl("try this one: https://example.com/r."),
+    "https://example.com/r",
+  );
+});
+
+test("findScrapeableUrl: null when a full recipe body merely contains a source url", () => {
+  const pasted =
+    "Grandma's Stew\n\nIngredients:\n" +
+    Array.from({ length: 30 }, (_, i) => `- ingredient number ${i} with some prep notes`).join("\n") +
+    "\n\nMethod:\nBrown the beef, add stock, simmer two hours, season well and serve hot.\n" +
+    "Source: https://example.com/stew";
+  assert.equal(findScrapeableUrl(pasted), null);
+});
+
+test("findScrapeableUrl: null for prose with no url, and for a private-host share", () => {
+  assert.equal(findScrapeableUrl("a sticky miso aubergine for two"), null);
+  assert.equal(findScrapeableUrl("My recipe\nhttp://127.0.0.1/secret"), null);
 });
 
 // ---------------------------------------------------------------------------

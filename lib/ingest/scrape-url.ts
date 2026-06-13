@@ -26,14 +26,49 @@ export interface ScrapeResult {
 }
 
 /**
- * True only when the input is a single bare http(s) URL — that's when we
- * scrape server-side. Prose, "check out <url>", or schemeless hosts fall
- * through to the normal text-ingest path.
+ * True only when the input is a single bare http(s) URL.
  */
 export function isRecipeUrl(input: string): boolean {
   const s = input.trim();
   if (!s || /\s/.test(s)) return false;
   return /^https?:\/\/\S+$/i.test(s);
+}
+
+const URL_IN_TEXT_RE = /https?:\/\/[^\s<>"'`]+/i;
+// A share/bare-URL input is a URL plus at most a title + short snippet. A full
+// pasted recipe (ingredients + method) is far longer, so we keep its text.
+const MAX_SHARE_REMAINDER = 500;
+
+/**
+ * Return a URL to scrape when the input is *dominated* by a single URL — a bare
+ * URL, or the Android Web Share case where the textarea is prefilled with the
+ * page title (and maybe a short snippet) plus the URL on separate lines. Returns
+ * null when the input is a full recipe body that merely contains a source link
+ * (keep the pasted text), when there's no URL, or when the URL is non-public.
+ *
+ * This is what the app uses (not isRecipeUrl) so shares — not just bare URLs —
+ * trigger the server-side scrape + source-image path.
+ */
+export function findScrapeableUrl(
+  input: string,
+  opts: { maxRemainder?: number } = {},
+): string | null {
+  const s = input.trim();
+  if (!s) return null;
+  const m = s.match(URL_IN_TEXT_RE);
+  if (!m) return null;
+  const url = m[0].replace(/[).,;!?]+$/, ""); // drop trailing prose punctuation
+  const remainder = s
+    .replace(/https?:\/\/[^\s<>"'`]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (remainder.length > (opts.maxRemainder ?? MAX_SHARE_REMAINDER)) return null;
+  try {
+    assertPublicHttpUrl(url);
+  } catch {
+    return null;
+  }
+  return url;
 }
 
 /**
