@@ -31,11 +31,17 @@ export default async function ProfilePage(
   const signedIn = viewerId !== null;
 
   // Owner sees everything; visitor sees only public. Owner rows also carry the
-  // per-dish last-cooked timestamp used for ordering and the "last cooked" stat.
+  // cook-log aggregates the client sort control needs (last cooked, total cooks,
+  // average rating, rating count) — all owner-private, so the visitor query never
+  // selects them. The ORDER BY keeps the SSR order equal to the client's default
+  // ("Suggested") sort, so there's no re-order flash on hydration.
   const dishRows = isOwner
     ? await sql`
         SELECT d.*,
-          (SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id) AS last_cooked_at
+          (SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id) AS last_cooked_at,
+          (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id) AS cook_count,
+          (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
+          (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
         FROM dishes d
         WHERE d.user_id = ${profile.id}
         ORDER BY favorite DESC, last_cooked_at DESC NULLS LAST, id DESC
