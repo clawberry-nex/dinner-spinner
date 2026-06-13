@@ -25,6 +25,12 @@ export interface ScrapeResult {
   imageUrl: string | null;
 }
 
+export interface IngredientGroup {
+  /** The group label (e.g. "For Salsa Verde"), or null for an unlabelled list. */
+  heading: string | null;
+  items: string[];
+}
+
 /**
  * True only when the input is a single bare http(s) URL.
  */
@@ -149,11 +155,17 @@ export async function scrapeRecipeUrl(
 export function extractRecipe(html: string, pageUrl: string): ScrapeResult {
   const ogImage = firstMeta(html, ["og:image", "twitter:image"]);
   const recipe = findRecipeNode(html);
+  // schema.org `recipeIngredient` is a FLAT list — it drops the "For the Salsa
+  // Verde" / "For Assembly" group headers many recipe widgets (getrecipekit,
+  // WPRM, …) render in HTML. Recover those from the markup so the agent can
+  // assign ingredient `section`s; without them it inconsistently re-infers.
+  const groups = extractIngredientGroups(html);
+  const useGroups = groups.filter((g) => g.heading).length >= 2;
   if (recipe) {
     const name = strOrNull(recipe.name);
     return {
       title: name ? decodeEntities(name) : null,
-      text: recipeNodeToText(recipe),
+      text: recipeNodeToText(recipe, useGroups ? groups : null),
       imageUrl: absolutize(firstImage(recipe.image) ?? ogImage, pageUrl),
     };
   }
@@ -162,6 +174,35 @@ export function extractRecipe(html: string, pageUrl: string): ScrapeResult {
     text: htmlToText(html),
     imageUrl: absolutize(ogImage, pageUrl),
   };
+}
+
+/**
+ * Recover ingredient GROUPS from the HTML — each `<ul|ol class="…ingredient…">`
+ * plus the nearest heading before it. schema.org JSON-LD flattens these, but the
+ * group labels ("For Salsa Verde", "For Assembly") are what let the agent assign
+ * ingredient `section`s. Works for getrecipekit (`rk_group_heading`) and other
+ * widgets that wrap ingredient lists in `*ingredient*`-classed elements.
+ */
+export function extractIngredientGroups(html: string): IngredientGroup[] {
+  const groups: IngredientGroup[] = [];
+  const listRe =
+    /<(ul|ol)[^>]*class="[^"]*ingredient[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = listRe.exec(html))) {
+    const items = [...m[2].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+      .map((li) => decodeEntities(stripTags(li[1])).replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    if (!items.length) continue;
+    const before = html.slice(Math.max(0, m.index - 300), m.index);
+    const hs = [...before.matchAll(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi)];
+    let heading: string | null = hs.length
+      ? decodeEntities(stripTags(hs[hs.length - 1][1])).replace(/\s+/g, " ").trim()
+      : null;
+    // A bare "Ingredients" title isn't a group label.
+    if (heading && /^ingredients?$/i.test(heading)) heading = null;
+    groups.push({ heading, items });
+  }
+  return groups;
 }
 
 // --- JSON-LD ---------------------------------------------------------------
@@ -210,7 +251,10 @@ function searchRecipe(node: unknown): RecipeNode | null {
   return null;
 }
 
-function recipeNodeToText(r: RecipeNode): string {
+function recipeNodeToText(
+  r: RecipeNode,
+  groups?: IngredientGroup[] | null,
+): string {
   const parts: string[] = [];
   const name = strOrNull(r.name);
   if (name) parts.push(decodeEntities(name));
@@ -218,10 +262,24 @@ function recipeNodeToText(r: RecipeNode): string {
   if (desc) parts.push(decodeEntities(stripTags(desc)));
   const yld = recipeYieldToText(r.recipeYield);
   if (yld) parts.push(`Serves: ${yld}`);
-  const ings = ingredientLines(r.recipeIngredient);
-  if (ings.length) {
-    parts.push("Ingredients:\n" + ings.map((i) => `- ${i}`).join("\n"));
+
+  if (groups && groups.length) {
+    // Grouped ingredients recovered from HTML — emit "## Heading" sections so
+    // the agent mirrors them into ingredient `section` fields.
+    const ing = groups
+      .map((g) => {
+        const head = g.heading ? `## ${g.heading}\n` : "";
+        return head + g.items.map((i) => `- ${i}`).join("\n");
+      })
+      .join("\n");
+    if (ing.trim()) parts.push("Ingredients:\n" + ing);
+  } else {
+    const ings = ingredientLines(r.recipeIngredient);
+    if (ings.length) {
+      parts.push("Ingredients:\n" + ings.map((i) => `- ${i}`).join("\n"));
+    }
   }
+
   const steps = instructionLines(r.recipeInstructions);
   if (steps.length) {
     parts.push("Method:\n" + steps.map((s, i) => `${i + 1}. ${s}`).join("\n"));

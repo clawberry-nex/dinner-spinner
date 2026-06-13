@@ -22,8 +22,10 @@
         "recipeIngredient": [
           "10 tomatillos, husked, rinsed, and chopped",
           "1 jalapeño, stemmed",
-          "1/2 white onion, chopped",
-          "2 cloves garlic, peeled"
+          "½ white onion, chopped",
+          "2 cloves garlic, peeled",
+          "2 cups shredded chicken",
+          "18 corn tortillas"
         ],
         "recipeInstructions": [
           { "@type": "HowToStep", "text": "Heat 2 tbsp of oil in a pan over medium heat. Saute the onion and garlic until fragrant." },
@@ -40,6 +42,20 @@
   <article>
     <h1>Pastel Azteca</h1>
     <p>Some surrounding article prose that is not the structured recipe.</p>
+
+    <!-- getrecipekit renders ingredient GROUPS the schema.org JSON-LD flattens away -->
+    <h4 class="rk_group_heading">For Salsa Verde</h4>
+    <ul class="recipe-ingredient">
+      <li><p>10 tomatillos, husked, rinsed, and chopped</p></li>
+      <li><p>1 jalapeño, stemmed</p></li>
+      <li><p>½ white onion, chopped</p></li>
+      <li><p>2 cloves garlic, peeled</p></li>
+    </ul>
+    <h4 class="rk_group_heading">For Assembly</h4>
+    <ul class="recipe-ingredient">
+      <li><p>2 cups shredded chicken</p></li>
+      <li><p>18 corn tortillas</p></li>
+    </ul>
   </article>
   <footer>© Masienda</footer>
 </body>
