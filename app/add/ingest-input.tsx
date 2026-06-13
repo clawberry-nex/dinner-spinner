@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { compressImage, type CompressedImage } from "@/lib/image-compress";
 import type { Dish, DishInput } from "@/lib/types";
 import { buildSharePrefillFromSearch } from "@/lib/share-prefill";
-import { isRecipeUrl } from "@/lib/ingest/scrape-url";
+import { findScrapeableUrl } from "@/lib/ingest/scrape-url";
 import { Icon, type IconName } from "../_components/icon";
 
 // Ordered phases for the working-overlay timeline. These map the real
@@ -468,8 +468,9 @@ export function IngestInput() {
       </div>
 
       {/* URL imports use the recipe page's own photo by default; this toggle
-          forces an AI-generated image instead. Only shown for a bare URL. */}
-      {isRecipeUrl(input) && !file && (
+          forces an AI-generated image instead. Shown when the input is a URL
+          (bare, or a shared title + link). */}
+      {findScrapeableUrl(input) !== null && !file && (
         <label className="mt-3 flex cursor-pointer items-start gap-[10px] rounded-[var(--radius-md)] border border-line bg-surface-2 px-[13px] py-[11px]">
           <input
             type="checkbox"

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { getPantryDefaults } from "@/lib/pantry";
 import { buildIngestPrompt } from "@/lib/ingest/prompt";
-import { isRecipeUrl, scrapeRecipeUrl } from "@/lib/ingest/scrape-url";
+import { findScrapeableUrl, scrapeRecipeUrl } from "@/lib/ingest/scrape-url";
 import { DISH_INPUT_JSON_SCHEMA } from "@/lib/ingest/schema";
 import {
   startClaudeAgentJob,
@@ -76,13 +76,16 @@ export async function POST(request: Request): Promise<Response> {
   // text instead of the raw URL. Heavy pages (a 1.1 MB Shopify food blog) used
   // to blow the agent's 8-turn budget when it had to WebFetch them itself. The
   // scrape also yields the page's own recipe photo (sourceImageUrl), which the
-  // create step prefers over generating one. If scraping fails or returns too
-  // little, fall back to passing the raw URL (the previous behaviour).
+  // create step prefers over generating one. `findScrapeableUrl` catches both a
+  // bare URL and the Android share case (title + url prefilled into the box),
+  // but not a full recipe that merely contains a source link. If scraping fails
+  // or returns too little, fall back to passing the raw input (prior behaviour).
   let promptInput: string | null = input ?? null;
   let sourceImageUrl: string | null = null;
-  if (input && isRecipeUrl(input)) {
+  const scrapeUrl = input ? findScrapeableUrl(input) : null;
+  if (scrapeUrl) {
     try {
-      const scraped = await scrapeRecipeUrl(input);
+      const scraped = await scrapeRecipeUrl(scrapeUrl);
       if (scraped.text && scraped.text.trim().length >= 40) {
         promptInput = scraped.text;
         sourceImageUrl = scraped.imageUrl;
