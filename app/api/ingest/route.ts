@@ -2,6 +2,7 @@ import { z } from "zod";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { getPantryDefaults } from "@/lib/pantry";
 import { buildIngestPrompt } from "@/lib/ingest/prompt";
+import { isRecipeUrl, scrapeRecipeUrl } from "@/lib/ingest/scrape-url";
 import { DISH_INPUT_JSON_SCHEMA } from "@/lib/ingest/schema";
 import {
   startClaudeAgentJob,
@@ -71,6 +72,30 @@ export async function POST(request: Request): Promise<Response> {
   }
   const { input, image } = parsed.data;
 
+  // URL imports: scrape the page server-side and hand the agent clean recipe
+  // text instead of the raw URL. Heavy pages (a 1.1 MB Shopify food blog) used
+  // to blow the agent's 8-turn budget when it had to WebFetch them itself. The
+  // scrape also yields the page's own recipe photo (sourceImageUrl), which the
+  // create step prefers over generating one. If scraping fails or returns too
+  // little, fall back to passing the raw URL (the previous behaviour).
+  let promptInput: string | null = input ?? null;
+  let sourceImageUrl: string | null = null;
+  if (input && isRecipeUrl(input)) {
+    try {
+      const scraped = await scrapeRecipeUrl(input);
+      if (scraped.text && scraped.text.trim().length >= 40) {
+        promptInput = scraped.text;
+        sourceImageUrl = scraped.imageUrl;
+      } else {
+        console.warn("[ingest] url scrape produced too little text; using raw url", {
+          chars: scraped.text?.trim().length ?? 0,
+        });
+      }
+    } catch (err) {
+      console.warn("[ingest] url scrape failed; using raw url", err);
+    }
+  }
+
   const pantrySet = await getPantryDefaults(userId);
   const pantryList = Array.from(pantrySet).sort();
   const langRows = await sql`
@@ -80,7 +105,7 @@ export async function POST(request: Request): Promise<Response> {
     (langRows[0]?.default_language as string | null) ?? null,
   );
   const prompt = buildIngestPrompt({
-    userInput: input ?? null,
+    userInput: promptInput,
     pantryList,
     targetLanguage,
   });
@@ -103,7 +128,10 @@ export async function POST(request: Request): Promise<Response> {
       // schema.ts) both models reliably call submit_result with a valid payload.
       model: image ? "opus" : "haiku",
     });
-    return Response.json({ jobId: job.jobId }, { status: 202 });
+    return Response.json(
+      { jobId: job.jobId, sourceImageUrl },
+      { status: 202 },
+    );
   } catch (err) {
     if (err instanceof ClaudeAgentError) {
       const status =

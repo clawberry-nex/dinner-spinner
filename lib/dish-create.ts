@@ -4,7 +4,7 @@ import { sql } from "@/lib/db";
 import { type Dish, type DishInput, rowToDish } from "@/lib/types";
 import { applyPantryDefaults } from "@/lib/pantry";
 import { sanitizeMethodRefs } from "@/lib/recipe";
-import { generateAndStoreImage } from "@/lib/dish-image";
+import { generateAndStoreImage, storeImageFromUrl } from "@/lib/dish-image";
 
 /**
  * The single source of truth for creating a dish from validated DishInput.
@@ -16,17 +16,27 @@ import { generateAndStoreImage } from "@/lib/dish-image";
  * INSERT the row, return the Dish.
  *
  * `autoImage` (default true): when the dish lands with no imageUrl, kick a
- * single-image generation fire-and-forget via after(). Batch import passes
- * `false` — it generates images through one Gemini batch instead of N
- * synchronous per-dish calls. NOTE: after() only works inside a request/render
- * context, so this must be called from a route handler (it always is).
+ * fire-and-forget image step via after(). Batch import passes `false` — it
+ * generates images through one Gemini batch instead of N synchronous per-dish
+ * calls. NOTE: after() only works inside a request/render context, so this
+ * must be called from a route handler (it always is).
+ *
+ * Image source (URL imports): when `sourceImageUrl` is set and `generateImage`
+ * is not forced, download+store that photo from the source page instead of
+ * generating one. If the download fails, fall back to generation so the dish
+ * still gets an image. `generateImage: true` forces AI generation even when a
+ * source photo is available (the "generate instead" toggle on /add).
  */
 export async function createDishForUser(
   input: DishInput,
   userId: string,
-  opts: { autoImage?: boolean } = {},
+  opts: {
+    autoImage?: boolean;
+    sourceImageUrl?: string | null;
+    generateImage?: boolean;
+  } = {},
 ): Promise<Dish> {
-  const { autoImage = true } = opts;
+  const { autoImage = true, sourceImageUrl = null, generateImage = false } = opts;
 
   const ingredients = await applyPantryDefaults(input.ingredients, userId);
   const d = {
@@ -62,7 +72,19 @@ export async function createDishForUser(
   const dish = rowToDish(rows[0]);
 
   if (autoImage && dish.imageUrl == null) {
+    const useSource = !generateImage && !!sourceImageUrl;
     after(async () => {
+      if (useSource) {
+        try {
+          await storeImageFromUrl(dish, userId, sourceImageUrl as string);
+          return;
+        } catch (err) {
+          console.warn(
+            `source image for dish ${dish.id} failed, generating instead:`,
+            err,
+          );
+        }
+      }
       try {
         await generateAndStoreImage(dish, userId);
       } catch (err) {

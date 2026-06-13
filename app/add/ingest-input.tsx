@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { compressImage, type CompressedImage } from "@/lib/image-compress";
 import type { Dish, DishInput } from "@/lib/types";
 import { buildSharePrefillFromSearch } from "@/lib/share-prefill";
+import { isRecipeUrl } from "@/lib/ingest/scrape-url";
 import { Icon, type IconName } from "../_components/icon";
 
 // Ordered phases for the working-overlay timeline. These map the real
@@ -63,8 +64,18 @@ const IMAGE_POLL_TIMEOUT_MS = 60_000;
 const PENDING_KEY = "dinner-spinner:pending-ingest";
 const PENDING_TTL_MS = 10 * 60 * 1000;
 
+// Image handling for the eventual save. For URL imports `sourceImageUrl` is
+// the recipe page's own photo (used unless `generateImage` is toggled on).
+type ImageOpts = { sourceImageUrl: string | null; generateImage: boolean };
+
 type PendingState =
-  | { stage: "ingest"; jobId: string; startedAt: number }
+  | {
+      stage: "ingest";
+      jobId: string;
+      startedAt: number;
+      sourceImageUrl?: string | null;
+      generateImage?: boolean;
+    }
   | { stage: "image"; dishId: number; startedAt: number };
 
 function readStash(): PendingState | null {
@@ -112,6 +123,9 @@ const sleep = (ms: number): Promise<void> =>
 export function IngestInput() {
   const router = useRouter();
   const [input, setInput] = useState("");
+  // URL imports default to the recipe page's own photo; this toggle (shown only
+  // when the input is a URL) forces AI generation instead. Default off.
+  const [generateImage, setGenerateImage] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [compressedPreviewUrl, setCompressedPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -170,7 +184,10 @@ export function IngestInput() {
     let navigated = false;
     try {
       if (pending.stage === "ingest") {
-        navigated = await runFlowFromIngest(pending.jobId, pending.startedAt);
+        navigated = await runFlowFromIngest(pending.jobId, pending.startedAt, {
+          sourceImageUrl: pending.sourceImageUrl ?? null,
+          generateImage: pending.generateImage ?? false,
+        });
       } else {
         navigated = await runFlowFromImage(pending.dishId);
       }
@@ -231,6 +248,7 @@ export function IngestInput() {
       });
       const startBody = (await start.json().catch(() => ({}))) as {
         jobId?: string;
+        sourceImageUrl?: string | null;
         error?: { code?: string; message?: string };
       };
       if (!start.ok || !startBody.jobId) {
@@ -238,9 +256,13 @@ export function IngestInput() {
         return;
       }
       const jobId = startBody.jobId;
-      writeStash({ stage: "ingest", jobId, startedAt });
+      const imageOpts: ImageOpts = {
+        sourceImageUrl: startBody.sourceImageUrl ?? null,
+        generateImage,
+      };
+      writeStash({ stage: "ingest", jobId, startedAt, ...imageOpts });
 
-      navigated = await runFlowFromIngest(jobId, startedAt);
+      navigated = await runFlowFromIngest(jobId, startedAt, imageOpts);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected failure");
     } finally {
@@ -261,21 +283,27 @@ export function IngestInput() {
   async function runFlowFromIngest(
     jobId: string,
     startedAt: number,
+    imageOpts: ImageOpts,
   ): Promise<boolean> {
     const dish = await pollIngestUntilDone(jobId);
     if (!dish) return false;
-    return runFlowFromSave(dish, startedAt);
+    return runFlowFromSave(dish, startedAt, imageOpts);
   }
 
   async function runFlowFromSave(
     dish: DishInput,
     startedAt: number,
+    imageOpts: ImageOpts,
   ): Promise<boolean> {
     setCurrentStep("saving");
     const saveRes = await fetch("/api/dishes", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(dish),
+      body: JSON.stringify({
+        ...dish,
+        sourceImageUrl: imageOpts.sourceImageUrl,
+        generateImage: imageOpts.generateImage,
+      }),
     });
     if (!saveRes.ok) {
       const body = (await saveRes.json().catch(() => ({}))) as {
@@ -438,6 +466,29 @@ export function IngestInput() {
           )}
         </div>
       </div>
+
+      {/* URL imports use the recipe page's own photo by default; this toggle
+          forces an AI-generated image instead. Only shown for a bare URL. */}
+      {isRecipeUrl(input) && !file && (
+        <label className="mt-3 flex cursor-pointer items-start gap-[10px] rounded-[var(--radius-md)] border border-line bg-surface-2 px-[13px] py-[11px]">
+          <input
+            type="checkbox"
+            checked={generateImage}
+            onChange={(e) => setGenerateImage(e.target.checked)}
+            disabled={loading}
+            className="mt-[2px] h-4 w-4 shrink-0"
+            style={{ accentColor: "var(--accent)" }}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13.5px] font-semibold text-text">
+              Generate a new image with AI
+            </span>
+            <span className="mt-[1px] block text-[12.5px] text-text-faint">
+              Off: use the recipe&rsquo;s own photo from the page.
+            </span>
+          </span>
+        </label>
+      )}
 
       <button
         type="submit"
