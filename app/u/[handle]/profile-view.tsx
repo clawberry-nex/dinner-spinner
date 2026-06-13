@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { signOut } from "next-auth/react";
 import { Icon, type IconName } from "@/app/_components/icon";
 import { BrandMark, DishArt, useToast } from "@/app/_components/ui";
 import { useTheme } from "@/app/_components/theme-provider";
 import { computeDietFlags } from "@/lib/diet";
+import {
+  availableSortOptions,
+  DEFAULT_SORT,
+  isSortKey,
+  sortDishes,
+  type SortKey,
+  type SortOption,
+} from "@/lib/dish-sort";
 import type { Dish, Profile } from "@/lib/types";
 import EditProfile from "./edit-profile";
 
@@ -322,6 +330,28 @@ function KitchenStats({ stats }: { stats: KitchenStats }) {
 // private); visitor sees only what the server handed (public only).
 // ---------------------------------------------------------------
 function DishGrid({ dishes, isOwner }: { dishes: Dish[]; isOwner: boolean }) {
+  const options = useMemo(() => availableSortOptions(isOwner), [isOwner]);
+  const [sort, setSort] = useState<SortKey>(DEFAULT_SORT);
+
+  // Hydrate the persisted sort after mount (no SSR mismatch — same pattern as
+  // the spinner's filter persistence). Ignore a stored owner-only key when the
+  // viewer isn't the owner of this kitchen.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("dishSort");
+      if (isSortKey(raw) && options.some((o) => o.key === raw)) setSort(raw);
+    } catch {}
+  }, [options]);
+
+  const changeSort = (key: SortKey) => {
+    setSort(key);
+    try {
+      localStorage.setItem("dishSort", key);
+    } catch {}
+  };
+
+  const sorted = useMemo(() => sortDishes(dishes, sort), [dishes, sort]);
+
   if (dishes.length === 0) {
     return isOwner ? (
       <div className="mt-10 rounded-[var(--radius-lg)] border border-dashed border-line px-6 py-14 text-center">
@@ -347,18 +377,23 @@ function DishGrid({ dishes, isOwner }: { dishes: Dish[]; isOwner: boolean }) {
 
   return (
     <section className="mt-[34px]">
-      <div className="mb-[16px] flex items-baseline justify-between gap-3">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
-          {isOwner ? `Your dishes · ${dishes.length}` : `Recipes · ${dishes.length}`}
+      <div className="mb-[16px] flex items-end justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
+            {isOwner ? `Your dishes · ${dishes.length}` : `Recipes · ${dishes.length}`}
+          </div>
+          {isOwner && (
+            <div className="mt-[5px] text-[12.5px] text-text-faint">
+              {dishes.filter((d) => d.public).length} shown on your public page
+            </div>
+          )}
         </div>
-        {isOwner && (
-          <span className="text-[12.5px] text-text-faint">
-            {dishes.filter((d) => d.public).length} shown on your public page
-          </span>
+        {dishes.length > 1 && (
+          <SortControl value={sort} options={options} onChange={changeSort} />
         )}
       </div>
       <ul className="grid grid-cols-2 gap-[12px] sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(208px,1fr))] lg:gap-[18px]">
-        {dishes.map((d) => (
+        {sorted.map((d) => (
           <li key={d.id}>
             <Link
               href={`/dishes/${d.id}`}
@@ -411,6 +446,52 @@ function DishGrid({ dishes, isOwner }: { dishes: Dish[]; isOwner: boolean }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------
+// Sort control — a native <select> styled to the design tokens. Native keeps
+// it keyboard- and mobile-accessible for free (and opens the OS picker on
+// touch). The funnel icon signals "sort"; a chevron hints the dropdown.
+// ---------------------------------------------------------------
+function SortControl({
+  value,
+  options,
+  onChange,
+}: {
+  value: SortKey;
+  options: SortOption[];
+  onChange: (key: SortKey) => void;
+}) {
+  return (
+    <label className="relative inline-flex shrink-0 items-center rounded-pill border border-line bg-surface text-text-dim transition-colors hover:border-line-2 focus-within:border-accent">
+      <Icon
+        name="filter"
+        size={14}
+        className="pointer-events-none absolute left-[12px]"
+        style={{ color: "var(--text-faint)" }}
+      />
+      <span className="sr-only">Sort dishes</span>
+      <select
+        aria-label="Sort dishes"
+        value={value}
+        onChange={(e) => onChange(e.target.value as SortKey)}
+        className="cursor-pointer appearance-none rounded-pill bg-transparent py-[8px] pl-[32px] pr-[30px] text-[12.5px] font-semibold text-text focus:outline-none"
+        style={{ fontFamily: "var(--font-sans)" }}
+      >
+        {options.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <Icon
+        name="chevD"
+        size={14}
+        className="pointer-events-none absolute right-[11px]"
+        style={{ color: "var(--text-faint)" }}
+      />
+    </label>
   );
 }
 

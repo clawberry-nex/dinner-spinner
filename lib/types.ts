@@ -117,6 +117,9 @@ export type Dish = {
   lastCookedAt: string | null;
   averageRating: number | null;
   ratingCount: number;
+  // Total cook-log entries (rated or not). Distinct from ratingCount (rated
+  // only). Selected by queries that compute it; defaults to 0 otherwise.
+  cookCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -165,6 +168,7 @@ export function rowToDish(row: Record<string, unknown>): Dish {
     lastCookedAt: row.last_cooked_at ? String(row.last_cooked_at) : null,
     averageRating: avg == null ? null : Number(avg),
     ratingCount: count == null ? 0 : Number(count),
+    cookCount: row.cook_count == null ? 0 : Number(row.cook_count),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
