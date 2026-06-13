@@ -1,7 +1,18 @@
+import { z } from "zod";
 import { sql } from "@/lib/db";
 import { DishInputSchema, rowToDish } from "@/lib/types";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { createDishForUser } from "@/lib/dish-create";
+
+// Companion image options accepted alongside DishInput on create. Sent by the
+// /add ingest flow for URL imports: `sourceImageUrl` is the recipe page's own
+// photo (used instead of generating one); `generateImage` forces AI generation
+// even when a source photo is present. Both default off, so the manual form
+// and other callers are unaffected.
+const ImageOptionsSchema = z.object({
+  sourceImageUrl: z.string().url().nullable().optional(),
+  generateImage: z.boolean().optional(),
+});
 
 export async function GET(req: Request) {
   const userId = await resolveUserId(req);
@@ -54,6 +65,10 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const dish = await createDishForUser(parsed.data, userId);
+  const imgOpts = ImageOptionsSchema.safeParse(body);
+  const dish = await createDishForUser(parsed.data, userId, {
+    sourceImageUrl: imgOpts.success ? imgOpts.data.sourceImageUrl ?? null : null,
+    generateImage: imgOpts.success ? imgOpts.data.generateImage ?? false : false,
+  });
   return Response.json(dish, { status: 201 });
 }
