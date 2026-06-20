@@ -124,6 +124,29 @@ export default function DishView({
     } catch { setDish((d) => ({ ...d, favorite: !next })); }
   };
 
+  // Share a public dish: native OS share sheet where available (mobile),
+  // clipboard-copy fallback otherwise (desktop). URL is built from the live
+  // origin so it's correct on prod and any preview host.
+  const share = async () => {
+    const url = `${window.location.origin}/dishes/${dish.id}`;
+    const copy = () =>
+      void navigator.clipboard?.writeText(url).then(
+        () => toast.show("Link copied to clipboard"),
+        () => toast.show("Couldn’t copy link"),
+      );
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: dish.title, url });
+      } catch (err) {
+        // Dismissing the share sheet rejects with AbortError — a cancel, not a
+        // failure. Any other error falls back to copying the link.
+        if ((err as Error)?.name !== "AbortError") copy();
+      }
+      return;
+    }
+    copy();
+  };
+
   const submitCook = async (rating: number | null, note: string | null) => {
     try {
       const res = await fetch("/api/cook-log", {
@@ -237,27 +260,44 @@ export default function DishView({
               <Icon name="back" size={20} style={{ color: "#fff" }} />
             </button>
 
-            {/* owner controls: favorite + edit */}
-            {isOwner && (
+            {/* top-right hero controls: share (any public dish, incl. visitors)
+                + the owner's favorite/edit. A non-owner only ever loads a
+                public dish, so they get the share button alone. */}
+            {(isOwner || dish.public) && (
               <div className="absolute right-[18px] top-[var(--safe-top)] z-[5] flex items-center gap-[10px] lg:top-5">
-                <button
-                  type="button"
-                  onClick={favorite}
-                  aria-label={dish.favorite ? "Remove favourite" : "Mark as favourite"}
-                  className="grid h-10 w-10 place-items-center rounded-pill border-0"
-                  style={{ background: "rgba(20,14,11,0.5)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}
-                >
-                  <Icon name="heart" size={19} fill={dish.favorite} style={{ color: dish.favorite ? "var(--rose)" : "#fff" }} />
-                </button>
-                <button
-                  type="button"
-                  onClick={goEdit}
-                  aria-label="Edit recipe"
-                  className="grid h-10 w-10 place-items-center rounded-pill border-0"
-                  style={{ background: "rgba(20,14,11,0.5)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}
-                >
-                  <Icon name="edit" size={18} style={{ color: "#fff" }} />
-                </button>
+                {dish.public && (
+                  <button
+                    type="button"
+                    onClick={share}
+                    aria-label="Share recipe"
+                    className="grid h-10 w-10 place-items-center rounded-pill border-0"
+                    style={{ background: "rgba(20,14,11,0.5)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}
+                  >
+                    <Icon name="share" size={18} style={{ color: "#fff" }} />
+                  </button>
+                )}
+                {isOwner && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={favorite}
+                      aria-label={dish.favorite ? "Remove favourite" : "Mark as favourite"}
+                      className="grid h-10 w-10 place-items-center rounded-pill border-0"
+                      style={{ background: "rgba(20,14,11,0.5)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}
+                    >
+                      <Icon name="heart" size={19} fill={dish.favorite} style={{ color: dish.favorite ? "var(--rose)" : "#fff" }} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={goEdit}
+                      aria-label="Edit recipe"
+                      className="grid h-10 w-10 place-items-center rounded-pill border-0"
+                      style={{ background: "rgba(20,14,11,0.5)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}
+                    >
+                      <Icon name="edit" size={18} style={{ color: "#fff" }} />
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
