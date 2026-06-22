@@ -51,6 +51,9 @@ const ONLY = argVal("--only") != null ? Number(argVal("--only")) : null;
 const USER = argVal("--user");
 const LIMIT = argVal("--limit") != null ? Number(argVal("--limit")) : null;
 const CONCURRENCY = argVal("--concurrency") != null ? Number(argVal("--concurrency")) : 4;
+// The model occasionally rewords instead of only inserting markers (~5%,
+// nondeterministic). Each attempt is a fresh roll, so retry for a clean one.
+const GUARD_RETRIES = argVal("--guard-retries") != null ? Number(argVal("--guard-retries")) : 4;
 
 const token: string = process.env.NEX_API_TOKEN ?? "";
 if (!token) throw new Error("NEX_API_TOKEN required");
@@ -169,11 +172,23 @@ async function processDish(d: Dish, preview: PreviewRow[]): Promise<void> {
     const src: Record<string, unknown> = { recipe: d.recipe ?? "" };
     normalizeEscapedWhitespace(src);
     const original = (src.recipe as string).trim().replace(/^"+/, "").replace(/"+$/, "").trim();
-    const annotated = await annotate({ ...d, recipe: original });
-    if (!methodProseUnchanged(original, annotated)) {
+
+    // Retry on a reworded answer (not just on a hard error): a fresh roll usually
+    // inserts only the markers. Only dishes the model keeps rewording fall through
+    // to the name-match fallback.
+    let annotated: string | null = null;
+    let lastAttempt = "";
+    for (let attempt = 0; attempt < GUARD_RETRIES; attempt++) {
+      lastAttempt = await annotate({ ...d, recipe: original });
+      if (methodProseUnchanged(original, lastAttempt)) {
+        annotated = lastAttempt;
+        break;
+      }
+    }
+    if (annotated === null) {
       stats.guardRejected++;
-      console.warn(`#${d.id} "${d.title}" — GUARD REJECTED (prose changed); left untouched`);
-      preview.push({ id: d.id, title: d.title, status: "guard-rejected", before: d.recipe, attempted: annotated });
+      console.warn(`#${d.id} "${d.title}" — GUARD REJECTED after ${GUARD_RETRIES} tries (model kept rewording); left untouched`);
+      preview.push({ id: d.id, title: d.title, status: "guard-rejected", before: d.recipe, attempted: lastAttempt });
       return;
     }
     const refCount = parseInlineRefs(annotated).refs.length;
