@@ -4,13 +4,34 @@ import { auth } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { rowToDish, rowToProfile, type Dish } from "@/lib/types";
 import ProfileView, { type KitchenStats } from "./profile-view";
+import { profileOgText } from "@/lib/og/meta";
 
-// Profiles are reachable from the open web (per the public-profile
-// design), but we don't want them indexed — the share-via-link model
-// works fine without SEO. Per-page metadata wins over the layout default.
-export const metadata: Metadata = {
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(
+  props: PageProps<"/u/[handle]">,
+): Promise<Metadata> {
+  const base: Metadata = { robots: { index: false, follow: false } };
+  const { handle: raw } = await props.params;
+  const handle = decodeURIComponent(raw).toLowerCase();
+
+  const rows = await sql`SELECT id, handle, name, bio FROM users WHERE handle = ${handle} LIMIT 1`;
+  if (rows.length === 0) return base;
+  const u = rows[0];
+
+  const countRows = await sql`SELECT COUNT(*)::int AS n FROM dishes WHERE user_id = ${u.id} AND public = true`;
+  const publicCount = (countRows[0]?.n as number) ?? 0;
+
+  const { title, description } = profileOgText(
+    { name: (u.name as string | null) ?? null, handle: u.handle as string, bio: (u.bio as string | null) ?? null },
+    publicCount,
+  );
+  return {
+    ...base,
+    title,
+    description,
+    openGraph: { type: "profile", title, description, url: `/u/${u.handle as string}` },
+    twitter: { card: "summary_large_image", title, description },
+  };
+}
 
 export default async function ProfilePage(
   props: PageProps<"/u/[handle]">,

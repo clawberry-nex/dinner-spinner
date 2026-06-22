@@ -29,6 +29,8 @@ export default auth((req) => {
   if (
     pathname.startsWith("/u/") ||
     /^\/dishes\/\d+$/.test(pathname) ||
+    /^\/dishes\/\d+\/opengraph-image/.test(pathname) ||
+    /^\/opengraph-image/.test(pathname) ||
     (isApi && /^\/api\/dishes\/\d+$/.test(pathname) && req.method === "GET")
   ) {
     return;
