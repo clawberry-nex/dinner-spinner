@@ -15,15 +15,17 @@ const spectral = Spectral({
 });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains", display: "swap" });
 
-// Absolute base for og:image + canonical URLs in metadata. AUTH_URL is not
-// set in this project's Vercel env, so fall back to Vercel's auto-injected
-// production domain (localhost is only for local dev). Without an absolute,
-// non-localhost base, og:image resolves to localhost in prod and WhatsApp /
-// other crawlers can't fetch the share-card image.
+// Absolute base for og:image + canonical URLs in metadata. AUTH_URL is
+// intentionally unset in prod (NextAuth uses AUTH_TRUST_HOST to serve several
+// domains), so we can't rely on it; and Vercel's VERCEL_PROJECT_PRODUCTION_URL
+// resolves to an unrelated alias for this project. Pin the canonical
+// production origin explicitly so og:image resolves to a real, fetchable URL
+// (localhost only in local dev). Without an absolute, non-localhost base,
+// WhatsApp and other crawlers can't fetch the share-card image.
 const siteUrl =
   process.env.AUTH_URL ??
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  (process.env.VERCEL_ENV === "production"
+    ? "https://dinner-spinner-lake.vercel.app"
     : "http://localhost:3000");
 
 export const metadata: Metadata = {
