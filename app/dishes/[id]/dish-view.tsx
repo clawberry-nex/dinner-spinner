@@ -787,7 +787,11 @@ function linkifyStep(
         key={`ing-${key++}`}
         type="button"
         onClick={(e) => { e.stopPropagation(); onTap(s.idxs); }}
-        className="font-semibold text-accent-2 underline decoration-dotted decoration-accent-line underline-offset-2 hover:text-accent"
+        // text-left: a <button> defaults to text-align:center (UA), and since
+        // Tailwind keeps buttons as inline-block (display:inline is ignored on
+        // native-appearance buttons), a long methodRef phrase stretches to the
+        // full width and its wrapped lines render centered. Force left.
+        className="text-left font-semibold text-accent-2 underline decoration-dotted decoration-accent-line underline-offset-2 hover:text-accent"
       >
         {text.slice(s.start, s.end)}
       </button>,
