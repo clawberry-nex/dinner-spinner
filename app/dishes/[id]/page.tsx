@@ -3,13 +3,38 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { rowToCookLogEntry, rowToDish } from "@/lib/types";
+import { dishOgText } from "@/lib/og/meta";
 import DishView from "./dish-view";
 
-export const metadata: Metadata = {
-  // Even public dishes are share-via-link only; we don't want them
-  // surfacing in search engines without the owner opting in.
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(
+  props: PageProps<"/dishes/[id]">,
+): Promise<Metadata> {
+  const base: Metadata = { robots: { index: false, follow: false } };
+  const { id } = await props.params;
+  const dishId = Number(id);
+  if (!Number.isFinite(dishId)) return base;
+
+  const rows = await sql`
+    SELECT title, subtitle, tags, base_servings
+      FROM dishes WHERE id = ${dishId} AND public = true LIMIT 1
+  `;
+  if (rows.length === 0) return base;
+  const row = rows[0];
+
+  const { title, description } = dishOgText({
+    title: row.title as string,
+    subtitle: (row.subtitle as string | null) ?? null,
+    tags: (row.tags as string[]) ?? [],
+    baseServings: row.base_servings as number,
+  });
+  return {
+    ...base,
+    title,
+    description,
+    openGraph: { type: "article", title, description, url: `/dishes/${dishId}` },
+    twitter: { card: "summary_large_image", title, description },
+  };
+}
 
 export default async function DishPage(props: PageProps<"/dishes/[id]">) {
   const { id } = await props.params;
