@@ -16,6 +16,7 @@ const spectral = Spectral({
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains", display: "swap" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.AUTH_URL ?? "http://localhost:3000"),
   title: "Dinner Spinner",
   description: "Pick a dinner, scale the recipe, build a shopping list.",
   manifest: "/manifest.webmanifest",
@@ -31,6 +32,13 @@ export const metadata: Metadata = {
     // apple-touch icon below, where there's room for it.
     apple: "/icons/apple-touch-icon.png",
   },
+  openGraph: {
+    type: "website",
+    siteName: "Dinner Spinner",
+    title: "Dinner Spinner",
+    description: "Pick a dinner, scale the recipe, build a shopping list.",
+  },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {
