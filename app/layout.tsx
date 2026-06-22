@@ -4,6 +4,7 @@ import { ThemeProvider, themeScript } from "./_components/theme-provider";
 import { RootShell } from "./_components/root-shell";
 import { Pwa } from "./_components/pwa";
 import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import "./globals.css";
 
 const schibsted = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-schibsted", display: "swap" });
@@ -15,44 +16,54 @@ const spectral = Spectral({
 });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains", display: "swap" });
 
-// Absolute base for og:image + canonical URLs in metadata. AUTH_URL is
-// intentionally unset in prod (NextAuth uses AUTH_TRUST_HOST to serve several
-// domains), so we can't rely on it; and Vercel's VERCEL_PROJECT_PRODUCTION_URL
-// resolves to an unrelated alias for this project. Pin the canonical
-// production origin explicitly so og:image resolves to a real, fetchable URL
-// (localhost only in local dev). Without an absolute, non-localhost base,
-// WhatsApp and other crawlers can't fetch the share-card image.
-const siteUrl =
-  process.env.AUTH_URL ??
-  (process.env.VERCEL_ENV === "production"
-    ? "https://dinner-spinner-lake.vercel.app"
-    : "http://localhost:3000");
+// Resolve the origin from the INCOMING REQUEST so og:image + canonical URLs are
+// same-origin as the domain the page is served on. This app runs on several
+// domains (*.vercel.app and dinner-spinner.van-willigenburg.nl), and WhatsApp
+// will NOT render a cross-origin og:image — a fixed metadataBase makes the
+// share card load on one domain but break on the others. Falls back to a static
+// origin only when there's no request context (e.g. at build time).
+async function resolveSiteUrl(): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  if (host) {
+    const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+    return `${proto}://${host}`;
+  }
+  return (
+    process.env.AUTH_URL ??
+    (process.env.VERCEL_ENV === "production"
+      ? "https://dinner-spinner-lake.vercel.app"
+      : "http://localhost:3000")
+  );
+}
 
-export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  title: "Dinner Spinner",
-  description: "Pick a dinner, scale the recipe, build a shopping list.",
-  manifest: "/manifest.webmanifest",
-  appleWebApp: {
-    capable: true,
-    title: "Dinner",
-    statusBarStyle: "default",
-  },
-  icons: {
-    // The browser-tab favicon comes from the file-convention app/icon.svg +
-    // app/favicon.ico — the simplified glyph that stays legible at 16px. The
-    // detailed spinner wheel lives in the PWA manifest (icon-192/512) and the
-    // apple-touch icon below, where there's room for it.
-    apple: "/icons/apple-touch-icon.png",
-  },
-  openGraph: {
-    type: "website",
-    siteName: "Dinner Spinner",
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    metadataBase: new URL(await resolveSiteUrl()),
     title: "Dinner Spinner",
     description: "Pick a dinner, scale the recipe, build a shopping list.",
-  },
-  twitter: { card: "summary_large_image" },
-};
+    manifest: "/manifest.webmanifest",
+    appleWebApp: {
+      capable: true,
+      title: "Dinner",
+      statusBarStyle: "default",
+    },
+    icons: {
+      // The browser-tab favicon comes from the file-convention app/icon.svg +
+      // app/favicon.ico — the simplified glyph that stays legible at 16px. The
+      // detailed spinner wheel lives in the PWA manifest (icon-192/512) and the
+      // apple-touch icon below, where there's room for it.
+      apple: "/icons/apple-touch-icon.png",
+    },
+    openGraph: {
+      type: "website",
+      siteName: "Dinner Spinner",
+      title: "Dinner Spinner",
+      description: "Pick a dinner, scale the recipe, build a shopping list.",
+    },
+    twitter: { card: "summary_large_image" },
+  };
+}
 
 export const viewport: Viewport = {
   // Dark-first identity — the app defaults to the warm dark palette regardless
