@@ -15,8 +15,19 @@ const spectral = Spectral({
 });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains", display: "swap" });
 
+// Absolute base for og:image + canonical URLs in metadata. AUTH_URL is not
+// set in this project's Vercel env, so fall back to Vercel's auto-injected
+// production domain (localhost is only for local dev). Without an absolute,
+// non-localhost base, og:image resolves to localhost in prod and WhatsApp /
+// other crawlers can't fetch the share-card image.
+const siteUrl =
+  process.env.AUTH_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.AUTH_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(siteUrl),
   title: "Dinner Spinner",
   description: "Pick a dinner, scale the recipe, build a shopping list.",
   manifest: "/manifest.webmanifest",
