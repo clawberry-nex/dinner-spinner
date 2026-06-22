@@ -57,10 +57,12 @@ test("asks for numbered steps and section headers", () => {
   assert.ok(p.includes("## "));
 });
 
-test("documents the section field and methodRefs", () => {
+test("documents the section field and inline ingredient references", () => {
   const p = buildIngestPrompt(FIXTURE);
   assert.ok(/section/i.test(p));
-  assert.ok(p.includes("methodRefs"));
+  // Inline `[label](#index)` markers replace the old methodRefs array.
+  assert.ok(p.includes("[the eggs](#0)"), "shows the inline-reference example");
+  assert.ok(/0-based INDEX/i.test(p), "explains the index target");
   assert.ok(p.includes("the seeds")); // loose-reference example
 });
 

@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { sql } from "@/lib/db";
 import { type Dish, type DishInput, rowToDish } from "@/lib/types";
 import { applyPantryDefaults } from "@/lib/pantry";
-import { sanitizeMethodRefs } from "@/lib/recipe";
+import { assignIngredientIds, rewriteIndexRefsToIds } from "@/lib/inline-refs";
 import { generateAndStoreImage, storeImageFromUrl } from "@/lib/dish-image";
 
 /**
@@ -12,8 +12,8 @@ import { generateAndStoreImage, storeImageFromUrl } from "@/lib/dish-image";
  * this so the create path can't drift between them.
  *
  * Steps (mirrors what POST /api/dishes did inline): apply the user's pantry
- * defaults, sanitize methodRefs against the POST-pantry ingredient count,
- * INSERT the row, return the Dish.
+ * defaults, assign stable ingredient ids, rewrite the method's inline index
+ * references to those ids, INSERT the row, return the Dish.
  *
  * `autoImage` (default true): when the dish lands with no imageUrl, kick a
  * fire-and-forget image step via after(). Batch import passes `false` — it
@@ -38,17 +38,24 @@ export async function createDishForUser(
 ): Promise<Dish> {
   const { autoImage = true, sourceImageUrl = null, generateImage = false } = opts;
 
-  const ingredients = await applyPantryDefaults(input.ingredients, userId);
-  const d = {
-    ...input,
-    ingredients,
-    methodRefs: sanitizeMethodRefs(input.methodRefs, ingredients.length),
-  };
+  // Stable ids first (existing ones preserved), then resolve the method's inline
+  // references: the ingest model emits them by list INDEX (`#0`); now that every
+  // ingredient has an id, rewrite each index to its id so the reference survives
+  // later reordering. applyPantryDefaults only flags rows, so positions — and the
+  // model's index references — stay aligned. Manual recipes carry no index tags,
+  // so the rewrite is a no-op for them.
+  const ingredients = assignIngredientIds(
+    await applyPantryDefaults(input.ingredients, userId),
+  );
+  const recipe = input.recipe
+    ? rewriteIndexRefsToIds(input.recipe, ingredients.map((i) => i.id!))
+    : (input.recipe ?? null);
+  const d = { ...input, ingredients, recipe };
 
   const rows = await sql`
     INSERT INTO dishes (
       user_id, title, subtitle, recipe, tags, ingredients, base_servings,
-      favorite, image_url, emoji, accent, notes, image_description, public, method_refs
+      favorite, image_url, emoji, accent, notes, image_description, public
     )
     VALUES (
       ${userId},
@@ -64,8 +71,7 @@ export async function createDishForUser(
       ${d.accent ?? null},
       ${d.notes ?? null},
       ${d.imageDescription ?? null},
-      ${d.public ?? true},
-      ${d.methodRefs == null ? null : JSON.stringify(d.methodRefs)}::jsonb
+      ${d.public ?? true}
     )
     RETURNING *
   `;

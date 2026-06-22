@@ -3,7 +3,7 @@ import { sql } from "@/lib/db";
 import { DishPatchSchema, rowToDish } from "@/lib/types";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { applyPantryDefaults } from "@/lib/pantry";
-import { sanitizeMethodRefs } from "@/lib/recipe";
+import { assignIngredientIds, rewriteIndexRefsToIds } from "@/lib/inline-refs";
 
 export async function GET(
   req: NextRequest,
@@ -69,29 +69,26 @@ export async function PATCH(
   }
   const existing = rowToDish(existingRows[0]);
 
-  const ingredients =
+  // Stable ids: existing rows keep theirs (so inline method references stay
+  // valid across an edit); new rows and any pre-id legacy rows get one minted.
+  const ingredients = assignIngredientIds(
     u.ingredients !== undefined
       ? await applyPantryDefaults(u.ingredients, userId)
-      : existing.ingredients;
+      : existing.ingredients,
+  );
 
-  // methodRefs indices are positional (into the ingredients array). On omit,
-  // re-sanitize the existing refs against the (possibly changed) ingredient
-  // count so any now-out-of-range index is dropped; an explicit null clears;
-  // an array replaces. (A raw-API reorder that keeps the same count but omits
-  // methodRefs can leave refs pointing at the wrong row — a recoverable cook-
-  // mode highlight mismatch, not data corruption; the in-app form clears refs
-  // on any ingredient edit.)
-  const methodRefs =
-    u.methodRefs === undefined
-      ? sanitizeMethodRefs(existing.methodRefs, ingredients.length)
-      : u.methodRefs === null
-        ? null
-        : sanitizeMethodRefs(u.methodRefs, ingredients.length);
+  // Resolve any index-form references in the incoming method to ids (no-op for
+  // the in-app form, which already carries id references; covers raw-API callers
+  // that send `#0`-style tags alongside new ingredients).
+  const recipeRaw = u.recipe === undefined ? existing.recipe : u.recipe;
+  const recipe = recipeRaw
+    ? rewriteIndexRefsToIds(recipeRaw, ingredients.map((i) => i.id!))
+    : recipeRaw;
 
   const merged = {
     title: u.title ?? existing.title,
     subtitle: u.subtitle === undefined ? existing.subtitle : u.subtitle,
-    recipe: u.recipe === undefined ? existing.recipe : u.recipe,
+    recipe,
     tags: u.tags ?? existing.tags,
     baseServings: u.baseServings ?? existing.baseServings,
     favorite: u.favorite === undefined ? existing.favorite : u.favorite,
@@ -121,7 +118,6 @@ export async function PATCH(
       notes = ${merged.notes ?? null},
       image_description = ${merged.imageDescription ?? null},
       public = ${merged.public},
-      method_refs = ${methodRefs == null ? null : JSON.stringify(methodRefs)}::jsonb,
       updated_at = now()
     WHERE id = ${Number(id)} AND user_id = ${userId}
     RETURNING *

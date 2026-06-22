@@ -3,8 +3,6 @@
 // Shared by the dish detail view (RecipeMethod) and cook mode (CookView)
 // so numbering and matching behave identically everywhere.
 
-import type { MethodRef } from "./types.ts";
-
 export interface RecipeSection {
   title: string | null;
   steps: string[];
@@ -111,9 +109,9 @@ export function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Literal-name matcher (the legacy/fallback path). Word-boundary, case-
-// insensitive, tolerant of a trailing plural "s". Used when a dish has no
-// methodRefs (old dishes, or a hand-edited method).
+// Literal-name matcher (the fallback path). Word-boundary, case-insensitive,
+// tolerant of a trailing plural "s". Used per-step when a step carries no inline
+// `[label](#id)` reference (hand-edited, legacy, or genuinely untagged steps).
 export function findNameSpans(
   text: string,
   ingredients: { name: string }[],
@@ -144,42 +142,7 @@ export function findNameSpans(
   return spans;
 }
 
-// Phrase matcher (preferred). For each methodRef, find every occurrence of its
-// exact phrase in the text and link it to the referenced ingredient indices.
-// Phrases were authored by the model from this exact (translated) text, so the
-// match is reliable and language/loose-reference proof.
-export function findPhraseSpans(
-  text: string,
-  refs: MethodRef[],
-): IngredientSpan[] {
-  const spans: IngredientSpan[] = [];
-  for (const ref of refs) {
-    const phrase = ref.phrase.trim();
-    if (!phrase) continue;
-    const re = new RegExp(escapeRegex(phrase), "gi");
-    for (const m of text.matchAll(re)) {
-      const start = m.index ?? 0;
-      spans.push({ start, end: start + m[0].length, idxs: ref.ingredients.slice() });
-    }
-  }
-  return spans;
-}
-
-// Drop refs whose ingredient indices are out of range for the persisted
-// ingredient array; drop refs left with no valid index. Returns null when
-// nothing survives (so the column is cleared and cook-mode falls back).
-export function sanitizeMethodRefs(
-  refs: MethodRef[] | null | undefined,
-  ingredientCount: number,
-): MethodRef[] | null {
-  if (!refs || refs.length === 0) return null;
-  const cleaned = refs
-    .map((r) => ({
-      phrase: r.phrase,
-      ingredients: r.ingredients.filter(
-        (i) => Number.isInteger(i) && i >= 0 && i < ingredientCount,
-      ),
-    }))
-    .filter((r) => r.phrase.trim().length > 0 && r.ingredients.length > 0);
-  return cleaned.length > 0 ? cleaned : null;
-}
+// Inline `[label](#id)` references in the Method text are parsed by
+// parseInlineRefs (lib/inline-refs.ts); the renderer resolves their ids to
+// ingredient indices. findNameSpans above is the per-step fallback for any step
+// that carries no inline reference (hand-edited, legacy, or genuinely untagged).

@@ -8,7 +8,7 @@ import {
 } from "@/lib/ingest/claude-agent";
 import { buildIngestPrompt } from "@/lib/ingest/prompt";
 import { DISH_INPUT_JSON_SCHEMA } from "@/lib/ingest/schema";
-import { coerceMethodRefs, normalizeEscapedWhitespace } from "@/lib/ingest/sanitize";
+import { normalizeEscapedWhitespace } from "@/lib/ingest/sanitize";
 import { DishInputSchema } from "@/lib/types";
 import { getPantryDefaults } from "@/lib/pantry";
 import { languageName } from "@/lib/languages";
@@ -229,12 +229,10 @@ async function advanceParsing(row: ImportRow): Promise<ImportRow> {
 }
 
 async function createDishFromStructured(structured: unknown, userId: string): Promise<number> {
-  // Same methodRefs resilience as the single-ingest poll route — coerce a
-  // string, drop a non-array, and drop individually-malformed entries instead
-  // of failing the whole dish (see lib/ingest/sanitize.ts).
-  coerceMethodRefs(structured);
   // Repair Haiku's literal-"\n"-instead-of-newline quirk in text fields
-  // (recipe/subtitle/ingredient prep) so the method renders as steps.
+  // (recipe/subtitle/ingredient prep) so the method renders as steps. Inline
+  // `[label](#index)` references live inside `recipe`; createDishForUser does
+  // the index→id rewrite once ingredient ids are assigned.
   normalizeEscapedWhitespace(structured);
   const validated = DishInputSchema.safeParse(structured);
   if (!validated.success) throw new Error("parsed dish failed validation");

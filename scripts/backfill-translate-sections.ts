@@ -1,7 +1,10 @@
 // scripts/backfill-translate-sections.ts
-// One-shot: re-ingest existing dishes through the new ingest pipeline so they
-// get translated method text, numbered steps, ingredient sections, and
-// methodRefs. Safe by default — writes a preview and changes nothing.
+// One-shot (HISTORICAL, already run): re-ingest existing dishes through the
+// ingest pipeline for translated method text, numbered steps, and ingredient
+// sections. Safe by default — writes a preview and changes nothing.
+// NOTE: superseded for ingredient↔method linking by scripts/backfill-inline-refs.ts
+// (ADR-0001). This script REWRITES prose (re-ingest); the inline-refs backfill
+// only inserts reference markers and leaves the wording untouched.
 //
 // Usage (env from .env.production.local for prod, or your local env):
 //   node --env-file=.env.production.local scripts/backfill-translate-sections.ts            # dry-run all candidates
@@ -19,7 +22,6 @@ import {
   pollClaudeAgentJob,
 } from "../lib/ingest/claude-agent.ts";
 import { languageName } from "../lib/languages.ts";
-import { sanitizeMethodRefs } from "../lib/recipe.ts";
 import { writeFileSync } from "node:fs";
 
 const APPLY = process.argv.includes("--apply");
@@ -100,16 +102,12 @@ async function main() {
     const id = row.id as number;
     try {
       const { dish, next } = await reingestOne(row);
-      const methodRefs = sanitizeMethodRefs(
-        next.methodRefs ?? null,
-        next.ingredients.length,
-      );
       preview.push({
         id,
         before: { title: dish.title, recipe: dish.recipe, ingredients: dish.ingredients },
-        after: { title: next.title, recipe: next.recipe, ingredients: next.ingredients, methodRefs },
+        after: { title: next.title, recipe: next.recipe, ingredients: next.ingredients },
       });
-      console.log(`#${id} "${dish.title}" → "${next.title}" (${methodRefs?.length ?? 0} refs)`);
+      console.log(`#${id} "${dish.title}" → "${next.title}"`);
       if (APPLY) {
         await sql`
           UPDATE dishes SET
@@ -117,7 +115,6 @@ async function main() {
             subtitle = ${next.subtitle ?? null},
             recipe = ${next.recipe ?? null},
             ingredients = ${JSON.stringify(next.ingredients)}::jsonb,
-            method_refs = ${methodRefs == null ? null : JSON.stringify(methodRefs)}::jsonb,
             updated_at = now()
           WHERE id = ${id}
         `;

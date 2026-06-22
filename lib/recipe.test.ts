@@ -4,8 +4,6 @@ import {
   parseMethod,
   groupIngredientsBySection,
   findNameSpans,
-  findPhraseSpans,
-  sanitizeMethodRefs,
   escapeRegex,
 } from "./recipe.ts";
 
@@ -97,54 +95,6 @@ test("findNameSpans matches literal ingredient names (case/plural insensitive)",
   assert.deepEqual(byIdx, [0, 1]);
 });
 
-test("findPhraseSpans links loose phrases to ingredient indices", () => {
-  const refs = [
-    { phrase: "the seeds", ingredients: [3] },
-    { phrase: "the dough", ingredients: [0, 1, 2] },
-  ];
-  const text = "Fry the seeds, then roll out the dough.";
-  const spans = findPhraseSpans(text, refs);
-  const seeds = spans.find((s) => text.slice(s.start, s.end) === "the seeds");
-  const dough = spans.find((s) => text.slice(s.start, s.end) === "the dough");
-  assert.deepEqual(seeds?.idxs, [3]);
-  assert.deepEqual(dough?.idxs, [0, 1, 2]);
-});
-
-test("findPhraseSpans finds every occurrence of a phrase", () => {
-  const refs = [{ phrase: "onion", ingredients: [0] }];
-  const spans = findPhraseSpans("onion here, onion there", refs);
-  assert.equal(spans.length, 2);
-});
-
-test("findPhraseSpans returns independent idxs arrays per span", () => {
-  const refs = [{ phrase: "onion", ingredients: [0] }];
-  const spans = findPhraseSpans("onion and onion", refs);
-  assert.equal(spans.length, 2);
-  assert.notEqual(spans[0].idxs, spans[1].idxs); // different array objects
-  spans[0].idxs.push(99);
-  assert.deepEqual(spans[1].idxs, [0]); // mutation isolated
-  assert.deepEqual(refs[0].ingredients, [0]); // original ref untouched
-});
-
 test("escapeRegex escapes regex metacharacters", () => {
   assert.equal(escapeRegex("a.b+c(d)"), "a\\.b\\+c\\(d\\)");
-});
-
-// ---- sanitizeMethodRefs ----
-test("sanitizeMethodRefs drops out-of-range indices and empties", () => {
-  const refs = [
-    { phrase: "a", ingredients: [0, 5] },
-    { phrase: "b", ingredients: [9] },
-    { phrase: "c", ingredients: [1, 2] },
-  ];
-  const out = sanitizeMethodRefs(refs, 3);
-  assert.deepEqual(out, [
-    { phrase: "a", ingredients: [0] },
-    { phrase: "c", ingredients: [1, 2] },
-  ]);
-});
-
-test("sanitizeMethodRefs returns null for null/empty input", () => {
-  assert.equal(sanitizeMethodRefs(null, 3), null);
-  assert.equal(sanitizeMethodRefs([], 3), null);
 });

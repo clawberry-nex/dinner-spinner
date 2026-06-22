@@ -3,15 +3,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Dish, Ingredient, MethodRef } from "@/lib/types";
+import type { Dish, Ingredient } from "@/lib/types";
 import { Icon } from "@/app/_components/icon";
 import { formatQty, scaleIngredient, visibleUnit } from "@/lib/ingredients";
 import {
   parseMethod,
   groupIngredientsBySection,
   findNameSpans,
-  findPhraseSpans,
 } from "@/lib/recipe";
+import { parseInlineRefs } from "@/lib/inline-refs";
 import { findTimers } from "@/lib/timer-parse";
 import { useTimers } from "./use-timers";
 import TimerPanel from "./timer-panel";
@@ -34,20 +34,34 @@ function flattenSteps(recipe: string | null): FlatStep[] {
   return out;
 }
 
-// Linkify a step's plain text. Ingredient references come from the dish's
-// methodRefs (phrase lookup) when present, else fall back to literal name
-// matching. Duration patterns ("15 min") become tappable timers.
+// Linkify a step. Ingredient references come from inline `[label](#id)` markers
+// in the Method text (parseInlineRefs → ids resolved to ingredient indices);
+// a step with no markers falls back to literal name matching. Duration patterns
+// ("15 min") become tappable timers. The raw step text is collapsed to display
+// text first, so every offset below indexes what the reader actually sees.
 // Overlaps resolve earliest-start-wins; equal starts favor the longer span.
 function linkifyStep(
-  text: string,
+  rawText: string,
   ingredients: Ingredient[],
-  methodRefs: MethodRef[] | null,
   onTapIngredients: (idxs: number[]) => void,
   onStartTimer: (label: string, seconds: number) => void,
 ): React.ReactNode[] {
+  const { text, refs } = parseInlineRefs(rawText);
+  const idToIndex = new Map<string, number>();
+  ingredients.forEach((ing, i) => {
+    if (ing.id) idToIndex.set(ing.id, i);
+  });
   const ingRaw =
-    methodRefs && methodRefs.length > 0
-      ? findPhraseSpans(text, methodRefs)
+    refs.length > 0
+      ? refs
+          .map((r) => ({
+            start: r.start,
+            end: r.end,
+            idxs: r.ids
+              .map((id) => idToIndex.get(id))
+              .filter((i): i is number => i !== undefined),
+          }))
+          .filter((s) => s.idxs.length > 0)
       : findNameSpans(text, ingredients);
   const ingredientSpans: Span[] = ingRaw.map((s) => ({
     kind: "ingredient",
@@ -510,7 +524,7 @@ export default function CookView({
                     }}
                   >
                     {step
-                      ? linkifyStep(step.text, scaledIngredients, dish.methodRefs, scrollToIngredients, timers.start)
+                      ? linkifyStep(step.text, scaledIngredients, scrollToIngredients, timers.start)
                       : null}
                   </p>
                 </div>

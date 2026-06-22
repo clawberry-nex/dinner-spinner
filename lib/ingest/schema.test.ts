@@ -27,13 +27,6 @@ test("schema declares an ingredients array of objects", () => {
   assert.equal(ing?.items?.type, "object");
 });
 
-test("schema declares an optional methodRefs property", () => {
-  // methodRefs is .nullable().optional(), so Zod v4 may emit it as an `anyOf`
-  // wrapper rather than a bare {type:"array"}. Assert the property exists.
-  const s = DISH_INPUT_JSON_SCHEMA as { properties?: Record<string, unknown> };
-  assert.ok(s.properties && "methodRefs" in s.properties, "methodRefs property exists");
-});
-
 test("ingredient items declare an optional section field", () => {
   const s = DISH_INPUT_JSON_SCHEMA as {
     properties?: {
@@ -78,14 +71,16 @@ test("generated DISH_INPUT_JSON_SCHEMA has NO anyOf anywhere", () => {
   assert.ok(!json.includes("\"anyOf\""), "schema should be anyOf-free for json-schema-to-zod compatibility");
 });
 
-test("methodRefs is now an enforceable array; ingredient section is a string", () => {
+test("ingredient section is an enforceable string; recipe carries refs inline", () => {
   type SchemaShape = {
     properties: {
-      methodRefs: { type: string };
+      recipe: { type: string };
       ingredients: { items: { properties: { section: { type: string } } } };
     };
   };
   const s = DISH_INPUT_JSON_SCHEMA as unknown as SchemaShape;
-  assert.equal(s.properties.methodRefs.type, "array");
+  // recipe is a plain string (inline `[label](#id)` references live in it) —
+  // no separate methodRefs array, so no nested-array reliability problem.
+  assert.equal(s.properties.recipe.type, "string");
   assert.equal(s.properties.ingredients.items.properties.section.type, "string");
 });

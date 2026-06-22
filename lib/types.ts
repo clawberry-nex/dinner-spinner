@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 export const IngredientSchema = z.object({
+  // Stable, dish-local id (see lib/inline-refs.ts::mintIngredientId). Inline
+  // references in the Method text point at this, never at list position, so
+  // reordering/inserting/deleting other ingredients never misaligns a tag.
+  // Assigned server-side at create/edit; the ingest model never emits it.
+  id: z.string().trim().min(1).max(16).optional(),
   quantity: z.number().nonnegative(),
   unit: z.string().trim().max(32).nullable().optional(),
   name: z.string().trim().min(1).max(128),
@@ -26,30 +31,15 @@ export const IngredientSchema = z.object({
 
 export type Ingredient = z.infer<typeof IngredientSchema>;
 
-// A link from a phrase in the (translated) method text to the ingredient(s)
-// it references. Resolved at ingest so cook-mode highlighting is a precise
-// lookup — language- and loose-reference-proof ("the seeds" → cumin seeds,
-// "the dough" → flour+water+yeast). `ingredients` holds 0-based indices into
-// the dish's `ingredients` array.
-export const MethodRefSchema = z.object({
-  // A phrase is an exact substring of a method step; a step that enumerates
-  // several ingredients ("the lime leaves, shallots, lemongrass and galangal")
-  // legitimately runs long, so keep generous headroom. Over-length or otherwise
-  // malformed refs are dropped at ingest (see lib/ingest/sanitize.ts) rather
-  // than failing the whole dish.
-  phrase: z.string().trim().min(1).max(160),
-  // Cap per-phrase fan-out: a phrase referencing >20 distinct ingredients
-  // would be incoherent. Independent of the dish's total ingredient count.
-  ingredients: z.array(z.number().int().nonnegative()).min(1).max(20),
-});
-
-export type MethodRef = z.infer<typeof MethodRefSchema>;
+// Cook-mode ingredient highlighting is driven by inline `[label](#id)`
+// references embedded directly in the Method text (see lib/inline-refs.ts and
+// ADR-0001). There is no separate ref structure — the reference travels with
+// the text, so `recipe` stays a plain string here.
 
 export const DishInputSchema = z.object({
   title: z.string().trim().min(1).max(200),
   subtitle: z.string().trim().max(300).nullable().optional(),
   recipe: z.string().max(20_000).nullable().optional(),
-  methodRefs: z.array(MethodRefSchema).max(300).nullable().optional(),
   tags: z.array(z.string().trim().min(1).max(40)).default([]),
   ingredients: z.array(IngredientSchema).default([]),
   baseServings: z.number().int().positive().max(100).default(4),
@@ -84,7 +74,6 @@ export const DishPatchSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   subtitle: z.string().trim().max(300).nullable().optional(),
   recipe: z.string().max(20_000).nullable().optional(),
-  methodRefs: z.array(MethodRefSchema).max(300).nullable().optional(),
   tags: z.array(z.string().trim().min(1).max(40)).optional(),
   ingredients: z.array(IngredientSchema).optional(),
   baseServings: z.number().int().positive().max(100).optional(),
@@ -103,7 +92,6 @@ export type Dish = {
   title: string;
   subtitle: string | null;
   recipe: string | null;
-  methodRefs: MethodRef[] | null;
   tags: string[];
   ingredients: Ingredient[];
   baseServings: number;
@@ -154,7 +142,6 @@ export function rowToDish(row: Record<string, unknown>): Dish {
     title: row.title as string,
     subtitle: (row.subtitle as string | null) ?? null,
     recipe: (row.recipe as string | null) ?? null,
-    methodRefs: (row.method_refs as MethodRef[] | null) ?? null,
     tags: (row.tags as string[]) ?? [],
     ingredients: (row.ingredients as Ingredient[]) ?? [],
     baseServings: row.base_servings as number,

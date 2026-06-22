@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DishArt, Button, ServingsStepper, useToast } from "@/app/_components/ui";
 import { Icon } from "@/app/_components/icon";
-import type { CookLogEntry, Dish, Ingredient, MethodRef } from "@/lib/types";
+import type { CookLogEntry, Dish, Ingredient } from "@/lib/types";
 import { formatQty, scaleIngredient, visibleUnit } from "@/lib/ingredients";
 import {
   groupIngredientsBySection,
   findNameSpans,
-  findPhraseSpans,
   parseMethod,
 } from "@/lib/recipe";
+import { parseInlineRefs } from "@/lib/inline-refs";
 import { computeDietFlags, formatDietChips } from "@/lib/diet";
 import { clearLastServings, readLastServings, writeLastServings } from "@/lib/last-servings";
 
@@ -224,7 +224,6 @@ export default function DishView({
     <MethodBlock
       recipe={dish.recipe}
       ingredients={scaledIngredients}
-      methodRefs={dish.methodRefs}
       onTapIngredients={flashFromMethod}
     />
   );
@@ -752,19 +751,32 @@ function MiniTag({ children }: { children: React.ReactNode }) {
 
 // ───────────────────── method ─────────────────────
 
-// Linkify a method step: ingredient references (from methodRefs, else literal
-// name match) become tappable spans that scroll to + flash the ingredient,
-// mirroring cook mode. Pure presentational — no timer linkification here
-// (that's a cook-mode concern).
+// Linkify a method step: ingredient references (inline `[label](#id)` markers,
+// else literal name match) become tappable spans that scroll to + flash the
+// ingredient, mirroring cook mode. The raw text is collapsed to display text
+// first so offsets index what the reader sees. Pure presentational — no timer
+// linkification here (that's a cook-mode concern).
 function linkifyStep(
-  text: string,
+  rawText: string,
   ingredients: Ingredient[],
-  methodRefs: MethodRef[] | null,
   onTap: (idxs: number[]) => void,
 ): React.ReactNode[] {
+  const { text, refs } = parseInlineRefs(rawText);
+  const idToIndex = new Map<string, number>();
+  ingredients.forEach((ing, i) => {
+    if (ing.id) idToIndex.set(ing.id, i);
+  });
   const spans =
-    methodRefs && methodRefs.length > 0
-      ? findPhraseSpans(text, methodRefs)
+    refs.length > 0
+      ? refs
+          .map((r) => ({
+            start: r.start,
+            end: r.end,
+            idxs: r.ids
+              .map((id) => idToIndex.get(id))
+              .filter((i): i is number => i !== undefined),
+          }))
+          .filter((s) => s.idxs.length > 0)
       : findNameSpans(text, ingredients);
   if (spans.length === 0) return [text];
 
@@ -814,12 +826,10 @@ function linkifyStep(
 function MethodBlock({
   recipe,
   ingredients,
-  methodRefs,
   onTapIngredients,
 }: {
   recipe: string | null;
   ingredients: Ingredient[];
-  methodRefs: MethodRef[] | null;
   onTapIngredients: (idxs: number[]) => void;
 }) {
   const sections = useMemo(() => (recipe ? parseMethod(recipe) : []), [recipe]);
@@ -851,7 +861,7 @@ function MethodBlock({
                 <span className="text-[15px] font-bold text-accent-2" style={{ fontFamily: "var(--font-serif)" }}>{j + 1}</span>
               </div>
               <div className="text-[15px] leading-[1.5] text-text lg:max-w-[640px] lg:pt-1 lg:text-[16px] lg:leading-[1.7]">
-                {linkifyStep(step, ingredients, methodRefs, onTapIngredients)}
+                {linkifyStep(step, ingredients, onTapIngredients)}
               </div>
             </div>
           ))}

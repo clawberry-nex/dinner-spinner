@@ -6,8 +6,8 @@ type JsonNode = Record<string, unknown>;
 // claude-agent reconstructs this schema via json-schema-to-zod, which does NOT
 // support `anyOf`. Every `.nullable()` field becomes `anyOf:[X,{type:"null"}]`
 // and degrades to z.unknown() there — so claude-agent can't enforce the field
-// (the model then emits e.g. methodRefs as a JSON string). The ingest agent
-// only ever PRODUCES values (it omits absent fields rather than sending null),
+// (e.g. a nullable `subtitle`/`recipe` would arrive unvalidated). The ingest
+// agent only ever PRODUCES values (it omits absent fields rather than sending null),
 // so we drop the null branch from every anyOf, leaving a plain typed node that
 // json-schema-to-zod handles. Recurses through properties and items.
 export function stripNullFromAnyOf(node: unknown): unknown {

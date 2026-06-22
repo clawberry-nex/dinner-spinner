@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { Dish, DishInput, Ingredient, MethodRef } from "@/lib/types";
+import type { Dish, DishInput, Ingredient } from "@/lib/types";
 import { PANTRY_DEFAULTS, STANDARD_INGREDIENTS, STANDARD_UNITS } from "@/lib/vocabulary";
 import { moveItem } from "@/lib/reorder";
 import { Button, DishArt } from "./ui";
@@ -13,6 +13,10 @@ import { Icon } from "./icon";
 // ---------------------------------------------------------------------------
 
 type IngredientDraft = {
+  // Stable id carried through edits so inline `[label](#id)` references in the
+  // method keep resolving across reorders. Empty for a freshly-added row; the
+  // server mints one on save (assignIngredientIds).
+  id: string;
   quantity: string;
   unit: string;
   descriptor: string;
@@ -28,6 +32,7 @@ type IngredientDraft = {
 };
 
 const EMPTY_INGREDIENT: IngredientDraft = {
+  id: "",
   quantity: "",
   unit: "",
   descriptor: "",
@@ -55,11 +60,6 @@ type Draft = {
   favorite: boolean;
   public: boolean;
   ingredients: IngredientDraft[];
-  // Ingest-derived links, carried through edits untouched. Cleared on save if
-  // the ingredient list changed (indices would go stale). `refNames` is the
-  // snapshot of ingredient names the refs were computed against.
-  methodRefs: MethodRef[] | null;
-  refNames: string[] | null;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -77,8 +77,6 @@ const EMPTY_DRAFT: Draft = {
   favorite: false,
   public: true,
   ingredients: [{ ...EMPTY_INGREDIENT }],
-  methodRefs: null,
-  refNames: null,
 };
 
 function dishToDraft(d: Dish): Draft {
@@ -99,6 +97,7 @@ function dishToDraft(d: Dish): Draft {
     ingredients:
       d.ingredients.length > 0
         ? d.ingredients.map((i) => ({
+            id: i.id ?? "",
             quantity: String(i.quantity),
             unit: i.unit ?? "",
             descriptor: i.descriptor ?? "",
@@ -111,8 +110,6 @@ function dishToDraft(d: Dish): Draft {
             alternativesInput: (i.alternatives ?? []).join(", "),
           }))
         : [{ ...EMPTY_INGREDIENT }],
-    methodRefs: d.methodRefs ?? null,
-    refNames: d.methodRefs?.length ? d.ingredients.map((i) => i.name.trim()) : null,
   };
 }
 
@@ -134,6 +131,7 @@ function dishInputToDraft(d: DishInput): Draft {
     ingredients:
       (d.ingredients ?? []).length > 0
         ? d.ingredients!.map((i) => ({
+            id: i.id ?? "",
             quantity: String(i.quantity),
             unit: i.unit ?? "",
             descriptor: i.descriptor ?? "",
@@ -146,8 +144,6 @@ function dishInputToDraft(d: DishInput): Draft {
             alternativesInput: (i.alternatives ?? []).join(", "),
           }))
         : [{ ...EMPTY_INGREDIENT }],
-    methodRefs: d.methodRefs ?? null,
-    refNames: d.methodRefs?.length ? (d.ingredients ?? []).map((i) => i.name.trim()) : null,
   };
 }
 
@@ -160,6 +156,10 @@ function draftToPayload(d: Draft) {
         .map((a) => a.trim())
         .filter(Boolean);
       return {
+        // Preserve the stable id on existing rows; a blank (new) row is left
+        // id-less so the server mints one. Inline method references resolve by
+        // this id, so it must survive reorders untouched.
+        id: i.id.trim() || undefined,
         quantity: Number(i.quantity) || 0,
         unit: i.unit.trim() || null,
         name: i.name.trim(),
@@ -173,13 +173,6 @@ function draftToPayload(d: Draft) {
         alternatives: alternatives.length > 0 ? alternatives : null,
       };
     });
-  const currentNames = ingredients.map((i) => i.name);
-  const refsValid =
-    d.methodRefs != null &&
-    d.refNames != null &&
-    d.refNames.length === currentNames.length &&
-    d.refNames.every((n, idx) => n === currentNames[idx]);
-  const methodRefs = refsValid ? d.methodRefs : null;
   const tags = d.tagsInput
     .split(",")
     .map((t) => t.trim())
@@ -191,7 +184,6 @@ function draftToPayload(d: Draft) {
     notes: d.notes.trim() || null,
     tags,
     ingredients,
-    methodRefs,
     baseServings: Number(d.baseServings) || 4,
     imageUrl: d.imageUrl.trim() || null,
     imageDescription: d.imageDescription.trim() || null,
