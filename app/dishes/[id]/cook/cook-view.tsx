@@ -290,8 +290,17 @@ export default function CookView({
           ? (target.closest("[data-ing-scroll]") as HTMLElement)
           : null;
       if (scroller) {
+        // Measure relative to the scroller's own box, not via offsetTop:
+        // offsetTop is relative to the nearest positioned ancestor (the root
+        // .relative container far above this panel), so it overshoots and the
+        // scroll clamps to the bottom instead of centering the ingredient.
+        const targetRect = target.getBoundingClientRect();
+        const scrollerRect = scroller.getBoundingClientRect();
         const top =
-          target.offsetTop - scroller.clientHeight / 2 + target.clientHeight / 2;
+          scroller.scrollTop +
+          (targetRect.top - scrollerRect.top) -
+          scroller.clientHeight / 2 +
+          targetRect.height / 2;
         scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
       } else {
         target.scrollIntoView({ behavior: "smooth", block: "center" });
