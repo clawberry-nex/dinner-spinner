@@ -782,19 +782,28 @@ function linkifyStep(
   let key = 0;
   for (const s of picked) {
     if (s.start > last) parts.push(text.slice(last, s.start));
+    // A <span role="button">, NOT a <button>: a real button is an atomic
+    // inline-block box, so a long phrase stretches to the full width (its
+    // wrapped lines centre via the UA text-align) and trailing punctuation
+    // can't sit on the phrase's last line. An inline span flows as normal
+    // text — wraps left-aligned and lets the following "." stay attached.
     parts.push(
-      <button
+      <span
         key={`ing-${key++}`}
-        type="button"
+        role="button"
+        tabIndex={0}
         onClick={(e) => { e.stopPropagation(); onTap(s.idxs); }}
-        // text-left: a <button> defaults to text-align:center (UA), and since
-        // Tailwind keeps buttons as inline-block (display:inline is ignored on
-        // native-appearance buttons), a long methodRef phrase stretches to the
-        // full width and its wrapped lines render centered. Force left.
-        className="text-left font-semibold text-accent-2 underline decoration-dotted decoration-accent-line underline-offset-2 hover:text-accent"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            onTap(s.idxs);
+          }
+        }}
+        className="cursor-pointer font-semibold text-accent-2 underline decoration-dotted decoration-accent-line underline-offset-2 hover:text-accent"
       >
         {text.slice(s.start, s.end)}
-      </button>,
+      </span>,
     );
     last = s.end;
   }
