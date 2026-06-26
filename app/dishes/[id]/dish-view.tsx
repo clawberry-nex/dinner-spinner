@@ -15,6 +15,7 @@ import {
 import { parseInlineRefs } from "@/lib/inline-refs";
 import { computeDietFlags, formatDietChips } from "@/lib/diet";
 import { clearLastServings, readLastServings, writeLastServings } from "@/lib/last-servings";
+import { readPlan, writePlan } from "@/lib/plan-storage";
 
 function relTime(iso: string | null): string {
   if (!iso) return "Never";
@@ -36,12 +37,16 @@ export default function DishView({
   isOwner,
   ownerHandle,
   ownerName,
+  hrefBase = "",
+  planConfig,
 }: {
   dish: Dish;
   history: CookLogEntry[];
   isOwner: boolean;
   ownerHandle: string | null;
   ownerName: string | null;
+  hrefBase?: string;
+  planConfig?: { storageKey: string };
 }) {
   const router = useRouter();
   const [dish, setDish] = useState(initial);
@@ -69,6 +74,39 @@ export default function DishView({
     } catch { return false; }
   });
   const toast = useToast();
+
+  // Ephemeral demo "add to plan" — only wired when a planConfig is supplied
+  // (the /demo dish route). Writes to the demo localStorage key, never the
+  // server. Owners keep their own action-bar add-to-plan (mealPlan + PUT).
+  const [inDemoPlan, setInDemoPlan] = useState(false);
+  useEffect(() => {
+    if (!planConfig) return;
+    setInDemoPlan(readPlan(planConfig.storageKey).some((e) => e.id === initial.id));
+  }, [planConfig, initial.id]);
+  const addToDemoPlan = () => {
+    if (!planConfig) return;
+    const list = readPlan(planConfig.storageKey);
+    const existing = list.find((e) => e.id === dish.id);
+    const next = existing
+      ? list.map((e) => (e.id === dish.id ? { ...e, servings } : e))
+      : [...list, { id: dish.id, servings }];
+    writePlan(planConfig.storageKey, next);
+    setInDemoPlan(true);
+    toast.show(existing ? `Updated to ${servings} servings` : `Added at ${servings} servings`);
+  };
+  const demoPlanButton = planConfig ? (
+    <button
+      type="button"
+      onClick={addToDemoPlan}
+      className={[
+        "inline-flex h-[52px] shrink-0 items-center gap-[7px] rounded-pill border px-5 text-[15px] font-semibold transition-colors",
+        inDemoPlan ? "border-accent-line bg-accent-tint text-accent-2" : "border-line-2 bg-transparent text-text",
+      ].join(" ")}
+      style={{ fontFamily: "var(--font-sans)" }}
+    >
+      <Icon name={inDemoPlan ? "check" : "plus"} size={18} />{inDemoPlan ? "In plan" : "Add to plan"}
+    </button>
+  ) : null;
 
   // — ingredient ⇄ method cross-highlighting (parity with cook mode) —
   // Both the mobile and desktop layouts render an ingredient list (CSS-toggled
@@ -128,7 +166,7 @@ export default function DishView({
   // clipboard-copy fallback otherwise (desktop). URL is built from the live
   // origin so it's correct on prod and any preview host.
   const share = async () => {
-    const url = `${window.location.origin}/dishes/${dish.id}`;
+    const url = `${window.location.origin}${hrefBase}/dishes/${dish.id}`;
     const copy = () =>
       void navigator.clipboard?.writeText(url).then(
         () => toast.show("Link copied to clipboard"),
@@ -426,6 +464,7 @@ export default function DishView({
                         <ServingsStepper value={servings} base={dish.baseServings} onChange={setServingsClamped} onReset={resetServings} />
                       </div>
                     )}
+                    {planConfig && !isOwner && <div className="mt-3">{demoPlanButton}</div>}
                     {ingredientList}
                   </div>
                 </div>
@@ -473,6 +512,10 @@ export default function DishView({
               </div>
               <ServingsStepper value={servings} base={dish.baseServings} onChange={setServingsClamped} onReset={resetServings} />
             </div>
+
+            {planConfig && !isOwner && (
+              <div className="mt-[14px] flex px-[22px]">{demoPlanButton}</div>
+            )}
 
             {/* primary actions (owner) — kept high & reachable */}
             {isOwner && (
