@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { TabBar } from "./tab-bar";
 
-export function AppShell({ children, planCount, hideTabs }: { children: ReactNode; planCount?: number; hideTabs?: boolean }) {
+export function AppShell({ children, planCount, hideTabs, bottomSlot }: { children: ReactNode; planCount?: number; hideTabs?: boolean; bottomSlot?: ReactNode }) {
   const pathname = usePathname() || "/";
   // Hide all chrome (sidebar AND bottom nav) when the caller explicitly says so
   // (e.g. anon visitor on a shared link) OR on the immersive views that never
@@ -37,6 +37,8 @@ export function AppShell({ children, planCount, hideTabs }: { children: ReactNod
         {children}
         {/* Mobile bottom nav (<lg). */}
         {!hide && <TabBar planCount={count} />}
+        {/* Demo nav (replaces real chrome on /demo/*). */}
+        {bottomSlot}
       </div>
     </div>
   );

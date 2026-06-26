@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { AppShell } from "./app-shell";
 import { ImportProvider } from "./import-provider";
+import { DemoNav } from "./demo-nav";
+import { readPlan } from "@/lib/plan-storage";
 
 export function RootShell({
   children,
@@ -15,24 +17,24 @@ export function RootShell({
 }) {
   const [planCount, setPlanCount] = useState(0);
   const pathname = usePathname();
+  const isDemo = (pathname || "").startsWith("/demo");
 
   useEffect(() => {
-    const read = () => {
-      try {
-        const raw = localStorage.getItem("mealPlan");
-        const parsed = raw ? JSON.parse(raw) : [];
-        setPlanCount(Array.isArray(parsed) ? parsed.length : 0);
-      } catch { setPlanCount(0); }
-    };
+    const key = isDemo ? "demoMealPlan" : "mealPlan";
+    const read = () => setPlanCount(readPlan(key).length);
     read();
-    const onStorage = (e: StorageEvent) => { if (e.key === "mealPlan") read(); };
+    const onStorage = (e: StorageEvent) => { if (e.key === key) read(); };
     window.addEventListener("storage", onStorage);
     const t = window.setInterval(read, 1500);
     return () => { window.removeEventListener("storage", onStorage); window.clearInterval(t); };
-  }, [pathname]);
+  }, [pathname, isDemo]);
 
   return (
-    <AppShell planCount={planCount} hideTabs={!isSignedIn}>
+    <AppShell
+      planCount={planCount}
+      hideTabs={!isSignedIn || isDemo}
+      bottomSlot={isDemo ? <DemoNav planCount={planCount} /> : undefined}
+    >
       <ImportProvider isSignedIn={isSignedIn}>{children}</ImportProvider>
     </AppShell>
   );
