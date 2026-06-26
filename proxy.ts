@@ -13,7 +13,9 @@ export default auth((req) => {
     pathname === "/manifest.webmanifest" ||
     pathname.startsWith("/icons/") ||
     pathname === "/favicon.ico" ||
-    pathname.startsWith("/offline")
+    pathname.startsWith("/offline") ||
+    pathname === "/demo" ||
+    pathname.startsWith("/demo/")
   ) {
     return;
   }
