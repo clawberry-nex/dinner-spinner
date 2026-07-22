@@ -8,9 +8,9 @@
 // across tags for variety. Strips `notes` and `imageDescription` (private).
 // Idempotent — re-run any time to refresh the demo.
 //
-// NOTE: as of 2026-06-26 the production Neon project is compute-quota-blocked
-// until ~2026-07-01, so this cannot run yet. The /demo routes stay dormant
-// (404) until lib/demo/dishes.ts is populated and committed.
+// The /demo routes stay dormant (404) until lib/demo/dishes.ts is populated,
+// reviewed, and committed. This generator is an explicit content-release step,
+// not part of the normal build.
 
 import { writeFileSync } from "node:fs";
 import { neon } from "@neondatabase/serverless";

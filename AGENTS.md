@@ -12,7 +12,7 @@ Google + email/password). Sign-up is gated by an `ALLOWED_EMAILS` allowlist.
 
 ## Deploy topology
 
-- **Production**: https://dinner-spinner-lake.vercel.app (auto-deploys from `main`)
+- **Production**: https://dinner-spinner.van-willigenburg.nl and https://dinner-spinner-lake.vercel.app (both serve the same Vercel deployment; `main` auto-deploys)
 - **GitHub**: [clawberry-nex/dinner-spinner](https://github.com/clawberry-nex/dinner-spinner)
 - **Predecessor** (archived, do not push to): [clawberry-nex/dinner-spinner-old](https://github.com/clawberry-nex/dinner-spinner-old) — an earlier MongoDB-based attempt
 - **Vercel project**: `clawberry-nexs-projects/dinner-spinner`, linked to the GitHub repo
@@ -87,7 +87,12 @@ Cross-user **private** reads return **404** (not 403) so existence isn't
 leaked. Cross-user **edits** (PATCH/DELETE on another user's dish)
 always 404 regardless of visibility.
 
-## Env vars (all required in Vercel production env)
+## Environment variables
+
+Production serves more than one hostname. Keep `AUTH_TRUST_HOST=true` and
+leave `AUTH_URL` **unset** in Vercel; pinning `AUTH_URL` breaks host-sensitive
+auth and share metadata. `AUTH_URL=http://localhost:3000` is acceptable only
+for local development.
 
 | Name | Purpose |
 |---|---|
@@ -95,17 +100,24 @@ always 404 regardless of visibility.
 | `AUTH_SECRET` | JWT signing key (≥32 chars, e.g. `openssl rand -base64 32`) |
 | `AUTH_GOOGLE_ID` | Google OAuth client ID |
 | `AUTH_GOOGLE_SECRET` | Google OAuth client secret |
-| `AUTH_URL` | Canonical app URL (e.g. `https://dinner-spinner-lake.vercel.app`) |
+| `AUTH_TRUST_HOST` | Set to `true`; NextAuth trusts the incoming Vercel/custom-domain host. |
 | `ALLOWED_EMAILS` | Comma-separated lowercased allowlist. Set to `*` to disable. |
 | `SEED_OWNER_EMAIL` | Email that owned pre-multi-user data; bearer-token requests resolve to this user. |
-| `API_TOKEN` | Bearer for `POST /api/dishes` from curl/scripts (resolves to seed owner). |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob token used to persist dish images. |
+| `NEX_API_TOKEN` | Nex API token with `chat` and `images:generate` scopes; powers recipe ingest and image generation. |
+| `API_TOKEN` | Optional bearer for domain API calls from curl/scripts (resolves to seed owner). |
 | `TODOIST_API_TOKEN` | Optional seed-owner Todoist fallback. Other users set theirs via `/settings`. |
 | `TODOIST_PROJECT_NAME` | Optional seed-owner Todoist project fallback. |
+| `PREMIUM_IMAGE_EMAILS` | Optional comma-separated premium-image allowlist; unset means seed owner only, `*` means all users. |
+| `CLAUDE_AGENT_URL` | Optional Nex API base override; defaults to the public Funnel endpoint. |
 | `CRON_SECRET` | **Optional but recommended.** Bearer that authenticates the batch-import background-completion chain (`/api/import/advance-bg`) and the daily `vercel.json` cron sweep. Unset ⇒ background completion is off and imports only advance while the `/add` tab is open. `openssl rand -hex 32`. |
 
 `.env.example` ships the placeholder template; `.env*` is gitignored except for `.env.example`.
 
-**Removed** since the single-admin era: `ADMIN_PASSWORD`, `SESSION_SECRET`.
+**Intentionally absent in production**: `AUTH_URL`. **Removed** since the
+single-admin era: `ADMIN_PASSWORD`, `SESSION_SECRET`. Direct provider variables
+such as `GEMINI_API_KEY`, `REPLICATE_API_TOKEN`, `IMAGE_GEN_URL`, and
+`IMAGE_GEN_TOKEN` are also unused; all image generation goes through Nex.
 
 ## Parsing recipes into ingredient rows
 
@@ -205,7 +217,7 @@ The ingest flow is **async** because Vercel Hobby caps function duration at 60s 
 
 Why async — direct calls to `POST /api/v1/chat` from Vercel were hitting the 60s wall on real photos. `/chat-async` + polling makes the Vercel function ~1s regardless of how long the agent takes.
 
-**URL imports** (`lib/ingest/scrape-url.ts`): when the input is a single bare http(s) URL (`isRecipeUrl`), `POST /api/ingest` fetches the page server-side and hands the agent **clean recipe text** instead of the raw URL — extracting schema.org Recipe JSON-LD (name + `recipeIngredient` + `recipeInstructions`, handling HowToStep/HowToSection), falling back to stripped page text. Why: heavy pages (a 1.1 MB Shopify food blog) made the agent WebFetch them itself and blow its 8-turn budget ("Reached maximum number of turns (8)"); a scraped page collapses to ~2 KB of text the agent structures in 1–2 turns. The scrape also returns the page's own recipe photo (`sourceImageUrl`, JSON-LD `image[]` → `og:image`/`twitter:image`). On the save, `createDishForUser` **downloads+stores** that photo (`lib/dish-image.ts::storeImageFromUrl` → `uploadDishImage`, never hotlinked) instead of generating one — unless the user ticks **"Generate a new image with AI"** (default off; only shown for URLs), or the download fails (then it falls back to generation). SSRF guard `assertPublicHttpUrl` (http/https only; blocks loopback/private/link-local/metadata hosts) runs on both the page fetch and the image download. On scrape failure or <40 chars extracted, it falls back to passing the raw URL (prior behaviour).
+**URL imports** (`lib/ingest/scrape-url.ts`): when `findScrapeableUrl` finds an input dominated by one public http(s) URL, `POST /api/ingest` fetches the page server-side and hands the agent **clean recipe text** instead of the raw URL. This covers both a bare URL and Android Web Share text (title/short snippet + URL, with at most 500 non-URL characters), but deliberately leaves a full pasted recipe containing a source link untouched. Extraction prefers schema.org Recipe JSON-LD (name + `recipeIngredient` + `recipeInstructions`, handling HowToStep/HowToSection), then falls back to stripped page text. Why: heavy pages (a 1.1 MB Shopify food blog) made the agent WebFetch them itself and blow its 8-turn budget ("Reached maximum number of turns (8)"); a scraped page collapses to ~2 KB of text the agent structures in 1–2 turns. The scrape also returns the page's own recipe photo (`sourceImageUrl`, JSON-LD `image[]` → `og:image`/`twitter:image`). On the save, `createDishForUser` **downloads+stores** that photo (`lib/dish-image.ts::storeImageFromUrl` → `uploadDishImage`, never hotlinked) instead of generating one — unless the user ticks **"Generate a new image with AI"** (default off; only shown for URLs), or the download fails (then it falls back to generation). SSRF guard `assertPublicHttpUrl` (http/https only; blocks loopback/private/link-local/metadata hosts) runs on both the page fetch and the image download. On scrape failure or <40 chars extracted, it falls back to passing the raw input.
 
 **Model: Opus for photos, Haiku for text** (`model: image ? "opus" : "haiku"`). Photo ingests run on Opus (`claude-opus-4-8`) for its **high-resolution vision** (up to a 2576px long edge): it reads small printed quantities (½, 175g) far more accurately than Haiku, which is what makes ingredient amounts come out right from a photo. Verified 4/4 valid structured outputs within claude-agent's 8-turn budget. Text-only ingests have no OCR problem, so they stay on Haiku — ~30× cheaper (~$0.005 vs ~$0.15/photo) and equally reliable. With the anyOf-free tool schema (see below) both models reliably call `submit_result` with a well-formed payload (incl. inline `[label](#index)` references in `recipe`) inside the 8-turn budget; **Sonnet** is the one to avoid — it exhausted that budget on this heavier translate+annotate prompt. (Not yet gated by user — every photo ingest pays the Opus cost; gate via `isPremiumImageUser` if other users start adding photos.)
 
@@ -234,6 +246,25 @@ A whole document of recipes (paste or `.txt`) imports via a resumable server-sid
   - **Non-premium**: always the **sync `nano-banana-2` path** (via Nex), generated **concurrently** — `IMAGE_SYNC_SLICE_FLUX`=6 images per step via `Promise.all` (~5–12s each; the constant name is legacy), skipping any dish that already has an image. (`IMAGE_SYNC_SLICE_PREMIUM`=1 keeps slow Nano Banana Pro small-imports to one per step.)
 - **Background completion** (`CRON_SECRET`): on confirm — and again on resume — the server kicks `/api/import/advance-bg`, a `CRON_SECRET`-gated self-driving chain (does ~45s of work in `after()`, then hands off to a fresh invocation; capped at `MAX_HOPS`=60; stops on any terminal status) that advances the import to completion **even after the user closes the tab**. Browser polling still drives the live UI; the row's `locked_until` lock serializes the two so they never double-advance. A **daily** `vercel.json` cron (`GET /api/import/advance-bg`) sweeps any stale non-terminal import as a backstop — Hobby allows only daily crons, so the self-chain is the real-time mechanism. Unset `CRON_SECRET` ⇒ background completion is off and the import only advances while the `/add` tab is open (it will freeze mid-imaging if the tab closes). The route is reachable past the NextAuth proxy via its existing Bearer-token bypass.
 
+Failed single-recipe ingests can be inspected for roughly 24 hours before Nex
+prunes the job. Follow [docs/operations/ingest-debugging.md](docs/operations/ingest-debugging.md);
+never copy a token id/prefix or a pulled production secret into project docs.
+
+## Public demo (implemented, intentionally dormant)
+
+`/demo/*` is an anonymous, read-only experience backed only by the bundled
+`lib/demo/dishes.ts` snapshot. It never calls the domain API or database and
+uses isolated browser storage. While `DEMO_DISHES` is empty, every demo route
+returns 404; this is the current intentional state.
+
+Activation is an explicit content release: pull the current production env,
+run `npx tsx scripts/build-demo-snapshot.ts`, review the generated
+`lib/demo/dishes.ts` for public-safe content, then commit and deploy that file.
+The generator selects up to 20 public, imaged recipes owned by
+`SEED_OWNER_EMAIL` and strips `notes` and `imageDescription`. Do not run it as a
+routine build step. Design and implementation details live in
+`docs/superpowers/specs/2026-06-26-demo-read-only-design.md`.
+
 ## Non-obvious things
 
 - **Next 16 typegen**: `RouteContext<'/api/dishes/[id]'>` and `PageProps<'/dishes/[id]'>` are globally available types generated into `.next/dev/types/` by `next dev`, `next build`, or `next typegen`. If tsc complains about `Cannot find name 'RouteContext'`, run `npx next typegen` first.
@@ -246,12 +277,37 @@ A whole document of recipes (paste or `.txt`) imports via a resumable server-sid
 - **Auth for everything (with two carve-outs)**: every API route requires a session OR bearer `API_TOKEN` via `resolveUserId(req)`. **Exceptions**: the public-profile page (`/u/[handle]`) and public-dish reads (`/dishes/[id]` page, `GET /api/dishes/[id]`) are anon-readable when the dish is `public=true`. Everything else (mutations, meal plan, cook log, pantry, settings, ingest) still requires a session. The bearer-token path resolves to the **seed owner**'s `user_id`. Per-user token minting doesn't exist yet.
 - **Cross-user isolation**: cross-user **private** reads return 404 (not 403). Public dish reads use `WHERE id = $1 AND (public = true OR user_id = $viewer)` so private dishes still 404 to non-owners. PATCH/DELETE still scope by `user_id` so cross-user mutations 404.
 - **Tab bar hides for anon visitors**: `app/layout.tsx` calls `auth()` and plumbs `isSignedIn` through `RootShell` → `AppShell`. Anon visitors on `/u/[handle]` or a public `/dishes/[id]` get a standalone-looking page with no bottom nav, matching the share-link mental model.
+- **Share metadata must stay same-origin.** `app/layout.tsx::resolveSiteUrl` builds `metadataBase` from `x-forwarded-host`/`host`, and the OG image routes are public in `proxy.ts`. Do not replace this with `VERCEL_PROJECT_PRODUCTION_URL`, a fixed production alias, or a production `AUTH_URL`: the app serves multiple domains and WhatsApp drops cross-origin preview images.
 - **Handle one-time rename**: `users.handle_changed_at` is `NULL` initially. The first successful PATCH /api/me/profile with a new handle stamps `now()`; subsequent rename attempts return `handle_already_changed`. Existing share links to the old handle will 404 — surfaced in the edit-profile form as a warning.
 - **Backup imports** are scoped to the importing user. Dish-id collisions with another user's row are silently no-op'd (the conflict UPDATE is gated by `dishes.user_id = ${userId}`) to prevent cross-user clobber.
 - **Cook-mode highlighting** parses inline `[label](#id)` references embedded in the method text (`lib/inline-refs.ts::parseInlineRefs`, each id resolved to an ingredient), falling back **per step** to literal ingredient-name string-matching for any step that carries no inline reference (hand-edited, legacy, or genuinely untagged). See ADR-0001.
 - **Dish-photo regeneration is async.** `POST /api/dishes/[id]/image` inserts an `image_jobs` row (`status` pending→done/failed), runs `lib/dish-image.ts::generateAndStoreImage` in Vercel `after()` (`maxDuration=60`), and returns `202 {jobId}`. The edit-page `<DishForm>` polls `GET /api/dishes/[id]/image/jobs/[jobId]` every 2s (up to 3 min) until `done`/`failed`. `image_jobs` rows are pruned (>1 day) opportunistically on each POST — no cron. The create-route's auto-image-gen uses the same `generateAndStoreImage` helper (fire-and-forget via `after()`, no job row). Why async: a synchronous regenerate (~10-30s Nex gen) outran the client and looked "stuck on Generating…" even though the image saved server-side.
 
 ## Verification
+
+Local verification (run type generation before TypeScript):
+
+```bash
+npm install --include=dev
+npx next typegen
+npx tsc --noEmit
+npm run lint
+npm run build
+npx --yes tsx --test app/_experiences/config.test.ts lib/*.test.ts lib/**/*.test.ts
+```
+
+`npm run lint` is not currently green. In this checkout ESLint also descends
+into `.claude/worktrees/v2-redesign`, which accounts for most of its 292 errors;
+current `main` also has five errors across `demo-library.tsx`,
+`batch-import.tsx`, `profile-view.tsx`, and `claude-agent.test.ts`. Do not
+attribute that baseline to an unrelated change without checking paths.
+
+The direct test command currently discovers 286 tests: 280 pass and six are a
+known baseline. `install-prompt.test.ts`, `last-servings.test.ts`, and
+`meal-plan.test.ts` use top-level await that tsx compiles as CJS; three
+`theme.test.ts` assertions still expect the old `system` default while the app
+now defaults to `dark`. Do not call either suite green, and treat additional
+failures as regressions until these baselines are fixed.
 
 After any deploy, curl these against the production URL to confirm the full chain. EVERY domain endpoint requires auth now — the bearer-token path resolves to the seed owner.
 

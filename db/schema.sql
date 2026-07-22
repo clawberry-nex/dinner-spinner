@@ -114,8 +114,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS handle_changed_at timestamptz;
 -- profile pages show only public dishes to non-owners.
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS public boolean NOT NULL DEFAULT true;
 
--- Ingest normalization (2026-06): per-step phrase→ingredient links resolved
--- at ingest for cook-mode highlighting, and per-user default recipe language.
+-- Legacy method_refs is retained for old rows and one-shot migration tooling;
+-- active ingredient links live inline in dishes.recipe and runtime code ignores
+-- this column. default_language controls per-user recipe translation.
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS method_refs jsonb;
 ALTER TABLE users  ADD COLUMN IF NOT EXISTS default_language text;
 

@@ -4,8 +4,8 @@
 // literal "\n" instead of pressing newline; claude-agent passes it through and
 // our renderer (parseMethod splits on real "\n") then can't see the steps — a
 // `## Section`-leading method collapses into a single heading and shows as "no
-// method". Repairing it here (right after coerceMethodRefs, in BOTH ingest
-// paths) is model-quirk-proof and keeps storage canonical. Recipes never
+// method". Repairing it at both ingest boundaries is model-quirk-proof and
+// keeps storage canonical. Recipes never
 // legitimately contain a backslash-n, so this is safe. Mutates `raw` in place.
 function unescapeWhitespace(s: string): string {
   return s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\t/g, "\t");
