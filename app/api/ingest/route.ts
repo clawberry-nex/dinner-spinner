@@ -5,6 +5,7 @@ import { buildIngestPrompt } from "@/lib/ingest/prompt";
 import { findScrapeableUrl, scrapeRecipeUrl } from "@/lib/ingest/scrape-url";
 import { DISH_INPUT_JSON_SCHEMA } from "@/lib/ingest/schema";
 import {
+  CLAUDE_HARNESS_MODELS,
   startClaudeAgentJob,
   ClaudeAgentError,
 } from "@/lib/ingest/claude-agent";
@@ -129,7 +130,9 @@ export async function POST(request: Request): Promise<Response> {
       // on Haiku — ~30× cheaper (~$0.005 vs ~$0.15/photo) and equally reliable
       // for the structured prompt. With the anyOf-free schema (lib/ingest/
       // schema.ts) both models reliably call submit_result with a valid payload.
-      model: image ? "opus" : "haiku",
+      model: image
+        ? CLAUDE_HARNESS_MODELS.opus
+        : CLAUDE_HARNESS_MODELS.haiku,
     });
     return Response.json(
       { jobId: job.jobId, sourceImageUrl },

@@ -18,6 +18,7 @@ import { rowToDish, DishInputSchema } from "../lib/types.ts";
 import { buildIngestPrompt } from "../lib/ingest/prompt.ts";
 import { DISH_INPUT_JSON_SCHEMA } from "../lib/ingest/schema.ts";
 import {
+  CLAUDE_HARNESS_MODELS,
   startClaudeAgentJob,
   pollClaudeAgentJob,
 } from "../lib/ingest/claude-agent.ts";
@@ -75,7 +76,7 @@ async function reingestOne(row: Record<string, unknown>) {
     baseUrl,
     // Haiku — matches the live ingest route; completes within claude-agent's
     // 8-turn structured-output budget where Sonnet exhausted it.
-    model: "haiku",
+    model: CLAUDE_HARNESS_MODELS.haiku,
   });
   // Poll until done.
   for (let i = 0; i < 120; i++) {

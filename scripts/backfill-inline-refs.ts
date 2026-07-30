@@ -29,6 +29,7 @@
 import { sql } from "../lib/db.ts";
 import { rowToDish, type Dish } from "../lib/types.ts";
 import {
+  CLAUDE_HARNESS_MODELS,
   startClaudeAgentJob,
   pollClaudeAgentJob,
 } from "../lib/ingest/claude-agent.ts";
@@ -114,7 +115,7 @@ async function annotateOnce(d: Dish): Promise<string> {
     responseSchema: ANNOTATE_SCHEMA,
     token,
     baseUrl,
-    model: "haiku",
+    model: CLAUDE_HARNESS_MODELS.haiku,
   });
   for (let i = 0; i < 120; i++) {
     const r = await pollClaudeAgentJob(job.jobId, { token, baseUrl });

@@ -34,6 +34,18 @@ export class ClaudeAgentError extends Error {
   }
 }
 
+// Recipe ingestion is deliberately tuned and costed against these Claude tiers.
+// Prefixing the aliases keeps global Nex harness changes from silently rerouting
+// structured recipe jobs through another provider.
+export const CLAUDE_HARNESS_MODELS = {
+  opus: "claude:opus",
+  sonnet: "claude:sonnet",
+  haiku: "claude:haiku",
+} as const;
+
+export type ClaudeHarnessModel =
+  (typeof CLAUDE_HARNESS_MODELS)[keyof typeof CLAUDE_HARNESS_MODELS];
+
 export interface CallArgs {
   prompt: string;
   responseSchema: object;
@@ -42,8 +54,8 @@ export interface CallArgs {
   baseUrl: string;
   /** ms; default 60000. */
   timeoutMs?: number;
-  /** claude-agent model alias: opus | sonnet | haiku. Omit to use claude-agent's default. */
-  model?: "opus" | "sonnet" | "haiku";
+  /** Explicit Claude-harness model tier. Omit to use the Nex runtime default. */
+  model?: ClaudeHarnessModel;
 }
 
 export interface CallResult {
@@ -143,7 +155,7 @@ export interface StartJobArgs {
   image?: { data: string; mediaType: string };
   token: string;
   baseUrl: string;
-  model?: "opus" | "sonnet" | "haiku";
+  model?: ClaudeHarnessModel;
   /** ms; default 15000. Just the POST to claude-agent, not the job itself. */
   timeoutMs?: number;
 }
@@ -297,4 +309,3 @@ export async function pollClaudeAgentJob(
     rawResponse: JSON.stringify(body),
   });
 }
-

@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "@/lib/db";
 import {
+  CLAUDE_HARNESS_MODELS,
   startClaudeAgentJob,
   pollClaudeAgentJob,
   ClaudeAgentError,
@@ -203,7 +204,7 @@ async function advanceParsing(row: ImportRow): Promise<ImportRow> {
           responseSchema: DISH_INPUT_JSON_SCHEMA,
           token: tok,
           baseUrl: CLAUDE_AGENT_BASE_URL,
-          model: "haiku",
+          model: CLAUDE_HARNESS_MODELS.haiku,
         });
         chunk.parseJobId = job.jobId;
         chunk.status = "parsing";

@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { callClaudeAgent, ClaudeAgentError } from "./claude-agent.ts";
+import {
+  callClaudeAgent,
+  CLAUDE_HARNESS_MODELS,
+  ClaudeAgentError,
+  startClaudeAgentJob,
+} from "./claude-agent.ts";
 
 const SCHEMA = {
   type: "object",
@@ -37,7 +42,7 @@ test("returns parsed `structured` on a 200", async () => {
 });
 
 test("sends the expected request body", async () => {
-  let captured: { url?: string; body?: unknown; auth?: string | null } = {};
+  const captured: { url?: string; body?: unknown; auth?: string | null } = {};
   const fetcher: typeof fetch = async (input, init) => {
     captured.url = String(input);
     captured.body = JSON.parse(String(init?.body ?? "{}"));
@@ -67,6 +72,35 @@ test("sends the expected request body", async () => {
     prompt: "hello",
     response_schema: SCHEMA,
     images: [{ data: "AAAA", media_type: "image/jpeg" }],
+  });
+});
+
+test("async jobs preserve an explicit Claude harness model prefix", async () => {
+  let capturedBody: unknown;
+  const fetcher: typeof fetch = async (_input, init) => {
+    capturedBody = JSON.parse(String(init?.body ?? "{}"));
+    return jsonResponse({
+      job_id: "job-1",
+      poll_url: "/api/v1/jobs/job-1",
+      status: "pending",
+    }, 202);
+  };
+
+  await startClaudeAgentJob(
+    {
+      prompt: "hello",
+      responseSchema: SCHEMA,
+      token: "nxk_test",
+      baseUrl: "http://mock.test",
+      model: CLAUDE_HARNESS_MODELS.haiku,
+    },
+    { fetcher },
+  );
+
+  assert.deepEqual(capturedBody, {
+    prompt: "hello",
+    response_schema: SCHEMA,
+    model: "claude:haiku",
   });
 });
 

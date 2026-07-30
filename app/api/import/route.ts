@@ -1,7 +1,11 @@
 import { after } from "next/server";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { sql } from "@/lib/db";
-import { startClaudeAgentJob, ClaudeAgentError } from "@/lib/ingest/claude-agent";
+import {
+  CLAUDE_HARNESS_MODELS,
+  startClaudeAgentJob,
+  ClaudeAgentError,
+} from "@/lib/ingest/claude-agent";
 import { buildDetectPrompt, DETECT_JSON_SCHEMA } from "@/lib/import/detect";
 import { parseImportRow, rowToImportProgress } from "@/lib/import/types";
 import { isContinueStatus, kickBackgroundAdvance } from "@/lib/import/background";
@@ -77,7 +81,7 @@ export async function POST(req: Request): Promise<Response> {
       responseSchema: DETECT_JSON_SCHEMA,
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
-      model: "sonnet",
+      model: CLAUDE_HARNESS_MODELS.sonnet,
     });
     detectJobId = job.jobId;
   } catch (e) {
