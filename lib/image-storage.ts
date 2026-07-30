@@ -10,8 +10,8 @@ import sharp from "sharp";
 // URL — no CDN cache surprises.
 //
 // Compression: every image is downscaled to MAX_DIMENSION and re-encoded
-// as WebP at quality WEBP_QUALITY before upload. Gemini Nano Banana Pro
-// returns ~2.5 MB JPEGs at 2048×2048; the spinner thumbnail and dish-page
+// as WebP at quality WEBP_QUALITY before upload. Generated source images can
+// be several megabytes; the spinner thumbnail and dish-page
 // hero never display larger than ~600px on the wire, so we lose nothing
 // visible by capping at 1024 and gain a 10× size reduction.
 
@@ -26,7 +26,7 @@ function nanoid(): string {
 
 /**
  * Resize+reencode for storage. Provider-agnostic — feed it whatever the
- * image-gen API returned (Gemini JPEG, Flux WebP, etc.) and it produces
+ * image-gen API returned and it produces
  * a uniformly small WebP. Falls back to the original bytes if sharp
  * throws (image-gen succeeded; don't lose the result over a re-encode
  * hiccup).
@@ -37,7 +37,7 @@ async function compressForStorage(
 ): Promise<{ bytes: Buffer; mime: string }> {
   try {
     const out = await sharp(Buffer.from(bytes))
-      .rotate() // honor EXIF orientation (Gemini sometimes embeds it)
+      .rotate() // honor any embedded EXIF orientation
       .resize({
         width: MAX_DIMENSION,
         height: MAX_DIMENSION,

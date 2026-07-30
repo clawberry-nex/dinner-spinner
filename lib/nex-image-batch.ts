@@ -1,14 +1,8 @@
 /**
- * Batch image generation, now routed through the Nex API (claude-agent
- * /api/v1/images/batch) instead of calling Gemini's batch endpoint directly.
+ * Thin adapter over claude-agent's provider-neutral Nex image batch API.
  *
- * This is a thin adapter that PRESERVES the old Gemini-shaped return types
- * (`BATCH_STATE_*` strings, `results[].bytes` inline) so the backfill route and
- * the import pipeline don't have to change their state machines. The only caller
- * changes are: pass a Nex token (not a Gemini key) and a model alias.
- *
- * Nex's poll returns per-key outcomes WITHOUT bytes; this adapter fetches the
- * bytes for each succeeded key so consumers still read `r.bytes`/`r.mime`.
+ * Nex's poll returns per-key outcomes without bytes; this adapter fetches the
+ * bytes for each succeeded key so consumers can apply completed images.
  */
 
 import {
@@ -18,6 +12,7 @@ import {
   cancelImageBatchViaNex,
   type NexBatchStatus,
 } from "./nex-image.ts";
+import type { DISH_IMAGE_MODEL } from "./image-model";
 
 export interface BatchRequest {
   /** Echoed back per-result so the caller can correlate. Use e.g. `dish_42`. */
@@ -60,12 +55,12 @@ function mapState(status: NexBatchStatus["status"]): string {
 }
 
 /**
- * Submit a batch. `model` is a Nex alias (e.g. `nano-banana-pro`) or raw id.
+ * Submit a batch with an explicit Nex-supported model id.
  * `displayName` is accepted for call-site compatibility but Nex names the job.
  */
 export async function submitImageBatch(
   token: string,
-  model: string,
+  model: typeof DISH_IMAGE_MODEL,
   _displayName: string,
   requests: BatchRequest[],
   opts: BatchOpts = {},

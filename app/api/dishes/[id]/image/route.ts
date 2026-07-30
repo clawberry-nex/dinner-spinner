@@ -3,9 +3,10 @@ import { after } from "next/server";
 import { sql } from "@/lib/db";
 import { rowToDish } from "@/lib/types";
 import { resolveUserId } from "@/lib/auth-helpers";
-import { generateAndStoreImage } from "@/lib/dish-image";
+import { startDishImageJob } from "@/lib/dish-image-job";
+import { kickDishImageAdvance } from "@/lib/dish-image-background";
 
-// after() runs the ~30-60s generation post-response; give it budget.
+// Submission is quick; after() starts the browser-independent poll chain.
 export const maxDuration = 60;
 
 export async function POST(
@@ -31,29 +32,10 @@ export async function POST(
   // Opportunistic prune — keep image_jobs small without a cron.
   await sql`DELETE FROM image_jobs WHERE created_at < now() - interval '1 day'`;
 
-  const jobRows = await sql`
-    INSERT INTO image_jobs (dish_id, user_id, status)
-    VALUES (${dishId}, ${userId}, 'pending')
-    RETURNING id
-  `;
-  const jobId = jobRows[0].id as string;
+  const job = await startDishImageJob(dish, userId);
+  if (job.status === "pending") {
+    after(() => kickDishImageAdvance(job.id));
+  }
 
-  after(async () => {
-    try {
-      const imageUrl = await generateAndStoreImage(dish, userId);
-      await sql`
-        UPDATE image_jobs SET status = 'done', image_url = ${imageUrl}, updated_at = now()
-         WHERE id = ${jobId}
-      `;
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "image generation failed";
-      await sql`
-        UPDATE image_jobs SET status = 'failed', error = ${message}, updated_at = now()
-         WHERE id = ${jobId}
-      `.catch(() => {});
-    }
-  });
-
-  return Response.json({ jobId }, { status: 202 });
+  return Response.json({ jobId: job.id }, { status: 202 });
 }

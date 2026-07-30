@@ -7,7 +7,7 @@
 // (batch-panel.tsx) consumes, but instead of a setTimeout simulation it POSTs
 // to /api/import and polls /api/import/jobs/[id]. That GET advances a
 // server-side state machine ONE bounded step per poll (detect the recipes →
-// parse each via claude-agent → create the dish → Gemini image batch). State
+// parse each via claude-agent → create the dish → Nex GPT Image 2 batch). State
 // lives in the import_jobs row, so the import survives navigation and resumes
 // when you reopen /add. Real dishes are created; photos generate in the
 // background. See roadmap QNGIkXIN62Sc.
@@ -72,8 +72,8 @@ export type ImportEngine = {
 };
 
 const POLL_MS = 1800;
-// The imaging phase waits on a minutes-long Gemini batch, so poll gently there
-// (the server also throttles its own Gemini calls — this just trims Vercel hits).
+// The imaging phase can wait minutes on GPT Image 2, so poll gently there (the
+// server independently throttles its Nex calls; this trims Vercel hits).
 const IMAGE_PHASE_POLL_MS = 6000;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -274,7 +274,7 @@ export function useImportEngine(toast?: (msg: string) => void): ImportEngine {
             patchRecipe(i, { photo: "failed" });
             return;
           }
-          for (let n = 0; n < 45; n++) {
+          for (let n = 0; n < 90; n++) {
             await sleep(2000);
             if (jobRef.current?.recipes[i]?.dishId !== dishId) return; // dismissed/changed
             const jr = await fetch(`/api/dishes/${dishId}/image/jobs/${data.jobId}`);

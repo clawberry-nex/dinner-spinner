@@ -1,10 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { submitImageBatch, pollBatch } from "./gemini-batch.ts";
+import { submitImageBatch, pollBatch } from "./nex-image-batch.ts";
 
-// gemini-batch is now a thin adapter over the Nex batch API. It keeps the old
-// Gemini-shaped return types (state strings, results[].bytes) so the backfill +
-// import consumers don't change, but auth is a Nex token and the transport is Nex.
+// The adapter keeps compact BATCH_STATE_* return types for the import state
+// machine, but auth, execution, and result staging all belong to Nex.
 
 function router(handlers: Record<string, { status?: number; json?: unknown; bytes?: string; ct?: string }>) {
   const calls: Array<{ method: string; url: string; body?: string }> = [];
@@ -28,10 +27,10 @@ function router(handlers: Record<string, { status?: number; json?: unknown; byte
 
 test("submitImageBatch returns the Nex job id as `name`", async () => {
   const { impl, calls } = router({ "/images/batch": { json: { job_id: "job_abc", status: "running", request_count: 2 } } });
-  const out = await submitImageBatch("tok", "nano-banana-pro", "display", [{ key: "dish_1", prompt: "a" }, { key: "dish_2", prompt: "b" }], { baseUrl: "https://b", fetcher: impl });
+  const out = await submitImageBatch("tok", "gpt-image-2", "display", [{ key: "dish_1", prompt: "a" }, { key: "dish_2", prompt: "b" }], { baseUrl: "https://b", fetcher: impl });
   assert.equal(out.name, "job_abc");
   const sent = JSON.parse(calls[0].body as string);
-  assert.equal(sent.model, "nano-banana-pro");
+  assert.equal(sent.model, "gpt-image-2");
   assert.equal(sent.requests.length, 2);
 });
 

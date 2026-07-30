@@ -1,8 +1,7 @@
-// Client for claude-agent's image generation API (the "Nex" /api/v1/images
-// endpoints). dinner-spinner no longer talks to Gemini directly — it sends a
-// fully-styled prompt to Nex, which owns the Gemini call, model selection,
-// batching and cost. We keep prompt-building (lib/image-prompt) and Blob storage
-// (lib/image-storage) here.
+// Client for claude-agent's provider-neutral image batch API (the "Nex"
+// /api/v1/images/batch endpoints). Dinner Spinner submits explicit
+// `gpt-image-2` jobs; Nex Image Generator owns execution and staging. We keep
+// prompt-building (lib/image-prompt) and Blob storage (lib/image-storage) here.
 //
 // Base URL is the public Tailscale Funnel (`…:10000`), which strips the
 // `/api/v1` prefix — so paths here are bare `/images`, `/images/batch`.
@@ -45,37 +44,6 @@ async function errorFrom(res: Response): Promise<NexImageError> {
   }
   return new NexImageError(code, message, res.status);
 }
-
-/** Synchronous single-image generation: POST /images → inline base64. */
-export async function generateImageViaNex(
-  args: {
-    prompt: string;
-    model: string;
-    aspectRatio?: string;
-    size?: string;
-    sourceImages?: SourceImage[];
-  } & NexImageConfig,
-): Promise<{ bytes: Uint8Array; mime: string }> {
-  const fetcher = args.fetcher ?? fetch;
-  const base = args.baseUrl ?? DEFAULT_BASE;
-  const res = await fetcher(`${base}/images`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${args.token}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      prompt: args.prompt,
-      model: args.model,
-      ...(args.aspectRatio ? { aspect_ratio: args.aspectRatio } : {}),
-      ...(args.size ? { size: args.size } : {}),
-      ...(args.sourceImages ? { input_images: args.sourceImages } : {}),
-    }),
-  });
-  if (!res.ok) throw await errorFrom(res);
-  const json = (await res.json()) as { image?: string; mime?: string };
-  if (!json.image) throw new NexImageError("bad_response", "Nex /images returned no image");
-  return { bytes: new Uint8Array(Buffer.from(json.image, "base64")), mime: json.mime ?? "image/png" };
-}
-
-// ---- Batch ----
 
 export interface NexBatchRequest {
   key: string;

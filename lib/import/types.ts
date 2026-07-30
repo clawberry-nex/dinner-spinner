@@ -6,7 +6,7 @@ export type ImportStatus =
   | "detecting" // claude-agent detect job splitting the doc into recipes
   | "detected" // split done; awaiting the user's "Import all" confirm
   | "parsing" // per-chunk parse → create dish (covers parse + create)
-  | "imaging" // dishes created; Gemini image batch generating + applying
+  | "imaging" // dishes created; Nex GPT Image 2 batches generating + applying
   | "done"
   | "failed";
 
@@ -21,21 +21,25 @@ export interface ImportChunk {
   parseJobId?: string | null;
   /** dishes.id once status === "created". */
   dishId?: number | null;
-  /** image outcome for the created dish (the Gemini batch result). */
+  /** image outcome for the created dish (the Nex batch result). */
   image?: PhotoStatus;
   error?: string | null;
 }
 
 export interface ImageBatch {
-  /** Gemini batch job name, e.g. "batches/abc…". */
+  /** Opaque Nex image-batch job id. */
   name: string;
   state: string;
+  /** Explicit model id used for this batch. */
+  model?: string;
+  /** Dish ids submitted in this batch (used to settle terminal failures). */
+  dishIds?: number[];
   /** true once every result for this batch has been applied (or marked failed). */
   applied: boolean;
-  /** epoch ms of the last Gemini poll — throttles polling independently of the
-   *  client's (much faster) poll cadence so we don't hammer Gemini. */
+  /** epoch ms of the last upstream poll — throttles polling independently of
+   *  the client's faster poll cadence. */
   polledAt?: number;
-  /** number of Gemini polls so far — bounds how long we wait for a batch. */
+  /** number of upstream polls so far — bounds how long we wait for a batch. */
   attempts?: number;
 }
 

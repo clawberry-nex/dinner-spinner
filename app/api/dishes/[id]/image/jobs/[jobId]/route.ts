@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
-import { sql } from "@/lib/db";
 import { resolveUserId } from "@/lib/auth-helpers";
+import { advanceDishImageJob } from "@/lib/dish-image-job";
 
-const UUID_RE = /^[0-9a-fA-F-]{36}$/;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function GET(
   req: NextRequest,
@@ -17,17 +18,13 @@ export async function GET(
   if (!Number.isFinite(dishId) || !UUID_RE.test(jobId)) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
-  const rows = await sql`
-    SELECT status, image_url, error FROM image_jobs
-     WHERE id = ${jobId} AND dish_id = ${dishId} AND user_id = ${userId}
-  `;
-  if (rows.length === 0) {
+  const job = await advanceDishImageJob(jobId, { dishId, userId });
+  if (!job) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
-  const r = rows[0];
   return Response.json({
-    status: r.status as string,
-    imageUrl: (r.image_url as string | null) ?? null,
-    error: (r.error as string | null) ?? null,
+    status: job.status,
+    imageUrl: job.imageUrl,
+    error: job.error,
   });
 }

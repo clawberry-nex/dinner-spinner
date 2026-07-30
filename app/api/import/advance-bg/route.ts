@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { advanceImport } from "@/lib/import/advance";
 import { parseImportRow } from "@/lib/import/types";
 import { isContinueStatus, kickBackgroundAdvance, MAX_HOPS } from "@/lib/import/background";
+import { driveDishImageJob } from "@/lib/dish-image-background";
 
 // Protected, browser-independent driver for the batch-import state machine.
 // POST {importId, hops} — drive that import as far as this invocation's time
@@ -93,13 +94,14 @@ export async function POST(req: Request): Promise<Response> {
   return Response.json({ ok: true }, { status: 202 });
 }
 
-// Vercel Cron triggers a GET (with the CRON_SECRET bearer). Nudge any import
-// that's stuck in a non-terminal state and isn't currently being advanced.
+// Vercel Cron triggers a GET (with the CRON_SECRET bearer). Nudge stale imports
+// and durable GPT Image 2 jobs that are not currently being advanced.
 export async function GET(req: Request): Promise<Response> {
   if (!authorized(req)) return err("unauthorized", 401);
-  let stale;
+  let staleImports;
+  let staleImages;
   try {
-    stale = await sql`
+    staleImports = await sql`
       SELECT id FROM import_jobs
        WHERE status IN ('detecting', 'parsing', 'imaging')
          AND (locked_until IS NULL OR locked_until < now())
@@ -107,12 +109,29 @@ export async function GET(req: Request): Promise<Response> {
        ORDER BY updated_at
        LIMIT 5
     `;
+    staleImages = await sql`
+      SELECT id FROM image_jobs
+       WHERE status = 'pending'
+         AND created_at > now() - interval '1 day'
+         AND (locked_until IS NULL OR locked_until < now())
+         AND updated_at < now() - interval '2 minutes'
+       ORDER BY updated_at
+       LIMIT 10
+    `;
   } catch {
     return err("agent_error", 500);
   }
-  for (const r of stale) {
+  for (const r of staleImports) {
     const id = String(r.id);
     after(() => driveImport(id, 0));
   }
-  return Response.json({ ok: true, swept: stale.length });
+  for (const r of staleImages) {
+    const id = String(r.id);
+    after(() => driveDishImageJob(id, 0));
+  }
+  return Response.json({
+    ok: true,
+    sweptImports: staleImports.length,
+    sweptImages: staleImages.length,
+  });
 }

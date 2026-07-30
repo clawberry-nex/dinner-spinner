@@ -4,7 +4,9 @@ import { sql } from "@/lib/db";
 import { type Dish, type DishInput, rowToDish } from "@/lib/types";
 import { applyPantryDefaults } from "@/lib/pantry";
 import { assignIngredientIds, rewriteIndexRefsToIds } from "@/lib/inline-refs";
-import { generateAndStoreImage, storeImageFromUrl } from "@/lib/dish-image";
+import { storeImageFromUrl } from "@/lib/dish-image";
+import { startDishImageJob } from "@/lib/dish-image-job";
+import { kickDishImageAdvance } from "@/lib/dish-image-background";
 
 /**
  * The single source of truth for creating a dish from validated DishInput.
@@ -15,11 +17,9 @@ import { generateAndStoreImage, storeImageFromUrl } from "@/lib/dish-image";
  * defaults, assign stable ingredient ids, rewrite the method's inline index
  * references to those ids, INSERT the row, return the Dish.
  *
- * `autoImage` (default true): when the dish lands with no imageUrl, kick a
- * fire-and-forget image step via after(). Batch import passes `false` — it
- * generates images through one Gemini batch instead of N synchronous per-dish
- * calls. NOTE: after() only works inside a request/render context, so this
- * must be called from a route handler (it always is).
+ * `autoImage` (default true): when the dish lands with no imageUrl, submit a
+ * durable GPT Image 2 job and kick its background completion chain. Batch
+ * import passes `false` because it owns a provider-neutral Nex batch.
  *
  * Image source (URL imports): when `sourceImageUrl` is set and `generateImage`
  * is not forced, download+store that photo from the source page instead of
@@ -92,9 +92,12 @@ export async function createDishForUser(
         }
       }
       try {
-        await generateAndStoreImage(dish, userId);
+        const job = await startDishImageJob(dish, userId);
+        if (job.status === "pending") {
+          await kickDishImageAdvance(job.id);
+        }
       } catch (err) {
-        console.warn(`auto image-gen failed for dish ${dish.id}:`, err);
+        console.warn(`auto GPT Image 2 submit failed for dish ${dish.id}:`, err);
       }
     });
   }

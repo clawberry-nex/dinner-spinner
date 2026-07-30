@@ -9,15 +9,12 @@ import {
   pollBatch,
   type BatchRequest,
   type BatchPollResult,
-} from "@/lib/gemini-batch";
+} from "@/lib/nex-image-batch";
+import { DISH_IMAGE_MODEL } from "@/lib/image-model";
 
-const BATCH_MODEL = "nano-banana-pro";
-
-// Hard cap. The Gemini inline-batch payload limit is 20 MB; at ~1.5 KB per
-// prompt that's ~13k requests, but applying N results synchronously on
-// poll has its own ceiling (each Blob upload ~100ms). 200 leaves room for
-// retries + DB round-trips inside Vercel's 60s function budget.
-const MAX_BATCH_SIZE = 200;
+// The legacy manual batch endpoint applies every returned image synchronously.
+// Keep the batch small because Nex returns image bytes inline on completion.
+const MAX_BATCH_SIZE = 12;
 
 const KEY_PREFIX = "dish_";
 
@@ -30,7 +27,7 @@ function dishIdFromKey(key: string): number | null {
 /**
  * POST /api/dishes/images/batch-backfill
  *
- * Submits a Gemini batch job that regenerates images for all of the
+ * Submits a Nex GPT Image 2 batch that regenerates images for all of the
  * caller's dishes (or only those missing an image, by default). Returns
  * the job name immediately; poll with GET ?job=<name> until state flips
  * to BATCH_STATE_SUCCEEDED, at which point the same GET applies the
@@ -90,7 +87,7 @@ export async function POST(req: NextRequest) {
 
   const submitted = await submitImageBatch(
     token,
-    BATCH_MODEL,
+    DISH_IMAGE_MODEL,
     `dinner-spinner-${userId.slice(0, 8)}-${Date.now()}`,
     requests,
   );
@@ -106,7 +103,7 @@ export async function POST(req: NextRequest) {
 /**
  * GET /api/dishes/images/batch-backfill?job=<name>
  *
- * Polls Gemini for batch state. While pending/running, returns the
+ * Polls Nex for batch state. While pending/running, returns the
  * current state and counts. When BATCH_STATE_SUCCEEDED, iterates the
  * inlined responses, uploads each image to Blob, and updates the
  * matching dish row.

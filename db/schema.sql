@@ -120,21 +120,26 @@ ALTER TABLE dishes ADD COLUMN IF NOT EXISTS public boolean NOT NULL DEFAULT true
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS method_refs jsonb;
 ALTER TABLE users  ADD COLUMN IF NOT EXISTS default_language text;
 
--- Async dish-image regeneration jobs (2026-06). POST /api/dishes/[id]/image
--- inserts a pending row, runs generation in after(), and flips status to
--- done/failed; the edit page polls GET .../image/jobs/[jobId]. Rows are
--- opportunistically pruned (>1 day) on each POST — no cron. gen_random_uuid()
--- comes from pgcrypto (already enabled above).
+-- Durable GPT Image 2 dish-image jobs. Each row owns one claude-agent
+-- /images/batch job (a one-item batch), so Vercel never waits synchronously for
+-- Codex. Browser polling and a CRON_SECRET-protected background chain cooperate
+-- through locked_until; attempts is diagnostic/bounding metadata.
 CREATE TABLE IF NOT EXISTS image_jobs (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  dish_id     int  NOT NULL REFERENCES dishes(id) ON DELETE CASCADE,
-  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  status      text NOT NULL DEFAULT 'pending',
-  image_url   text,
-  error       text,
-  created_at  timestamptz NOT NULL DEFAULT now(),
-  updated_at  timestamptz NOT NULL DEFAULT now()
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  dish_id         int  NOT NULL REFERENCES dishes(id) ON DELETE CASCADE,
+  user_id         uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status          text NOT NULL DEFAULT 'pending',
+  upstream_job_id text,
+  attempts        int NOT NULL DEFAULT 0,
+  locked_until    timestamptz,
+  image_url       text,
+  error           text,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS upstream_job_id text;
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS attempts int NOT NULL DEFAULT 0;
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS locked_until timestamptz;
 CREATE INDEX IF NOT EXISTS image_jobs_dish_id_idx ON image_jobs (dish_id);
 CREATE INDEX IF NOT EXISTS image_jobs_created_at_idx ON image_jobs (created_at);
 
@@ -142,11 +147,11 @@ CREATE INDEX IF NOT EXISTS image_jobs_created_at_idx ON image_jobs (created_at);
 -- row and starts a claude-agent "detect" job that splits the uploaded/pasted
 -- text into N recipe chunks; GET /api/import/jobs/[id] advances the state
 -- machine ONE bounded step per poll (detect → parse each chunk via the
--- single-ingest claude-agent path → create dish → Gemini image batch),
+-- single-ingest claude-agent path → create dish → Nex GPT Image 2 batch),
 -- persisting progress so the import survives navigation and resumes on return.
 --   status:        detecting → detected → parsing → imaging → done (+failed)
 --   chunks:        [{title, text, status, parseJobId, dishId, error}] per recipe
---   image_batches: [{name, state, applied}] Gemini batch job(s)
+--   image_batches: [{name, state, model, dishIds, applied}] Nex batch job(s)
 --   locked_until:  set while one poll advances, so two tabs can't double-advance
 -- Rows are opportunistically pruned (>1 day) on each POST — no cron.
 -- gen_random_uuid() comes from pgcrypto (enabled above).

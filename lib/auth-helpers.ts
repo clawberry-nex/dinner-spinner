@@ -94,38 +94,13 @@ export async function assignAvailableHandle(
 
 // The seed owner's user_id — the user whose email is SEED_OWNER_EMAIL — or null
 // when unset or that user hasn't signed up yet. Used by the bearer-token auth
-// path and by the image pipeline to gate premium (Nano Banana Pro) generation.
+// path.
 export async function getSeedOwnerUserId(): Promise<string | null> {
   const seedEmail = (process.env.SEED_OWNER_EMAIL ?? "").trim().toLowerCase();
   if (!seedEmail) return null;
   const { sql } = await import("@/lib/db");
   const rows = await sql`SELECT id FROM users WHERE email = ${seedEmail} LIMIT 1`;
   return (rows[0]?.id as string | undefined) ?? null;
-}
-
-// True when userId is the seed owner. Non-owners get the cheaper image model
-// (flux) instead of Nano Banana Pro — see lib/image-provider.ts::getProvider.
-export async function isSeedOwner(userId: string | null | undefined): Promise<boolean> {
-  if (!userId) return false;
-  const seedId = await getSeedOwnerUserId();
-  return seedId != null && seedId === userId;
-}
-
-// True when userId may generate with the premium image model (Nano Banana Pro):
-// the seed owner always, plus any user whose email is in PREMIUM_IMAGE_EMAILS
-// (comma-separated, lowercased; `*` = everyone). Everyone else gets flux. An
-// empty/unset list means "seed owner only" — and short-circuits the DB lookup,
-// so the common case costs no extra query.
-export async function isPremiumImageUser(userId: string | null | undefined): Promise<boolean> {
-  if (!userId) return false;
-  if (await isSeedOwner(userId)) return true;
-  const list = parseAllowlist(process.env.PREMIUM_IMAGE_EMAILS);
-  if (list.mode === "deny-all") return false;
-  if (list.mode === "allow-all") return true;
-  const { sql } = await import("@/lib/db");
-  const rows = await sql`SELECT email FROM users WHERE id = ${userId} LIMIT 1`;
-  const email = (rows[0]?.email as string | undefined) ?? null;
-  return email != null && isEmailAllowed(email, list);
 }
 
 // Resolves the acting user_id for an incoming request. Returns null when

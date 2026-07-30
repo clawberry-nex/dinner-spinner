@@ -4,6 +4,10 @@ import { DishPatchSchema, rowToDish } from "@/lib/types";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { applyPantryDefaults } from "@/lib/pantry";
 import { assignIngredientIds, rewriteIndexRefsToIds } from "@/lib/inline-refs";
+import {
+  advanceDishImageJob,
+  findPendingDishImageJob,
+} from "@/lib/dish-image-job";
 
 export async function GET(
   req: NextRequest,
@@ -15,13 +19,23 @@ export async function GET(
   const userId = await resolveUserId(req);
 
   const { id } = await ctx.params;
+  const dishId = Number(id);
+  // The add flow polls this endpoint while an automatically submitted image is
+  // pending. Let an authenticated owner advance that durable job even when the
+  // optional background chain is disabled.
+  if (userId && Number.isFinite(dishId)) {
+    const imageJob = await findPendingDishImageJob(dishId, userId);
+    if (imageJob) {
+      await advanceDishImageJob(imageJob.id, { dishId, userId });
+    }
+  }
   const rows = await sql`
     SELECT d.*,
       (SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id) AS last_cooked_at,
       (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
       (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
     FROM dishes d
-    WHERE d.id = ${Number(id)} AND (d.public = true OR d.user_id = ${userId})
+    WHERE d.id = ${dishId} AND (d.public = true OR d.user_id = ${userId})
   `;
   if (rows.length === 0) {
     return Response.json({ error: "Not found" }, { status: 404 });
