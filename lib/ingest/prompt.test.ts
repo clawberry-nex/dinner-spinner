@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildIngestPrompt } from "./prompt.ts";
+import { STANDARD_INGREDIENTS } from "../vocabulary.ts";
+import { buildDetectPrompt } from "../import/detect.ts";
 
 const FIXTURE = {
   userInput: "2 onions, 1 tbsp olive oil",
@@ -17,9 +19,11 @@ test("renders the pantry list", () => {
   assert.ok(p.includes("salt, black pepper, olive oil"));
 });
 
-test("references the submit_result tool", () => {
-  const p = buildIngestPrompt(FIXTURE);
-  assert.ok(p.includes("submit_result"));
+test("recipe and detection prompts request native JSON without Claude tool calls", () => {
+  for (const p of [buildIngestPrompt(FIXTURE), buildDetectPrompt(FIXTURE.userInput)]) {
+    assert.ok(p.includes("JSON object"));
+    assert.ok(!p.includes("submit_result"));
+  }
 });
 
 test("when only an image is attached, prompts to read from the image", () => {
@@ -66,10 +70,21 @@ test("documents the section field and inline ingredient references", () => {
   assert.ok(p.includes("the seeds")); // loose-reference example
 });
 
-test("includes at least one standard ingredient name", () => {
+test("includes the current canonical ingredient vocabulary", () => {
   const p = buildIngestPrompt(FIXTURE);
-  // STANDARD_INGREDIENTS contains "onion" — verify the auto-sync wiring.
-  assert.ok(p.includes("onion"));
+  assert.ok(p.includes(STANDARD_INGREDIENTS.join(", ")));
+});
+
+test("preserves Dutch teaspoon identity, product forms, and serving suggestions", () => {
+  const p = buildIngestPrompt(FIXTURE);
+  assert.ok(p.includes("theelepel/theelepels/tl = tsp"));
+  assert.ok(p.includes("eetlepel/eetlepels/el = tbsp"));
+  assert.ok(p.includes("uienpoeder = onion powder"));
+  assert.ok(p.includes("Canned beans must remain visibly canned"));
+  assert.ok(p.includes("List suggested toppings as optional ingredients"));
+  assert.ok(p.includes("heat levels, times, sizes, equipment"));
+  assert.ok(p.includes("imageDescription"));
+  assert.ok(!p.includes("image_description"));
 });
 
 // Regression (batch-import stress test, 2026-06-11): Haiku fabricated whole

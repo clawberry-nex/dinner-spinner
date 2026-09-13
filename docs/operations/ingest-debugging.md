@@ -69,3 +69,48 @@ field. Reproducing the complete call should be a fallback: use
 `buildIngestPrompt`, `DISH_INPUT_JSON_SCHEMA`, and the same model selection as
 `app/api/ingest/route.ts` so the reproduction does not silently test a different
 pipeline.
+
+## Model routing and fidelity evaluation
+
+All recipe jobs explicitly use Nex's Codex provider. The service is still named
+`claude-agent`, and `CLAUDE_AGENT_URL` remains its compatible URL override; neither
+selects an Anthropic model. `lib/ingest/nex-agent.ts::RECIPE_MODELS` owns routing:
+
+| Workload | Explicit model |
+|---|---|
+| Text/URL recipe parsing | `codex:gpt-5.6-sol` |
+| Recipe photo transcription | `codex:gpt-6-astra` |
+| Batch detection and per-recipe parsing | `codex:gpt-5.6-sol` |
+| Translation/inline-reference backfill scripts | `codex:gpt-5.6-sol` |
+| Generated dish photos (separate images API) | `gpt-image-2` |
+
+The recipe client rejects missing and unsupported models before submission.
+Nex supplies strict JSON output and native image attachments; prompts ask for
+JSON directly. No `submit_result` tool or Anthropic fallback is used.
+
+The model capabilities were checked against the official
+[Sol model documentation](https://developers.openai.com/api/docs/models/gpt-5.6-sol),
+[Astra model documentation](https://developers.openai.com/api/docs/models/gpt-6-astra),
+and [Sol migration guidance](https://developers.openai.com/api/docs/guides/upgrading-to-gpt-5p6-sol).
+
+After loading a **fresh production environment** as above, these opt-in commands
+exercise the real Nex API without creating dishes or generating dish photos:
+
+```bash
+npx tsx scripts/eval-recipe-ingest.ts
+npx tsx scripts/eval-recipe-ingest.ts --detect
+npx tsx scripts/eval-recipe-ingest.ts --photo /path/to/chili-source.jpg
+```
+
+The photo mode expects an image of `lib/ingest/fixtures/chili-con-carne.txt`.
+All modes write their output to gitignored `verify/openai-migration/`. The
+fixture checks cover all 17 measured ingredients, teaspoon/tablespoon identity,
+onion powder, canned/ground product forms, the fixed stock cube, optional toppings,
+key method details, and valid ingredient-reference indices. Detection must preserve
+two recipe chunks verbatim. These are regression evaluations, not a universal
+runtime comparison of arbitrary recipes against their sources.
+
+On 2026-09-13, live Sol text parsing completed in about 63 seconds, Sol detection
+in 14 seconds, and Astra transcription of a rendered recipe image in 96 seconds;
+all passed the fidelity checks. This verifies native image handling and legible
+text extraction, not accuracy on every real-world camera photo.

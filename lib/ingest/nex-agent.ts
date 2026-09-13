@@ -1,4 +1,4 @@
-export type ClaudeAgentErrorCode =
+export type NexAgentErrorCode =
   | "unauthorized"
   | "scope_missing"
   | "rate_limited"
@@ -12,21 +12,21 @@ export type ClaudeAgentErrorCode =
   | "network_error"
   | "timeout";
 
-export class ClaudeAgentError extends Error {
-  code: ClaudeAgentErrorCode;
+export class NexAgentError extends Error {
+  code: NexAgentErrorCode;
   status: number | null;
   retryAfter: number | null;
   rawResponse: string | null;
 
   constructor(opts: {
-    code: ClaudeAgentErrorCode;
+    code: NexAgentErrorCode;
     message: string;
     status?: number | null;
     retryAfter?: number | null;
     rawResponse?: string | null;
   }) {
     super(opts.message);
-    this.name = "ClaudeAgentError";
+    this.name = "NexAgentError";
     this.code = opts.code;
     this.status = opts.status ?? null;
     this.retryAfter = opts.retryAfter ?? null;
@@ -34,17 +34,24 @@ export class ClaudeAgentError extends Error {
   }
 }
 
-// Recipe ingestion is deliberately tuned and costed against these Claude tiers.
-// Prefixing the aliases keeps global Nex harness changes from silently rerouting
-// structured recipe jobs through another provider.
-export const CLAUDE_HARNESS_MODELS = {
-  opus: "claude:opus",
-  sonnet: "claude:sonnet",
-  haiku: "claude:haiku",
+// Every recipe workload explicitly selects OpenAI through Nex's Codex provider.
+// The prefix overrides Nex's global default; never fall back to another provider.
+export const RECIPE_MODELS = {
+  text: "codex:gpt-5.6-sol",
+  photo: "codex:gpt-6-astra",
 } as const;
 
-export type ClaudeHarnessModel =
-  (typeof CLAUDE_HARNESS_MODELS)[keyof typeof CLAUDE_HARNESS_MODELS];
+export type RecipeModel =
+  (typeof RECIPE_MODELS)[keyof typeof RECIPE_MODELS];
+
+function assertRecipeModel(model: RecipeModel): void {
+  if (!Object.values(RECIPE_MODELS).includes(model)) {
+    throw new NexAgentError({
+      code: "validation",
+      message: "Recipe jobs require an explicit supported OpenAI model",
+    });
+  }
+}
 
 export interface CallArgs {
   prompt: string;
@@ -54,8 +61,8 @@ export interface CallArgs {
   baseUrl: string;
   /** ms; default 60000. */
   timeoutMs?: number;
-  /** Explicit Claude-harness model tier. Omit to use the Nex runtime default. */
-  model?: ClaudeHarnessModel;
+  /** Required OpenAI selection; recipe jobs must never inherit Nex defaults. */
+  model: RecipeModel;
 }
 
 export interface CallResult {
@@ -66,10 +73,11 @@ export interface CallResult {
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
-export async function callClaudeAgent(
+export async function callNexAgent(
   args: CallArgs,
   opts: { fetcher?: typeof fetch } = {},
 ): Promise<CallResult> {
+  assertRecipeModel(args.model);
   const fetcher = opts.fetcher ?? fetch;
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -88,7 +96,7 @@ export async function callClaudeAgent(
       body: JSON.stringify({
         prompt: args.prompt,
         response_schema: args.responseSchema,
-        ...(args.model ? { model: args.model } : {}),
+        model: args.model,
         ...(args.image
           ? { images: [{ data: args.image.data, media_type: args.image.mediaType }] }
           : {}),
@@ -98,12 +106,12 @@ export async function callClaudeAgent(
   } catch (err) {
     clearTimeout(timeout);
     if (err instanceof Error && err.name === "AbortError") {
-      throw new ClaudeAgentError({
+      throw new NexAgentError({
         code: "timeout",
         message: `claude-agent did not respond within ${args.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms`,
       });
     }
-    throw new ClaudeAgentError({
+    throw new NexAgentError({
       code: "network_error",
       message: err instanceof Error ? err.message : String(err),
     });
@@ -115,10 +123,10 @@ export async function callClaudeAgent(
     | null;
 
   if (!res.ok) {
-    const code = (body?.error?.code as ClaudeAgentErrorCode) ?? "agent_error";
+    const code = (body?.error?.code as NexAgentErrorCode) ?? "agent_error";
     const retryAfterHeader = res.headers.get("retry-after");
     const retryAfter = retryAfterHeader ? Number(retryAfterHeader) : null;
-    throw new ClaudeAgentError({
+    throw new NexAgentError({
       code,
       message: body?.error?.message ?? `claude-agent ${res.status}`,
       status: res.status,
@@ -128,7 +136,7 @@ export async function callClaudeAgent(
   }
 
   if (!body || body.structured === undefined || body.structured === null) {
-    throw new ClaudeAgentError({
+    throw new NexAgentError({
       code: "bad_response",
       message: "claude-agent returned no `structured` field",
       status: res.status,
@@ -155,7 +163,7 @@ export interface StartJobArgs {
   image?: { data: string; mediaType: string };
   token: string;
   baseUrl: string;
-  model?: ClaudeHarnessModel;
+  model: RecipeModel;
   /** ms; default 15000. Just the POST to claude-agent, not the job itself. */
   timeoutMs?: number;
 }
@@ -165,10 +173,11 @@ export interface JobHandle {
   pollUrl: string;
 }
 
-export async function startClaudeAgentJob(
+export async function startNexAgentJob(
   args: StartJobArgs,
   opts: { fetcher?: typeof fetch } = {},
 ): Promise<JobHandle> {
+  assertRecipeModel(args.model);
   const fetcher = opts.fetcher ?? fetch;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), args.timeoutMs ?? 15_000);
@@ -184,7 +193,7 @@ export async function startClaudeAgentJob(
       body: JSON.stringify({
         prompt: args.prompt,
         response_schema: args.responseSchema,
-        ...(args.model ? { model: args.model } : {}),
+        model: args.model,
         ...(args.image
           ? { images: [{ data: args.image.data, media_type: args.image.mediaType }] }
           : {}),
@@ -194,12 +203,12 @@ export async function startClaudeAgentJob(
   } catch (err) {
     clearTimeout(timeout);
     if (err instanceof Error && err.name === "AbortError") {
-      throw new ClaudeAgentError({
+      throw new NexAgentError({
         code: "timeout",
         message: `claude-agent did not respond within ${args.timeoutMs ?? 15_000}ms`,
       });
     }
-    throw new ClaudeAgentError({
+    throw new NexAgentError({
       code: "network_error",
       message: err instanceof Error ? err.message : String(err),
     });
@@ -211,8 +220,8 @@ export async function startClaudeAgentJob(
     | null;
 
   if (!res.ok || !body?.job_id) {
-    const code = (body?.error?.code as ClaudeAgentErrorCode) ?? "agent_error";
-    throw new ClaudeAgentError({
+    const code = (body?.error?.code as NexAgentErrorCode) ?? "agent_error";
+    throw new NexAgentError({
       code,
       message: body?.error?.message ?? `claude-agent ${res.status}`,
       status: res.status,
@@ -233,7 +242,7 @@ export type PollResult =
     }
   | { status: "failed"; errorCode: string; errorMessage: string };
 
-export async function pollClaudeAgentJob(
+export async function pollNexAgentJob(
   jobId: string,
   args: { token: string; baseUrl: string; timeoutMs?: number },
   opts: { fetcher?: typeof fetch } = {},
@@ -251,12 +260,12 @@ export async function pollClaudeAgentJob(
   } catch (err) {
     clearTimeout(timeout);
     if (err instanceof Error && err.name === "AbortError") {
-      throw new ClaudeAgentError({
+      throw new NexAgentError({
         code: "timeout",
         message: `claude-agent poll did not respond within ${args.timeoutMs ?? 10_000}ms`,
       });
     }
-    throw new ClaudeAgentError({
+    throw new NexAgentError({
       code: "network_error",
       message: err instanceof Error ? err.message : String(err),
     });
@@ -276,8 +285,8 @@ export async function pollClaudeAgentJob(
     | null;
 
   if (!res.ok) {
-    const code = (body?.error?.code as ClaudeAgentErrorCode) ?? "agent_error";
-    throw new ClaudeAgentError({
+    const code = (body?.error?.code as NexAgentErrorCode) ?? "agent_error";
+    throw new NexAgentError({
       code,
       message: body?.error?.message ?? `claude-agent ${res.status}`,
       status: res.status,
@@ -303,7 +312,7 @@ export async function pollClaudeAgentJob(
       errorMessage: body.error?.message ?? "job failed",
     };
   }
-  throw new ClaudeAgentError({
+  throw new NexAgentError({
     code: "agent_error",
     message: `unexpected job status: ${body?.status ?? "?"}`,
     rawResponse: JSON.stringify(body),

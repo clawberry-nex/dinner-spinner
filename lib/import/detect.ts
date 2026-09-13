@@ -30,7 +30,7 @@ export interface DetectedRecipe {
  * parse step (the existing single-ingest path) gets the original content.
  */
 export function buildDetectPrompt(text: string): string {
-  return `Split the following document into the individual recipes it contains, and call submit_result. Do not respond with prose.
+  return `Split the following document into the individual recipes it contains, and return ONLY the JSON object matching the supplied response schema. No tool calls, markdown fences, or commentary.
 
 The document may be plain text, markdown, JSON, a numbered list, or a messy paste — treat ALL of it as raw text. Find each distinct recipe. For each, return:
 - title: the recipe's name (a short dish title).
@@ -45,5 +45,5 @@ Rules:
 DOCUMENT:
 ${text}
 
-Call submit_result now.`;
+Return the JSON object now.`;
 }

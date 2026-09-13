@@ -18,10 +18,10 @@ import { rowToDish, DishInputSchema } from "../lib/types.ts";
 import { buildIngestPrompt } from "../lib/ingest/prompt.ts";
 import { DISH_INPUT_JSON_SCHEMA } from "../lib/ingest/schema.ts";
 import {
-  CLAUDE_HARNESS_MODELS,
-  startClaudeAgentJob,
-  pollClaudeAgentJob,
-} from "../lib/ingest/claude-agent.ts";
+  RECIPE_MODELS,
+  startNexAgentJob,
+  pollNexAgentJob,
+} from "../lib/ingest/nex-agent.ts";
 import { languageName } from "../lib/languages.ts";
 import { writeFileSync } from "node:fs";
 
@@ -69,18 +69,17 @@ async function reingestOne(row: Record<string, unknown>) {
   ].join("\n");
 
   const prompt = buildIngestPrompt({ userInput, pantryList: pantry, targetLanguage });
-  const job = await startClaudeAgentJob({
+  const job = await startNexAgentJob({
     prompt,
     responseSchema: DISH_INPUT_JSON_SCHEMA,
     token,
     baseUrl,
-    // Haiku — matches the live ingest route; completes within claude-agent's
-    // 8-turn structured-output budget where Sonnet exhausted it.
-    model: CLAUDE_HARNESS_MODELS.haiku,
+    // Explicit OpenAI selection, shared with the live text-ingest route.
+    model: RECIPE_MODELS.text,
   });
   // Poll until done.
   for (let i = 0; i < 120; i++) {
-    const r = await pollClaudeAgentJob(job.jobId, { token, baseUrl });
+    const r = await pollNexAgentJob(job.jobId, { token, baseUrl });
     if (r.status === "done") {
       const parsed = DishInputSchema.safeParse(r.structured);
       if (!parsed.success) throw new Error("re-ingest failed validation");

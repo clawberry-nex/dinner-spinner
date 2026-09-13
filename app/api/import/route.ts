@@ -2,10 +2,10 @@ import { after } from "next/server";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { sql } from "@/lib/db";
 import {
-  CLAUDE_HARNESS_MODELS,
-  startClaudeAgentJob,
-  ClaudeAgentError,
-} from "@/lib/ingest/claude-agent";
+  RECIPE_MODELS,
+  startNexAgentJob,
+  NexAgentError,
+} from "@/lib/ingest/nex-agent";
 import { buildDetectPrompt, DETECT_JSON_SCHEMA } from "@/lib/import/detect";
 import { parseImportRow, rowToImportProgress } from "@/lib/import/types";
 import { isContinueStatus, kickBackgroundAdvance } from "@/lib/import/background";
@@ -76,16 +76,16 @@ export async function POST(req: Request): Promise<Response> {
   // Kick off the detect job (claude-agent splits the doc into recipe chunks).
   let detectJobId: string;
   try {
-    const job = await startClaudeAgentJob({
+    const job = await startNexAgentJob({
       prompt: buildDetectPrompt(text),
       responseSchema: DETECT_JSON_SCHEMA,
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
-      model: CLAUDE_HARNESS_MODELS.sonnet,
+      model: RECIPE_MODELS.text,
     });
     detectJobId = job.jobId;
   } catch (e) {
-    if (e instanceof ClaudeAgentError) {
+    if (e instanceof NexAgentError) {
       const status =
         e.code === "queue_full" || e.code === "rate_limited"
           ? 429

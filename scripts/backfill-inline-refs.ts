@@ -3,7 +3,7 @@
 // ingredient references in its Method text + stable ingredient ids, WITHOUT
 // touching the wording.
 //
-// For each candidate dish a Haiku pass inserts ONLY the markers into the exact
+// For each candidate dish a GPT-5.6 Sol pass inserts ONLY the markers into the exact
 // existing method text. A prose-unchanged guard (methodProseUnchanged) then
 // strips the markers back out and compares to the original; if anything but the
 // markers changed, the annotation is REJECTED and the dish is left exactly as it
@@ -29,10 +29,10 @@
 import { sql } from "../lib/db.ts";
 import { rowToDish, type Dish } from "../lib/types.ts";
 import {
-  CLAUDE_HARNESS_MODELS,
-  startClaudeAgentJob,
-  pollClaudeAgentJob,
-} from "../lib/ingest/claude-agent.ts";
+  RECIPE_MODELS,
+  startNexAgentJob,
+  pollNexAgentJob,
+} from "../lib/ingest/nex-agent.ts";
 import { normalizeEscapedWhitespace } from "../lib/ingest/sanitize.ts";
 import {
   parseInlineRefs,
@@ -96,9 +96,9 @@ HARD RULES:
 - Change NOTHING except inserting the [ ]( ) characters. Same words, same spelling, same punctuation, same line breaks, same "## " headers, same "1." / "2." numbering.
 - Wrap only words that are ALREADY in the method; never add, drop, or alter a word.
 - Only use an index that appears in the INGREDIENTS list. Wrap only references you are sure of; if unsure, leave that text untouched.
-- Return the complete method via submit_result's "recipe" field.
+- Return the complete method in the JSON "recipe" field.
 
-Call submit_result now.`;
+Return ONLY the JSON object matching the supplied response schema. No tool calls or markdown fences.`;
 }
 
 // A dish is already migrated once every ingredient carries an id (a successful
@@ -110,15 +110,15 @@ function isMigrated(d: Dish): boolean {
 
 // One annotation attempt: start a job, poll to completion, repair literal-"\n".
 async function annotateOnce(d: Dish): Promise<string> {
-  const job = await startClaudeAgentJob({
+  const job = await startNexAgentJob({
     prompt: buildAnnotatePrompt(d),
     responseSchema: ANNOTATE_SCHEMA,
     token,
     baseUrl,
-    model: CLAUDE_HARNESS_MODELS.haiku,
+    model: RECIPE_MODELS.text,
   });
   for (let i = 0; i < 120; i++) {
-    const r = await pollClaudeAgentJob(job.jobId, { token, baseUrl });
+    const r = await pollNexAgentJob(job.jobId, { token, baseUrl });
     if (r.status === "done") {
       const structured = r.structured as { recipe?: unknown };
       if (typeof structured?.recipe !== "string") {
@@ -136,7 +136,7 @@ async function annotateOnce(d: Dish): Promise<string> {
 }
 
 // Structured output is nondeterministic: the model occasionally answers in prose
-// instead of calling submit_result. Give it two tries before giving up.
+// instead of returning JSON. Give it two tries before giving up.
 async function annotate(d: Dish): Promise<string> {
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {

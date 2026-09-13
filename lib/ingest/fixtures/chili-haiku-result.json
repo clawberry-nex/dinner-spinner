@@ -1,0 +1,107 @@
+{
+  "title": "Chili Con Carne",
+  "recipe": "1. Finely chop [the onions](#0) and [garlic](#1). Heat oil in a large pot and brown [the ground beef](#2) with [the paprika](#3), [cumin](#4), [oregano](#5), [garlic powder](#6), and [cinnamon](#7) for 5–6 minutes over medium-high to high heat. Press the meat occasionally to develop browning; uneven browning adds flavor.\\n\\n2. Clean [the red bell peppers](#8) and cut into roughly 1 cm pieces.\\n\\n3. Add [the onions](#0) and [peppers](#8) to the pot and cook for 3 minutes over medium-high heat, stirring regularly. Add [the garlic](#1) and cook for 2 minutes more, stirring.\\n\\n4. Rinse [the black beans](#9) and [kidney beans](#10) in a colander under cold running water and drain well.\\n\\n5. Add [the canned tomatoes](#11), [chipotle pepper](#12), and [water](#13) to the pot. Crumble [the stock cube](#14) over the top. Mash [the tomatoes](#11) with a wooden spoon. Stir in [the drained beans](#9,10), [chocolate](#15), and [sugar](#16). Bring to a boil, then reduce heat to low, cover, and simmer for 90 minutes, stirring occasionally. Season with salt and pepper to taste.\"",
+  "tags": [
+    "beef",
+    "soup"
+  ],
+  "ingredients": [
+    {
+      "quantity": 2,
+      "unit": "piece",
+      "name": "onion",
+      "descriptor": "medium"
+    },
+    {
+      "quantity": 3,
+      "unit": "clove",
+      "name": "garlic"
+    },
+    {
+      "quantity": 500,
+      "unit": "g",
+      "name": "ground beef"
+    },
+    {
+      "quantity": 2,
+      "unit": "tbsp",
+      "name": "paprika",
+      "pantry": true
+    },
+    {
+      "quantity": 2,
+      "unit": "tbsp",
+      "name": "cumin",
+      "pantry": true
+    },
+    {
+      "quantity": 2,
+      "unit": "tbsp",
+      "name": "dried oregano",
+      "pantry": true
+    },
+    {
+      "quantity": 1,
+      "unit": "tbsp",
+      "name": "garlic powder",
+      "pantry": true
+    },
+    {
+      "quantity": 0.5,
+      "unit": "tbsp",
+      "name": "cinnamon",
+      "pantry": true
+    },
+    {
+      "quantity": 2,
+      "unit": "piece",
+      "name": "red bell pepper"
+    },
+    {
+      "quantity": 400,
+      "unit": "g",
+      "name": "black bean"
+    },
+    {
+      "quantity": 400,
+      "unit": "g",
+      "name": "kidney bean"
+    },
+    {
+      "quantity": 800,
+      "unit": "g",
+      "name": "tomato",
+      "descriptor": "canned peeled"
+    },
+    {
+      "quantity": 2,
+      "unit": "tbsp",
+      "name": "chipotle pepper in adobo sauce"
+    },
+    {
+      "quantity": 200,
+      "unit": "ml",
+      "name": "water",
+      "pantry": true
+    },
+    {
+      "quantity": 1,
+      "unit": "piece",
+      "name": "chicken stock cube",
+      "pantry": true
+    },
+    {
+      "quantity": 50,
+      "unit": "g",
+      "name": "dark chocolate",
+      "descriptor": "70%"
+    },
+    {
+      "quantity": 1,
+      "unit": "tbsp",
+      "name": "dark muscovado sugar"
+    }
+  ],
+  "baseServings": 4,
+  "imageDescription": "Rich, dark chili con carne with visible beans and peppers in a thick sauce, garnished with sour cream, cheddar, and jalapeños"
+}

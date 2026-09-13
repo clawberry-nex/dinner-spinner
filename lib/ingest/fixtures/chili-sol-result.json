@@ -1,0 +1,187 @@
+{
+  "title": "Chili con carne",
+  "recipe": "1. Dice [the onions](#0) and finely chop [the garlic](#1). Heat [the oil](#17) in a sauté pan and brown [the beef mince](#2) with [the spices](#3,4,5,6,7) and [salt](#18), if desired, for 5–6 minutes over medium-high to high heat. Brown [the meat](#2) well by cooking it a little longer on one side and pressing it down lightly from time to time. [The meat](#2) does not need to be evenly cooked through. The browner pieces add more flavor.\n2. Clean [the red peppers](#8) and cut them into pieces of about 1 cm.\n3. Add [the onion](#0) and [red pepper](#8) and cook for 3 minutes over medium-high heat. Add [the garlic](#1) and cook for another 2 minutes, stirring regularly.\n4. Meanwhile, put [all the beans](#9,10) in a colander and rinse them under cold running water. Drain well.\n5. Add [the tomatoes](#11), [chipotle pepper](#12), and [water](#13), then crumble [the stock cube](#14) over the mixture. Break [the tomatoes](#11) into pieces with a wooden spoon. Add [the beans](#9,10), [chocolate](#15), and [sugar](#16), bring to a boil, then cover and simmer over low heat for 90 minutes. Stir occasionally. Season with [black pepper](#19) and [salt](#18), if desired.\n\n## To serve\n1. Serve with toppings of your choice, such as [sour cream](#20), [grated cheddar](#21), [chili rings](#22), [jalapeño rings](#23), [coriander](#24), [lime](#25), [finely chopped tomatoes](#26), and [red onion](#27).",
+  "tags": [
+    "beef"
+  ],
+  "ingredients": [
+    {
+      "quantity": 2,
+      "unit": "piece",
+      "name": "onion",
+      "descriptor": "medium",
+      "preparation": "diced"
+    },
+    {
+      "quantity": 3,
+      "unit": "clove",
+      "name": "garlic",
+      "preparation": "finely chopped",
+      "pantry": true
+    },
+    {
+      "quantity": 500,
+      "unit": "g",
+      "name": "beef mince"
+    },
+    {
+      "quantity": 2,
+      "unit": "tsp",
+      "name": "paprika",
+      "pantry": true
+    },
+    {
+      "quantity": 2,
+      "unit": "tsp",
+      "name": "ground cumin",
+      "pantry": true
+    },
+    {
+      "quantity": 2,
+      "unit": "tsp",
+      "name": "dried oregano",
+      "pantry": true
+    },
+    {
+      "quantity": 1,
+      "unit": "tsp",
+      "name": "onion powder"
+    },
+    {
+      "quantity": 0.5,
+      "unit": "tsp",
+      "name": "ground cinnamon",
+      "pantry": true
+    },
+    {
+      "quantity": 2,
+      "unit": "piece",
+      "name": "red pepper",
+      "preparation": "cleaned and cut into 1 cm pieces"
+    },
+    {
+      "quantity": 400,
+      "unit": "g",
+      "name": "black bean",
+      "descriptor": "canned",
+      "preparation": "rinsed and drained"
+    },
+    {
+      "quantity": 400,
+      "unit": "g",
+      "name": "kidney bean",
+      "descriptor": "canned",
+      "preparation": "rinsed and drained"
+    },
+    {
+      "quantity": 800,
+      "unit": "g",
+      "name": "peeled tomato",
+      "descriptor": "canned"
+    },
+    {
+      "quantity": 2,
+      "unit": "tbsp",
+      "name": "chipotle pepper in adobo sauce",
+      "descriptor": "jarred"
+    },
+    {
+      "quantity": 200,
+      "unit": "ml",
+      "name": "water",
+      "pantry": true
+    },
+    {
+      "quantity": 1,
+      "unit": "piece",
+      "name": "chicken stock cube",
+      "preparation": "crumbled",
+      "pantry": true,
+      "scalable": false
+    },
+    {
+      "quantity": 50,
+      "unit": "g",
+      "name": "dark chocolate",
+      "descriptor": "70% cocoa"
+    },
+    {
+      "quantity": 1,
+      "unit": "tsp",
+      "name": "dark brown sugar",
+      "pantry": true
+    },
+    {
+      "quantity": 1,
+      "name": "oil",
+      "pantry": true
+    },
+    {
+      "quantity": 1,
+      "name": "salt",
+      "pantry": true,
+      "optional": true
+    },
+    {
+      "quantity": 1,
+      "unit": "to taste",
+      "name": "black pepper",
+      "pantry": true
+    },
+    {
+      "quantity": 1,
+      "name": "sour cream",
+      "optional": true,
+      "section": "To serve"
+    },
+    {
+      "quantity": 1,
+      "name": "cheddar",
+      "preparation": "grated",
+      "optional": true,
+      "section": "To serve"
+    },
+    {
+      "quantity": 1,
+      "name": "chili",
+      "preparation": "sliced into rings",
+      "optional": true,
+      "section": "To serve"
+    },
+    {
+      "quantity": 1,
+      "name": "jalapeño",
+      "preparation": "sliced into rings",
+      "optional": true,
+      "section": "To serve"
+    },
+    {
+      "quantity": 1,
+      "name": "coriander",
+      "optional": true,
+      "section": "To serve"
+    },
+    {
+      "quantity": 1,
+      "name": "lime",
+      "optional": true,
+      "section": "To serve"
+    },
+    {
+      "quantity": 1,
+      "name": "tomato",
+      "preparation": "finely chopped",
+      "optional": true,
+      "section": "To serve"
+    },
+    {
+      "quantity": 1,
+      "name": "red onion",
+      "preparation": "finely chopped",
+      "optional": true,
+      "section": "To serve"
+    }
+  ],
+  "baseServings": 4,
+  "imageDescription": "Chili con carne topped with sour cream, grated cheddar, jalapeño rings, coriander, and lime"
+}

@@ -5,10 +5,10 @@ import { buildIngestPrompt } from "@/lib/ingest/prompt";
 import { findScrapeableUrl, scrapeRecipeUrl } from "@/lib/ingest/scrape-url";
 import { DISH_INPUT_JSON_SCHEMA } from "@/lib/ingest/schema";
 import {
-  CLAUDE_HARNESS_MODELS,
-  startClaudeAgentJob,
-  ClaudeAgentError,
-} from "@/lib/ingest/claude-agent";
+  RECIPE_MODELS,
+  startNexAgentJob,
+  NexAgentError,
+} from "@/lib/ingest/nex-agent";
 import { sql } from "@/lib/db";
 import { languageName } from "@/lib/languages";
 
@@ -115,31 +115,25 @@ export async function POST(request: Request): Promise<Response> {
   });
 
   try {
-    const job = await startClaudeAgentJob({
+    const job = await startNexAgentJob({
       prompt,
       responseSchema: DISH_INPUT_JSON_SCHEMA,
       image,
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
-      // Photo ingests run on Opus (claude-opus-4-8) for its high-resolution
-      // vision (up to a 2576px long edge — see lib/image-compress.ts): it reads
-      // small printed quantities (½, 175g) far more accurately than Haiku, which
-      // is what makes ingredient amounts come out right from a photo. Verified
-      // 4/4 valid structured outputs within claude-agent's 8-turn budget (Sonnet
-      // used to exhaust it). Text-only ingests have no OCR problem, so they stay
-      // on Haiku — ~30× cheaper (~$0.005 vs ~$0.15/photo) and equally reliable
-      // for the structured prompt. With the anyOf-free schema (lib/ingest/
-      // schema.ts) both models reliably call submit_result with a valid payload.
+      // Sol handles text/URL translation and structuring; Astra handles photo
+      // transcription. Explicit Codex prefixes keep both on OpenAI regardless
+      // of Nex's global provider setting.
       model: image
-        ? CLAUDE_HARNESS_MODELS.opus
-        : CLAUDE_HARNESS_MODELS.haiku,
+        ? RECIPE_MODELS.photo
+        : RECIPE_MODELS.text,
     });
     return Response.json(
       { jobId: job.jobId, sourceImageUrl },
       { status: 202 },
     );
   } catch (err) {
-    if (err instanceof ClaudeAgentError) {
+    if (err instanceof NexAgentError) {
       const status =
         err.code === "rate_limited" || err.code === "queue_full"
           ? 429

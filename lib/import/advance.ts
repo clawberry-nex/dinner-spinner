@@ -1,12 +1,12 @@
 import "server-only";
 import { sql } from "@/lib/db";
 import {
-  CLAUDE_HARNESS_MODELS,
-  startClaudeAgentJob,
-  pollClaudeAgentJob,
-  ClaudeAgentError,
+  RECIPE_MODELS,
+  startNexAgentJob,
+  pollNexAgentJob,
+  NexAgentError,
   type PollResult,
-} from "@/lib/ingest/claude-agent";
+} from "@/lib/ingest/nex-agent";
 import { buildIngestPrompt } from "@/lib/ingest/prompt";
 import { DISH_INPUT_JSON_SCHEMA } from "@/lib/ingest/schema";
 import { normalizeEscapedWhitespace } from "@/lib/ingest/sanitize";
@@ -98,7 +98,7 @@ async function advanceDetecting(row: ImportRow): Promise<ImportRow> {
   }
   let result: PollResult;
   try {
-    result = await pollClaudeAgentJob(row.detect_job_id, {
+    result = await pollNexAgentJob(row.detect_job_id, {
       token: token(),
       baseUrl: CLAUDE_AGENT_BASE_URL,
     });
@@ -149,7 +149,7 @@ async function advanceParsing(row: ImportRow): Promise<ImportRow> {
     if (chunk.status !== "parsing" || !chunk.parseJobId) continue;
     let res: PollResult;
     try {
-      res = await pollClaudeAgentJob(chunk.parseJobId, {
+      res = await pollNexAgentJob(chunk.parseJobId, {
         token: tok,
         baseUrl: CLAUDE_AGENT_BASE_URL,
       });
@@ -187,19 +187,19 @@ async function advanceParsing(row: ImportRow): Promise<ImportRow> {
           pantryList,
           targetLanguage,
         });
-        const job = await startClaudeAgentJob({
+        const job = await startNexAgentJob({
           prompt,
           responseSchema: DISH_INPUT_JSON_SCHEMA,
           token: tok,
           baseUrl: CLAUDE_AGENT_BASE_URL,
-          model: CLAUDE_HARNESS_MODELS.haiku,
+          model: RECIPE_MODELS.text,
         });
         chunk.parseJobId = job.jobId;
         chunk.status = "parsing";
         inFlight++;
       } catch (err) {
         if (
-          err instanceof ClaudeAgentError &&
+          err instanceof NexAgentError &&
           (err.code === "queue_full" || err.code === "rate_limited")
         ) {
           break; // back off — leave queued, retry next poll
@@ -218,7 +218,7 @@ async function advanceParsing(row: ImportRow): Promise<ImportRow> {
 }
 
 async function createDishFromStructured(structured: unknown, userId: string): Promise<number> {
-  // Repair Haiku's literal-"\n"-instead-of-newline quirk in text fields
+  // Repair legacy literal-"\n"-instead-of-newline quirk in text fields
   // (recipe/subtitle/ingredient prep) so the method renders as steps. Inline
   // `[label](#index)` references live inside `recipe`; createDishForUser does
   // the index→id rewrite once ingredient ids are assigned.

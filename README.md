@@ -15,8 +15,8 @@ Production: [dinner-spinner.van-willigenburg.nl](https://dinner-spinner.van-will
   that can be shared without signing in.
 - Structured ingredient quantities, unit-aware shopping-list aggregation,
   pantry defaults, optional ingredients, serving scaling, and cook history.
-- Async single-recipe and resumable batch imports through the Nex API.
-- Vercel Blob-backed recipe photos and premium/non-premium image model gating.
+- Async single-recipe and resumable batch imports through the Nex API: GPT-5.6 Sol for text and batch processing, GPT-6 Astra for recipe photos.
+- Vercel Blob-backed recipe photos, generated with OpenAI GPT Image 2.
 - A fully implemented read-only `/demo` experience that stays dormant (404)
   until a reviewed static recipe snapshot is committed.
 

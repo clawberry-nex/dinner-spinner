@@ -2,9 +2,9 @@ import { resolveUserId } from "@/lib/auth-helpers";
 import { DishInputSchema } from "@/lib/types";
 import { normalizeEscapedWhitespace } from "@/lib/ingest/sanitize";
 import {
-  pollClaudeAgentJob,
-  ClaudeAgentError,
-} from "@/lib/ingest/claude-agent";
+  pollNexAgentJob,
+  NexAgentError,
+} from "@/lib/ingest/nex-agent";
 
 // Just a poll proxy. Should respond in <1s in practice.
 export const maxDuration = 15;
@@ -43,13 +43,13 @@ export async function GET(
   }
 
   try {
-    const result = await pollClaudeAgentJob(id, {
+    const result = await pollNexAgentJob(id, {
       token,
       baseUrl: CLAUDE_AGENT_BASE_URL,
     });
 
     if (result.status === "done") {
-      // Repair Haiku's literal-"\n"-instead-of-newline quirk in text fields
+      // Repair legacy literal-"\n"-instead-of-newline quirk in text fields
       // (recipe/subtitle/ingredient prep) so the method renders as steps. Inline
       // `[label](#index)` references live inside `recipe` as plain text — no
       // separate structure to coerce. Index→id rewrite happens at create time.
@@ -95,7 +95,7 @@ export async function GET(
       currentStep: result.currentStep,
     });
   } catch (err) {
-    if (err instanceof ClaudeAgentError) {
+    if (err instanceof NexAgentError) {
       const status =
         err.code === "not_found"
           ? 404

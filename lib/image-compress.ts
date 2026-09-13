@@ -1,12 +1,8 @@
 const MAX_RAW_BYTES = 20 * 1024 * 1024; // 20MB pre-compression sanity cap
 
-// Claude Opus 4.x reads images up to a 2576px long edge (~3.75MP) — its
-// high-resolution vision ceiling. Photo ingests run on Opus (see
-// app/api/ingest/route.ts), so we send at that resolution: small printed
-// quantities (½, 0.5, 175g) survive instead of smearing at the old 1280px.
-// Pre-4.7 models (Haiku/Sonnet) cap at ~1568px — if ingest ever moves back to
-// one of those, lower this to 1568 to avoid wasted upload. Ingest is async, so
-// the larger image no longer has to beat a 60s synchronous-call budget.
+// Keep small printed fractions and quantities legible for GPT-6 Astra photo
+// ingestion. The existing 2576px input budget balances text detail with Vercel's
+// request body cap; it is an app upload policy, not a claimed model limit.
 const MAX_DIMENSION = 2576;
 
 // Encode at decreasing quality until the result fits the budget, so a dense
