@@ -71,6 +71,15 @@ test("generated DISH_INPUT_JSON_SCHEMA has NO anyOf anywhere", () => {
   assert.ok(!json.includes("\"anyOf\""), "schema should be anyOf-free for json-schema-to-zod compatibility");
 });
 
+test("ingest output cannot invent persistence-owned ingredient IDs", () => {
+  const schema = DISH_INPUT_JSON_SCHEMA as {
+    properties: { ingredients: { items: { properties: Record<string, unknown>; additionalProperties: boolean } } };
+  };
+  const ingredient = schema.properties.ingredients.items;
+  assert.equal(ingredient.properties.id, undefined);
+  assert.equal(ingredient.additionalProperties, false);
+});
+
 test("ingredient section is an enforceable string; recipe carries refs inline", () => {
   type SchemaShape = {
     properties: {

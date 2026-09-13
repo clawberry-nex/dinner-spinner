@@ -87,6 +87,18 @@ test("preserves Dutch teaspoon identity, product forms, and serving suggestions"
   assert.ok(!p.includes("image_description"));
 });
 
+test("required serving ingredients stay required even under a To serve heading", () => {
+  const p = buildIngestPrompt({
+    userInput: "125g creme fraiche\n100g geraspte kaas\n1. Kook de rijst.\n2. Serveer met rijst, de creme fraiche en de geraspte kaas.",
+    pantryList: ["rice"],
+  });
+  assert.ok(p.includes("A serving instruction is not an optionality marker"));
+  assert.ok(p.includes("those ingredients are REQUIRED"));
+  assert.ok(p.includes('a "To serve" section alone never makes them optional'));
+  assert.ok(p.includes("only when the source presents them as choices"));
+  assert.ok(!p.includes('the source says "optional", "(optional)", "to serve"'));
+});
+
 // Regression (batch-import stress test, 2026-06-11): Haiku fabricated whole
 // methods/ingredients when the source had none ("The Soup I Make Every January"
 // → invented "Easy Cabbage Soup" with 18 ingredients). The prompt must forbid

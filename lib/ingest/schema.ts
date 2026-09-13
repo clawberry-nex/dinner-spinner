@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DishInputSchema } from "../types.ts";
+import { DishInputSchema, IngredientSchema } from "../types.ts";
 
 type JsonNode = Record<string, unknown>;
 
@@ -35,7 +35,13 @@ export function stripNullFromAnyOf(node: unknown): unknown {
   return out;
 }
 
-const { $schema: _unused, ...raw } = z.toJSONSchema(DishInputSchema) as Record<
+// Ingredient IDs belong to persistence. Exposing this optional field to native
+// structured output lets models invent IDs that break inline-reference parsing.
+const IngestDishSchema = DishInputSchema.extend({
+  ingredients: z.array(IngredientSchema.omit({ id: true })).default([]),
+});
+
+const { $schema: _unused, ...raw } = z.toJSONSchema(IngestDishSchema) as Record<
   string,
   unknown
 >;
