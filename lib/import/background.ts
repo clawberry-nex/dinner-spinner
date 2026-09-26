@@ -1,4 +1,5 @@
 import "server-only";
+import { postBackgroundAdvance } from "../background-request";
 
 // Server-side, browser-independent completion for a batch import.
 //
@@ -28,31 +29,12 @@ export function isContinueStatus(s: string): boolean {
  *  sweep or a browser revisit to resume. */
 export const MAX_HOPS = 60;
 
-function selfBaseUrl(): string | null {
-  const authUrl = process.env.AUTH_URL;
-  if (authUrl) return authUrl.replace(/\/+$/, "");
-  const vercelUrl = process.env.VERCEL_URL;
-  if (vercelUrl) return `https://${vercelUrl}`;
-  return null;
-}
-
 /**
  * Trigger (or continue) the background advance chain for one import. Awaiting
  * this resolves quickly: /api/import/advance-bg ACKs with 202 and does the work
  * in its own after(). Call this inside after() from a route handler.
  */
 export async function kickBackgroundAdvance(importId: string, hops = 0): Promise<void> {
-  const secret = process.env.CRON_SECRET;
-  const base = selfBaseUrl();
-  if (!secret || !base) return; // feature off — browser polling drives the import
   if (hops > MAX_HOPS) return;
-  try {
-    await fetch(`${base}/api/import/advance-bg`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${secret}` },
-      body: JSON.stringify({ importId, hops }),
-    });
-  } catch {
-    /* best-effort — browser polling / the daily cron sweep will resume it */
-  }
+  await postBackgroundAdvance("/api/import/advance-bg", { importId, hops });
 }

@@ -111,6 +111,7 @@ for local development.
 | `TODOIST_PROJECT_NAME` | Optional seed-owner Todoist project fallback. |
 | `CLAUDE_AGENT_URL` | Optional Nex API base override; defaults to the public Funnel endpoint. |
 | `CRON_SECRET` | **Optional but recommended.** Bearer that authenticates batch-import and dish-image background completion (`/api/import/advance-bg`, `/api/dishes/images/advance-bg`) plus the daily `vercel.json` safety sweep. Unset ⇒ browser polling still advances work, but it may pause after the user closes the tab. `openssl rand -hex 32`. |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | Optional Vercel-managed Protection Bypass for Automation secret, sent as `x-vercel-protection-bypass` on background calls when configured. Needed for protected preview deployments (or production with protection on its public domain). |
 
 `.env.example` ships the placeholder template; `.env*` is gitignored except for `.env.example`.
 
@@ -252,6 +253,16 @@ Failed single-recipe ingests can be inspected for roughly 24 hours before Nex
 prunes the job. Follow [docs/operations/ingest-debugging.md](docs/operations/ingest-debugging.md);
 never copy a token id/prefix or a pulled production secret into project docs.
 
+**Background handoff destination:** dish-image and batch-import chains share
+`lib/background-request.ts`. In production they call
+`VERCEL_PROJECT_PRODUCTION_URL`, since `VERCEL_URL` can require Vercel login even
+when the public production domain works. Previews use their own `VERCEL_URL`
+(never the production domain); local development falls back to `AUTH_URL`.
+These URLs come only from deployment configuration, never incoming host headers.
+Handoffs have a five-second timeout, do not follow redirects, and require HTTP
+202; rejected or failed requests log a warning without secrets. Keep production
+`AUTH_URL` unset—background routing does not change auth or share metadata.
+
 ## Public demo (implemented, intentionally dormant)
 
 `/demo/*` is an anonymous, read-only experience backed only by the bundled
@@ -304,7 +315,7 @@ the active app also has four errors across `demo-library.tsx`,
 `batch-import.tsx`, and `profile-view.tsx`. Do not
 attribute that baseline to an unrelated change without checking paths.
 
-The direct test command currently discovers 288 tests: 282 pass and six are a
+The direct test command currently discovers 295 tests: 289 pass and six are a
 known baseline. `install-prompt.test.ts`, `last-servings.test.ts`, and
 `meal-plan.test.ts` use top-level await that tsx compiles as CJS; three
 `theme.test.ts` assertions still expect the old `system` default while the app
