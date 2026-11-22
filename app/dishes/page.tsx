@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Chip, DishArt, Stars } from "../_components/ui";
 import { Icon, type IconName } from "../_components/icon";
+import { LibraryDishTypes } from "../_components/dish-type-controls";
+import { DISH_TYPE_LABELS, type DishType } from "@/lib/dish-types";
 import type { Dish } from "@/lib/types";
 import {
   DIET_FILTERS,
@@ -47,7 +49,7 @@ function dietLabel(flags: DietFlags): string | null {
 
 export default function DishesPage() {
   const [dishes, setDishes] = useState<Dish[]>([]);
-  const [allTags, setAllTags] = useState<string[]>([]);
+  const [dishType, setDishType] = useState<DishType>("main");
   const [q, setQ] = useState("");
   const [favOnly, setFavOnly] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -66,8 +68,10 @@ export default function DishesPage() {
   };
 
   useEffect(() => {
-    fetch("/api/dishes").then((r) => r.json()).then((data: Dish[]) => { setDishes(data); setLoading(false); }).catch(() => setLoading(false));
-    fetch("/api/tags").then((r) => r.json()).then(setAllTags).catch(() => {});
+    fetch("/api/dishes").then((r) => {
+      if (!r.ok) throw new Error("Could not load dishes");
+      return r.json();
+    }).then(setDishes).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -130,9 +134,12 @@ export default function DishesPage() {
     return map;
   }, [dishes]);
 
+  const sectionDishes = useMemo(() => dishes.filter((d) => d.dishType === dishType), [dishes, dishType]);
+  const allTags = useMemo(() => [...new Set(sectionDishes.flatMap((d) => d.tags))].sort(), [sectionDishes]);
+
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
-    return dishes.filter((d) => {
+    return sectionDishes.filter((d) => {
       if (favOnly && !d.favorite) return false;
       if (selected.length && !selected.every((t) => d.tags.includes(t))) return false;
       if (dietFilters.length) {
@@ -143,7 +150,7 @@ export default function DishesPage() {
       if (!query) return true;
       return `${d.title} ${d.subtitle ?? ""}`.toLowerCase().includes(query);
     });
-  }, [dishes, q, favOnly, selected, dietFilters, dietByDish]);
+  }, [sectionDishes, q, favOnly, selected, dietFilters, dietByDish]);
 
   // Sort runs AFTER the filters, and feeds both the grid and list views.
   const sorted = useMemo(() => sortDishes(filtered, sort), [filtered, sort]);
@@ -167,16 +174,23 @@ export default function DishesPage() {
                 Your collection
               </h1>
               <div className="mt-2 text-[13.5px] text-text-dim lg:text-[15px]">
-                {filtered.length} of {dishes.length}
+                {filtered.length} of {sectionDishes.length}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-[8px] self-end sm:self-auto">
-              {dishes.length > 1 && (
+              {sectionDishes.length > 1 && (
                 <SortControl value={sort} options={SORT_OPTIONS} onChange={changeSort} />
               )}
               <ViewToggle view={view} onChange={setView} />
             </div>
           </div>
+
+          <LibraryDishTypes value={dishType} onChange={(type) => {
+            if (type !== dishType) {
+              setDishType(type);
+              setSelected([]);
+            }
+          }} />
 
           {/* Mobile search + filter trigger (desktop uses the rail below). */}
           <div className="mt-4 flex items-center gap-[9px] lg:hidden">
@@ -299,11 +313,11 @@ export default function DishesPage() {
                 <div className="rounded-[var(--radius-lg)] border border-dashed border-line p-8 text-center text-[14px] text-text-dim">
                   Loading dishes…
                 </div>
-              ) : !dishes.length ? (
+              ) : !sectionDishes.length ? (
                 <EmptyState
                   emoji="🍽️"
-                  title="No dishes yet"
-                  body="Add your first recipe and it’ll show up here."
+                  title={`No ${DISH_TYPE_LABELS[dishType].plural.toLowerCase()} yet`}
+                  body="Choose this dish type when adding or editing a recipe."
                 />
               ) : !filtered.length ? (
                 <EmptyState

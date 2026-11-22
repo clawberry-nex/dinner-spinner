@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { DISH_TYPES, type DishType } from "./dish-types.ts";
+
+export const DishTypeSchema = z.enum(DISH_TYPES);
 
 export const IngredientSchema = z.object({
   // Stable, dish-local id (see lib/inline-refs.ts::mintIngredientId). Inline
@@ -37,6 +40,7 @@ export type Ingredient = z.infer<typeof IngredientSchema>;
 // the text, so `recipe` stays a plain string here.
 
 export const DishInputSchema = z.object({
+  dishType: DishTypeSchema.default("main"),
   title: z.string().trim().min(1).max(200),
   subtitle: z.string().trim().max(300).nullable().optional(),
   recipe: z.string().max(20_000).nullable().optional(),
@@ -71,6 +75,7 @@ export type DishInput = z.infer<typeof DishInputSchema>;
 // the source schema for omitted `tags` / `ingredients` / `baseServings`,
 // which would clobber the existing values on a partial patch.
 export const DishPatchSchema = z.object({
+  dishType: DishTypeSchema.optional(),
   title: z.string().trim().min(1).max(200).optional(),
   subtitle: z.string().trim().max(300).nullable().optional(),
   recipe: z.string().max(20_000).nullable().optional(),
@@ -88,6 +93,7 @@ export const DishPatchSchema = z.object({
 export type DishPatchInput = z.infer<typeof DishPatchSchema>;
 
 export type Dish = {
+  dishType: DishType;
   id: number;
   title: string;
   subtitle: string | null;
@@ -138,6 +144,7 @@ export function rowToDish(row: Record<string, unknown>): Dish {
   const avg = row.avg_rating;
   const count = row.rating_count;
   return {
+    dishType: (row.dish_type as DishType | undefined) ?? "main",
     id: row.id as number,
     title: row.title as string,
     subtitle: (row.subtitle as string | null) ?? null,

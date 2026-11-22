@@ -260,6 +260,8 @@ function recipeNodeToText(
   if (name) parts.push(decodeEntities(name));
   const desc = strOrNull(r.description);
   if (desc) parts.push(decodeEntities(stripTags(desc)));
+  const categories = [r.recipeCategory].flat().map(strOrNull).filter(Boolean);
+  if (categories.length) parts.push(`Recipe category: ${categories.join(", ")}`);
   const yld = recipeYieldToText(r.recipeYield);
   if (yld) parts.push(`Serves: ${yld}`);
 

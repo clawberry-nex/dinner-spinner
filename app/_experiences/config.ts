@@ -1,13 +1,14 @@
 // Config values for the shared experiences. No JSX here so the read-only
 // invariants stay unit-testable. fetch/localStorage are only touched inside
 // the functions (at call time), so this module is safe to import in tests.
+import type { DishType } from "@/lib/dish-types";
 import type { Dish } from "@/lib/types";
 import type { PlanEntry } from "@/lib/plan-storage";
 import { demoLoadDishes, demoLoadTags } from "@/lib/demo/source";
 
 export type ExperienceConfig = {
-  loadDishes: (tags: string[]) => Promise<Dish[]>;
-  loadTags: () => Promise<string[]>;
+  loadDishes: (tags: string[], dishType?: DishType) => Promise<Dish[]>;
+  loadTags: (dishType?: DishType) => Promise<string[]>;
   hrefBase: string;
   spinnerFiltersKey: string;
   planStorageKey: string;
@@ -17,13 +18,17 @@ export type ExperienceConfig = {
 };
 
 export const liveExperienceConfig: ExperienceConfig = {
-  loadDishes: async (tags) => {
-    const qs = tags.length ? `?tags=${encodeURIComponent(tags.join(","))}` : "";
-    const res = await fetch(`/api/dishes${qs}`);
+  loadDishes: async (tags, dishType) => {
+    const qs = new URLSearchParams();
+    if (tags.length) qs.set("tags", tags.join(","));
+    if (dishType) qs.set("dishType", dishType);
+    const res = await fetch(qs.size ? `/api/dishes?${qs}` : "/api/dishes");
+    if (!res.ok) throw new Error("Could not load dishes");
     return res.json();
   },
-  loadTags: async () => {
-    const res = await fetch("/api/tags");
+  loadTags: async (dishType) => {
+    const res = await fetch(dishType ? `/api/tags?dishType=${dishType}` : "/api/tags");
+    if (!res.ok) throw new Error("Could not load tags");
     return res.json();
   },
   hrefBase: "",

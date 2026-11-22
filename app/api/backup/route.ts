@@ -76,13 +76,14 @@ export async function POST(req: Request) {
   for (const d of envelope.dishes) {
     await sql`
       INSERT INTO dishes (
-        id, user_id, title, subtitle, recipe, tags, ingredients, base_servings,
+        id, user_id, dish_type, title, subtitle, recipe, tags, ingredients, base_servings,
         favorite, image_url, emoji, accent, notes, image_description,
         created_at, updated_at
       )
       VALUES (
         ${d.id},
         ${userId},
+        ${d.dishType},
         ${d.title},
         ${d.subtitle},
         ${d.recipe},
@@ -99,6 +100,7 @@ export async function POST(req: Request) {
         ${d.updatedAt}
       )
       ON CONFLICT (id) DO UPDATE SET
+        dish_type = EXCLUDED.dish_type,
         title = EXCLUDED.title,
         subtitle = EXCLUDED.subtitle,
         recipe = EXCLUDED.recipe,

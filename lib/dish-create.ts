@@ -54,11 +54,12 @@ export async function createDishForUser(
 
   const rows = await sql`
     INSERT INTO dishes (
-      user_id, title, subtitle, recipe, tags, ingredients, base_servings,
+      user_id, dish_type, title, subtitle, recipe, tags, ingredients, base_servings,
       favorite, image_url, emoji, accent, notes, image_description, public
     )
     VALUES (
       ${userId},
+      ${d.dishType},
       ${d.title},
       ${d.subtitle ?? null},
       ${d.recipe ?? null},

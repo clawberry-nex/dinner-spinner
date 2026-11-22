@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { sql } from "@/lib/db";
-import { DishInputSchema, rowToDish } from "@/lib/types";
+import { DishInputSchema, DishTypeSchema, rowToDish } from "@/lib/types";
 import { resolveUserId } from "@/lib/auth-helpers";
 import { createDishForUser } from "@/lib/dish-create";
 
@@ -24,28 +24,19 @@ export async function GET(req: Request) {
     ? tagsParam.split(",").map((t) => t.trim()).filter(Boolean)
     : [];
 
-  const rows =
-    tags.length > 0
-      ? await sql`
-          SELECT d.*,
-            (SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id) AS last_cooked_at,
-            (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id) AS cook_count,
-            (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
-            (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
-          FROM dishes d
-          WHERE d.user_id = ${userId} AND tags @> ${tags}
-          ORDER BY title ASC
-        `
-      : await sql`
-          SELECT d.*,
-            (SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id) AS last_cooked_at,
-            (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id) AS cook_count,
-            (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
-            (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
-          FROM dishes d
-          WHERE d.user_id = ${userId}
-          ORDER BY title ASC
-        `;
+  const type = DishTypeSchema.nullable().safeParse(url.searchParams.get("dishType"));
+  if (!type.success) return Response.json({ error: "Invalid dish type" }, { status: 400 });
+  const rows = await sql`
+    SELECT d.*,
+      (SELECT MAX(cooked_at) FROM cook_log WHERE dish_id = d.id) AS last_cooked_at,
+      (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id) AS cook_count,
+      (SELECT AVG(rating)::float FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS avg_rating,
+      (SELECT COUNT(*) FROM cook_log WHERE dish_id = d.id AND rating IS NOT NULL) AS rating_count
+    FROM dishes d
+    WHERE d.user_id = ${userId} AND d.tags @> ${tags}::text[]
+      AND (${type.data}::text IS NULL OR d.dish_type = ${type.data})
+    ORDER BY title ASC
+  `;
 
   return Response.json(rows.map(rowToDish));
 }

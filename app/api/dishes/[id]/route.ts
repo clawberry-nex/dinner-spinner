@@ -119,6 +119,7 @@ export async function PATCH(
 
   const rows = await sql`
     UPDATE dishes SET
+      dish_type = COALESCE(${u.dishType ?? null}, dish_type),
       title = ${merged.title},
       subtitle = ${merged.subtitle ?? null},
       recipe = ${merged.recipe ?? null},

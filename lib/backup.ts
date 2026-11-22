@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { DishTypeSchema } from "./types.ts";
 
 export const CURRENT_BACKUP_VERSION = "1" as const;
 
 const BackupDishSchema = z.object({
+  dishType: DishTypeSchema.default("main"),
   id: z.number().int().positive(),
   title: z.string(),
   subtitle: z.string().nullable(),

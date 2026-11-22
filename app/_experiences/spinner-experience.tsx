@@ -48,12 +48,12 @@ export function SpinnerExperience() {
   }, [selected]);
 
   useEffect(() => {
-    cfg.loadTags().then(setAllTags).catch(() => {});
+    cfg.loadTags("main").then(setAllTags).catch(() => {});
   }, [cfg]);
 
   const load = async (): Promise<Dish[]> => {
     try {
-      const data = await cfg.loadDishes(selected);
+      const data = await cfg.loadDishes(selected, "main");
       setDishes(data);
       return data;
     } catch {
@@ -132,7 +132,7 @@ export function SpinnerExperience() {
                   "Gathering your dishes…"
                 ) : (
                   <>
-                    {poolSize} {poolSize === 1 ? "dish" : "dishes"} in the running
+                    {poolSize} {poolSize === 1 ? "main dish" : "main dishes"} in the running
                     {narrowed && " · narrowed"}
                   </>
                 )}
@@ -902,12 +902,12 @@ function EmptyPool({
         className="mt-4 text-[22px] font-medium text-text lg:text-[26px]"
         style={{ fontFamily: "var(--font-serif)" }}
       >
-        {narrowed ? "Nothing matches" : "Your kitchen’s empty"}
+        {narrowed ? "Nothing matches" : "No main dishes yet"}
       </h2>
       <p className="mt-2 max-w-sm text-[14px] leading-[1.5] text-text-dim lg:text-[15px]">
         {narrowed
-          ? "No dish fits all of those filters. Loosen them and try again."
-          : "Add your first recipe and the spinner will start suggesting dinners."}
+          ? "No main dish fits all of those filters. Loosen them and try again."
+          : "Add a main dish to start spinning."}
       </p>
       {narrowed ? (
         <Button variant="ghost" onClick={onClear} className="mt-[18px]">

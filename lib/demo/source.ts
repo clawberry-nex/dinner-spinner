@@ -1,15 +1,16 @@
 // Read-only data source for the /demo experience. Pure helpers (testable)
 // plus async loaders bound to the bundled snapshot. NEVER touches the DB or
 // /api/* — that is the read-only guarantee.
+import type { DishType } from "@/lib/dish-types";
 import type { Dish } from "@/lib/types";
 import { DEMO_DISHES, DEMO_TAGS } from "./dishes";
 
 // Mirrors GET /api/dishes: AND-semantics tag filter, ordered by title ASC.
-export function filterDishesByTags(dishes: Dish[], tags: string[]): Dish[] {
+export function filterDishesByTags(dishes: Dish[], tags: string[], dishType?: DishType): Dish[] {
   const wanted = tags.map((t) => t.trim()).filter(Boolean);
-  const matched = wanted.length
-    ? dishes.filter((d) => wanted.every((t) => d.tags.includes(t)))
-    : dishes.slice();
+  const matched = dishes.filter((d) =>
+    (!dishType || d.dishType === dishType) && wanted.every((t) => d.tags.includes(t)),
+  );
   return matched.sort((a, b) => a.title.localeCompare(b.title));
 }
 
@@ -19,10 +20,11 @@ export function deriveTags(dishes: Dish[]): string[] {
   return [...set].sort((a, b) => a.localeCompare(b));
 }
 
-export async function demoLoadDishes(tags: string[]): Promise<Dish[]> {
-  return filterDishesByTags(DEMO_DISHES, tags);
+export async function demoLoadDishes(tags: string[], dishType?: DishType): Promise<Dish[]> {
+  return filterDishesByTags(DEMO_DISHES, tags, dishType);
 }
 
-export async function demoLoadTags(): Promise<string[]> {
+export async function demoLoadTags(dishType?: DishType): Promise<string[]> {
+  if (dishType) return deriveTags(DEMO_DISHES.filter((d) => d.dishType === dishType));
   return DEMO_TAGS.length ? DEMO_TAGS : deriveTags(DEMO_DISHES);
 }

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { DishTypeOptions } from "./dish-type-controls";
+import type { DishType } from "@/lib/dish-types";
 import type { Dish, DishInput, Ingredient } from "@/lib/types";
 import { PANTRY_DEFAULTS, STANDARD_INGREDIENTS, STANDARD_UNITS } from "@/lib/vocabulary";
 import { moveItem } from "@/lib/reorder";
@@ -51,6 +53,7 @@ type Draft = {
   subtitle: string;
   recipe: string;
   notes: string;
+  dishType: DishType;
   tagsInput: string;
   baseServings: string;
   imageUrl: string;
@@ -68,6 +71,7 @@ const EMPTY_DRAFT: Draft = {
   subtitle: "",
   recipe: "",
   notes: "",
+  dishType: "main",
   tagsInput: "",
   baseServings: "4",
   imageUrl: "",
@@ -82,6 +86,7 @@ const EMPTY_DRAFT: Draft = {
 function dishToDraft(d: Dish): Draft {
   return {
     id: d.id,
+    dishType: d.dishType,
     title: d.title,
     subtitle: d.subtitle ?? "",
     recipe: d.recipe ?? "",
@@ -116,6 +121,7 @@ function dishToDraft(d: Dish): Draft {
 function dishInputToDraft(d: DishInput): Draft {
   return {
     id: null,
+    dishType: d.dishType,
     title: d.title,
     subtitle: d.subtitle ?? "",
     recipe: d.recipe ?? "",
@@ -178,6 +184,7 @@ function draftToPayload(d: Draft) {
     .map((t) => t.trim())
     .filter(Boolean);
   return {
+    dishType: d.dishType,
     title: d.title.trim(),
     subtitle: d.subtitle.trim() || null,
     recipe: d.recipe.trim() || null,
@@ -499,6 +506,17 @@ export default function DishForm({
             placeholder="Thai-style, weeknight-fast"
             className={inputCls}
           />
+        </Field>
+
+        <Field label="Dish type" hint="Only main dishes appear in the spinner">
+          <select
+            aria-label="Dish type"
+            value={draft.dishType}
+            onChange={(e) => setDraft({ ...draft, dishType: e.target.value as DishType })}
+            className={inputCls}
+          >
+            <DishTypeOptions />
+          </select>
         </Field>
 
         <Field label="Base servings" hint="servings the quantities are written for">

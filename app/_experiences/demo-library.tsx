@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { LibraryDishTypes } from "@/app/_components/dish-type-controls";
+import { DISH_TYPE_LABELS, type DishType } from "@/lib/dish-types";
 import { DishArt } from "@/app/_components/ui";
 import { Icon } from "@/app/_components/icon";
 import { DEMO_DISHES } from "@/lib/demo/dishes";
@@ -13,6 +15,8 @@ const KEY = "demoMealPlan";
 // so it doesn't depend on the full /dishes page. The only interaction is an
 // ephemeral add-to-plan toggle, written to the isolated demo key.
 export function DemoLibrary() {
+  const [dishType, setDishType] = useState<DishType>("main");
+  const dishes = DEMO_DISHES.filter((d) => d.dishType === dishType);
   const [planIds, setPlanIds] = useState<Set<number>>(new Set());
   useEffect(() => {
     setPlanIds(new Set(readPlan(KEY).map((e) => e.id)));
@@ -43,12 +47,14 @@ export function DemoLibrary() {
               The collection
             </h1>
             <div className="mt-2 text-[13.5px] text-text-dim lg:text-[15px]">
-              {DEMO_DISHES.length} dishes
+              {dishes.length} {dishes.length === 1 ? "recipe" : "recipes"}
             </div>
           </div>
 
+          <LibraryDishTypes value={dishType} onChange={setDishType} />
+          {!dishes.length && <p className="mt-6 text-text-dim">No {DISH_TYPE_LABELS[dishType].plural.toLowerCase()} yet.</p>}
           <div className="mt-6 grid grid-cols-2 gap-[13px] lg:mt-8 lg:grid-cols-[repeat(auto-fill,minmax(212px,1fr))] lg:gap-[22px]">
-            {DEMO_DISHES.map((d) => {
+            {dishes.map((d) => {
               const inPlan = planIds.has(d.id);
               return (
                 <Link

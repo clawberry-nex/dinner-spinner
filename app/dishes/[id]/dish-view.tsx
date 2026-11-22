@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DishArt, Button, ServingsStepper, useToast } from "@/app/_components/ui";
 import { Icon } from "@/app/_components/icon";
+import { DISH_TYPE_LABELS } from "@/lib/dish-types";
 import type { CookLogEntry, Dish, Ingredient } from "@/lib/types";
 import { formatQty, scaleIngredient, visibleUnit } from "@/lib/ingredients";
 import {
@@ -397,23 +398,21 @@ export default function DishView({
             </h1>
             {dish.subtitle && <div className="mt-[6px] text-[14.5px] text-text-dim">{dish.subtitle}</div>}
             {dietChips.length > 0 && <DietChipRow chips={dietChips} className="mt-[13px]" />}
-            {dish.tags.length > 0 && (
-              <div className="mt-[10px] flex flex-wrap gap-[7px]">
-                {dish.tags.map((t) => <TagChip key={t}>{t}</TagChip>)}
-              </div>
-            )}
+            <div className="mt-[10px] flex flex-wrap gap-[7px]">
+              <TagChip>{DISH_TYPE_LABELS[dish.dishType].singular}</TagChip>
+              {dish.tags.map((t) => <TagChip key={t}>{t}</TagChip>)}
+            </div>
           </div>
 
           {/* ── Desktop content well ── */}
           <div className="hidden px-12 pb-16 lg:block">
             <div className="mx-auto max-w-[1080px]">
               {/* chips row */}
-              {(dietChips.length > 0 || dish.tags.length > 0) && (
-                <div className="flex flex-wrap items-center gap-[10px]">
-                  {dietChips.length > 0 && <DietChipRow chips={dietChips} />}
-                  {dish.tags.map((t) => <TagChip key={t}>{t}</TagChip>)}
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-[10px]">
+                <TagChip>{DISH_TYPE_LABELS[dish.dishType].singular}</TagChip>
+                {dietChips.length > 0 && <DietChipRow chips={dietChips} />}
+                {dish.tags.map((t) => <TagChip key={t}>{t}</TagChip>)}
+              </div>
 
               {/* action bar (owner) */}
               {isOwner && (

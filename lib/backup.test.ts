@@ -9,6 +9,7 @@ import {
 
 const sampleDish = {
   id: 42,
+  dishType: "side" as const,
   title: "Curry",
   subtitle: null,
   recipe: null,
@@ -63,6 +64,7 @@ test("parseBackup accepts a round-tripped envelope", () => {
   assert.equal(round.version, CURRENT_BACKUP_VERSION);
   assert.equal(round.dishes.length, 1);
   assert.equal(round.dishes[0].id, 42);
+  assert.equal(round.dishes[0].dishType, "side");
 });
 
 test("parseBackup round-trips the notes field", () => {
@@ -80,18 +82,18 @@ test("parseBackup round-trips the notes field", () => {
   assert.equal(round.dishes[0].notes, "Finn won't eat this if there are mushrooms");
 });
 
-test("parseBackup accepts envelopes missing the notes field (back-compat)", () => {
+test("parseBackup accepts envelopes missing notes and dish type (back-compat)", () => {
   // Simulate a backup exported by a pre-notes version.
   const legacy = {
     version: "1",
     exportedAt: "2026-01-01T00:00:00.000Z",
     appVersion: "0.10.0",
-    dishes: [sampleDish],
+    dishes: [{ ...sampleDish, dishType: undefined }],
     pantryNames: [],
     mealPlan: { entries: [] },
   };
   const parsed = parseBackup(legacy);
-  assert.equal(parsed.dishes.length, 1);
+  assert.equal(parsed.dishes[0].dishType, "main");
   // An absent field should parse as undefined (or null); not throw.
   assert.ok(parsed.dishes[0].notes == null);
 });

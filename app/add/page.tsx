@@ -87,7 +87,7 @@ export default function AddPage() {
             ) : (
               <DishForm
                 key={seed ? `seed-${seed.key}` : "manual"}
-                prefillDraft={seed ? { title: seed.title, baseServings: 4, tags: [], ingredients: [] } : undefined}
+                prefillDraft={seed ? { title: seed.title, dishType: "main", baseServings: 4, tags: [], ingredients: [] } : undefined}
                 onSaved={(dish) => router.push(`/dishes/${dish.id}`)}
               />
             )}

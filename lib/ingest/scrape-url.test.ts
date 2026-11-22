@@ -145,12 +145,14 @@ test("extractRecipe: handles string-array instructions and a string image", () =
       "@type": "Recipe",
       name: "Quick Eggs",
       image: "https://img.example.com/eggs.jpg",
+      recipeCategory: ["Side Dish", "Breakfast"],
       recipeIngredient: ["2 eggs", "butter"],
       recipeInstructions: ["Crack eggs.", "Fry in butter."],
     })}</script></body></html>`;
   const r = extractRecipe(html, "https://example.com/eggs");
   assert.equal(r.title, "Quick Eggs");
   assert.equal(r.imageUrl, "https://img.example.com/eggs.jpg");
+  assert.match(r.text, /Recipe category: Side Dish, Breakfast/);
   assert.match(r.text, /2 eggs/);
   assert.match(r.text, /Crack eggs\./);
   assert.match(r.text, /Fry in butter\./);

@@ -60,6 +60,7 @@ Completeness:
 - Preserve serving suggestions under a numbered "## To serve" section (translated to the target language). List suggested toppings as optional ingredients only when the source presents them as choices; merge repeated mentions of the same topping. Keep required serving steps in the method, and do not mark their ingredients optional just because they are served alongside the dish.
 
 Top-level fields:
+- dishType: classify the whole recipe by how it is served. Use "main" for a dinner entrée, "side" for an accompaniment, and "other" for dishes such as a starter, dessert, or standalone sauce. Follow the source when specified. If the role is ambiguous, use "main".
 - title: short dish name (in ${lang}).
 - subtitle: optional 1-line description if obvious (in ${lang}).
 - recipe: the cooking method as Markdown in ${lang} — ONLY if the input actually contains instructions. If it has no steps (e.g. just a title or an ingredient list), OMIT this field; never invent steps. For multi-part recipes use "## Section Title" headers (e.g. "## Dough", "## Filling", "## Toppings"); under each, write numbered steps "1.", "2.", one step per line. Single-part recipes: numbered steps, no header.

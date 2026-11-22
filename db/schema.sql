@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS dishes (
 CREATE INDEX IF NOT EXISTS dishes_tags_gin ON dishes USING gin (tags);
 
 -- Backward-compatible adds for existing installs.
+ALTER TABLE dishes ADD COLUMN IF NOT EXISTS dish_type text NOT NULL DEFAULT 'main'
+  CHECK (dish_type IN ('main', 'side', 'other'));
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS favorite boolean NOT NULL DEFAULT false;
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS image_url text;
 ALTER TABLE dishes ADD COLUMN IF NOT EXISTS emoji text;

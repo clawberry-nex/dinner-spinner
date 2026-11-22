@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { compressImage, type CompressedImage } from "@/lib/image-compress";
+import { DishTypeOptions } from "../_components/dish-type-controls";
+import type { DishType } from "@/lib/dish-types";
 import type { Dish, DishInput } from "@/lib/types";
 import { buildSharePrefillFromSearch } from "@/lib/share-prefill";
 import { findScrapeableUrl } from "@/lib/ingest/scrape-url";
@@ -66,7 +68,11 @@ const PENDING_TTL_MS = 10 * 60 * 1000;
 
 // Image handling for the eventual save. For URL imports `sourceImageUrl` is
 // the recipe page's own photo (used unless `generateImage` is toggled on).
-type ImageOpts = { sourceImageUrl: string | null; generateImage: boolean };
+type SaveOptions = {
+  sourceImageUrl: string | null;
+  generateImage: boolean;
+  dishType?: DishType;
+};
 
 type PendingState =
   | {
@@ -75,6 +81,7 @@ type PendingState =
       startedAt: number;
       sourceImageUrl?: string | null;
       generateImage?: boolean;
+      dishType?: DishType;
     }
   | { stage: "image"; dishId: number; startedAt: number };
 
@@ -125,6 +132,7 @@ export function IngestInput() {
   const [input, setInput] = useState("");
   // URL imports default to the recipe page's own photo; this toggle (shown only
   // when the input is a URL) forces AI generation instead. Default off.
+  const [dishType, setDishType] = useState<DishType | "">("");
   const [generateImage, setGenerateImage] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [compressedPreviewUrl, setCompressedPreviewUrl] = useState<string | null>(null);
@@ -187,6 +195,7 @@ export function IngestInput() {
         navigated = await runFlowFromIngest(pending.jobId, pending.startedAt, {
           sourceImageUrl: pending.sourceImageUrl ?? null,
           generateImage: pending.generateImage ?? false,
+          dishType: pending.dishType,
         });
       } else {
         navigated = await runFlowFromImage(pending.dishId);
@@ -256,13 +265,14 @@ export function IngestInput() {
         return;
       }
       const jobId = startBody.jobId;
-      const imageOpts: ImageOpts = {
+      const saveOptions: SaveOptions = {
         sourceImageUrl: startBody.sourceImageUrl ?? null,
         generateImage,
+        dishType: dishType || undefined,
       };
-      writeStash({ stage: "ingest", jobId, startedAt, ...imageOpts });
+      writeStash({ stage: "ingest", jobId, startedAt, ...saveOptions });
 
-      navigated = await runFlowFromIngest(jobId, startedAt, imageOpts);
+      navigated = await runFlowFromIngest(jobId, startedAt, saveOptions);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected failure");
     } finally {
@@ -283,17 +293,17 @@ export function IngestInput() {
   async function runFlowFromIngest(
     jobId: string,
     startedAt: number,
-    imageOpts: ImageOpts,
+    saveOptions: SaveOptions,
   ): Promise<boolean> {
     const dish = await pollIngestUntilDone(jobId);
     if (!dish) return false;
-    return runFlowFromSave(dish, startedAt, imageOpts);
+    return runFlowFromSave(dish, startedAt, saveOptions);
   }
 
   async function runFlowFromSave(
     dish: DishInput,
     startedAt: number,
-    imageOpts: ImageOpts,
+    saveOptions: SaveOptions,
   ): Promise<boolean> {
     setCurrentStep("saving");
     const saveRes = await fetch("/api/dishes", {
@@ -301,8 +311,9 @@ export function IngestInput() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...dish,
-        sourceImageUrl: imageOpts.sourceImageUrl,
-        generateImage: imageOpts.generateImage,
+        dishType: saveOptions.dishType ?? dish.dishType,
+        sourceImageUrl: saveOptions.sourceImageUrl,
+        generateImage: saveOptions.generateImage,
       }),
     });
     if (!saveRes.ok) {
@@ -466,6 +477,19 @@ export function IngestInput() {
           )}
         </div>
       </div>
+
+      <label className="mt-4 flex flex-wrap items-center gap-3 text-[13.5px] font-semibold text-text">
+        Dish type
+        <select
+          value={dishType}
+          onChange={(e) => setDishType(e.target.value as DishType | "")}
+          disabled={loading}
+          className="rounded-[var(--radius-sm)] border border-line bg-surface-2 px-3 py-2"
+        >
+          <option value="">Detect from recipe</option>
+          <DishTypeOptions />
+        </select>
+      </label>
 
       {/* URL imports use the recipe page's own photo by default; this toggle
           forces an AI-generated image instead. Shown when the input is a URL
